@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/tools"
 )
@@ -33,24 +34,36 @@ func NewUserController(e *gin.Engine, ush *service.UserService) *UserController 
 // @Tags User
 // @Summary 登录
 // @Produce json
-// @Param studentid formData string true "学号"
-// @Param password formData string true "密码"
-// @Success 200 {object} resp.Resp
+// @Param user body req.LoginReq true "登录请求"
+// @Success 200 {object} resp.Resp{data=resp.LoginResp}
 // @Router /user/login [post]
 func (uc *UserController) Login() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		studentid := c.PostForm("studentid")
-		password := c.PostForm("password")
-		if studentid == "" || password == "" {
+		var lr req.LoginReq
+		err := c.ShouldBindJSON(&lr)
+		if err != nil {
+			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
+			return
+		}
+		if lr.Studentid == "" || lr.Password == "" {
 			c.JSON(200, tools.ReturnMSG(c, "studentid or password is empty", nil))
 			return
 		}
-		user, token, err := uc.ush.Login(c, studentid, password)
+		user, token, err := uc.ush.Login(c, lr.Studentid, lr.Password)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "login fail", nil))
 			return
 		}
-		c.JSON(200, tools.ReturnMSG(c, "login success", user, token))
+		res := resp.LoginResp{
+			Id:     user.Id,
+			Sid:    user.StudentId,
+			Name:   user.Name,
+			Avatar: user.Avatar,
+			School: user.School,
+			Likes:  user.Likes,
+			Token:  token,
+		}
+		c.JSON(200, tools.ReturnMSG(c, "login success", res))
 	}
 }
 
@@ -75,6 +88,7 @@ func (uc *UserController) Logout() gin.HandlerFunc {
 // @Tags User
 // @Summary 获取用户信息
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param sid query string true "学号"
 // @Success 200 {object} resp.Resp
 // @Router /user/info [get]
@@ -98,6 +112,7 @@ func (uc *UserController) GetUserInfo() gin.HandlerFunc {
 // @Summary 更新头像
 // @Description not finished
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param userAvatarReq body req.UserAvatarReq true "用户头像更改"
 // @Success 200 {object} resp.Resp
 // @Router /user/avatar [post]
@@ -121,19 +136,23 @@ func (uc *UserController) UpdateAvatar() gin.HandlerFunc {
 // @Tags User
 // @Summary 更新用户名
 // @Produce json
-// @Param sid formData string true "学号"
-// @Param newname formData string true "新用户名"
+// @Param Authorization header string true "token"
+// @Param unr body req.UpdateNameReq true "更新用户名"
 // @Success 200 {object} resp.Resp
 // @Router /user/username [post]
 func (uc *UserController) UpdateUsername() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sid := c.PostForm("sid")
-		name := c.PostForm("newname")
-		if name == "" {
+		var unr req.UpdateNameReq
+		err := c.ShouldBind(&unr)
+		if err != nil {
+			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
+			return
+		}
+		if unr.Name == "" {
 			c.JSON(200, tools.ReturnMSG(c, "name is empty", nil))
 			return
 		}
-		err := uc.ush.UpdateUsername(c, sid, name)
+		err = uc.ush.UpdateUsername(c, unr.Sid, unr.Name)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "update username fail", nil))
 			return
@@ -146,6 +165,7 @@ func (uc *UserController) UpdateUsername() gin.HandlerFunc {
 // @Tags User
 // @Summary 搜索用户活动
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param ureq body req.UserSearchReq true "搜索请求"
 // @Success 200 {object} resp.Resp
 // @Router /user/search/act [post]
@@ -173,6 +193,7 @@ func (uc *UserController) SearchUserAct() gin.HandlerFunc {
 // @Tags User
 // @Summary 搜索用户帖子
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param ureq body req.UserSearchReq true "搜索请求"
 // @Success 200 {object} resp.Resp
 // @Router /user/search/post [post]
@@ -200,6 +221,7 @@ func (uc *UserController) SearchUserPost() gin.HandlerFunc {
 // @Tags User
 // @Summary 获取七牛云token
 // @Produce json
+// @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp
 // @Router /user/token/qiniu [get]
 func (uc *UserController) GenQiniuToken() gin.HandlerFunc {

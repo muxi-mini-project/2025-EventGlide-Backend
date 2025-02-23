@@ -100,6 +100,11 @@ func setTTL() time.Duration {
 func (c *Jwt) WrapCheckToken() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		token := ctx.GetHeader("Authorization")
+		if token == "" {
+			ctx.JSON(401, tools.ReturnMSG(ctx, "token is empty", nil))
+			ctx.Abort()
+			return
+		}
 		err := c.CheckToken(ctx, token)
 		if err != nil {
 			ctx.JSON(401, tools.ReturnMSG(ctx, "token is invalid", nil))

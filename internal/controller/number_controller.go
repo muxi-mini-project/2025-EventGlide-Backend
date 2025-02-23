@@ -26,6 +26,7 @@ func NewNumberController(ns *service.NumberService) *NumberController {
 // @Tags number
 // @Summary 增加点赞数
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param number body model.Number true "点赞入参"
 // @Success 200 {object} resp.Resp
 // @Router /number/like [post]
@@ -49,6 +50,7 @@ func (nc *NumberController) AddLikesNum() gin.HandlerFunc {
 // @Tags number
 // @Summary 减少点赞数
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param number body model.Number true "点赞入参"
 // @Success 200 {object} resp.Resp
 // @Router /number/unlike [post]
@@ -72,6 +74,7 @@ func (nc *NumberController) CutLikesNum() gin.HandlerFunc {
 // @Tags number
 // @Summary 增加评论数
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param number body model.Number true "评论入参"
 // @Success 200 {object} resp.Resp
 // @Router /number/comment [post]
@@ -95,6 +98,7 @@ func (nc *NumberController) AddCommentsNum() gin.HandlerFunc {
 // @Tags number
 // @Summary 更新点赞数和评论数
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param number body model.Number true "更新入参"
 // @Success 200 {object} resp.Resp
 // @Router /number/update [post]

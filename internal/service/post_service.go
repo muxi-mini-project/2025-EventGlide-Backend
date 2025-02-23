@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/tools"
+	"time"
 )
 
 type PostServiceHdl interface {
@@ -61,6 +62,7 @@ func (ps *PostService) DeletePost(c *gin.Context, post *model.Post) error {
 
 func (ps *PostService) CreateDraft(c *gin.Context, draft *model.PostDraft) error {
 	draft.Bid = tools.GenUUID(c)
+	draft.CreatedAt = time.Now()
 	err := ps.pdh.CreateDraft(c, draft)
 	if err != nil {
 		return err
@@ -68,10 +70,10 @@ func (ps *PostService) CreateDraft(c *gin.Context, draft *model.PostDraft) error
 	return nil
 }
 
-func (ps *PostService) LoadDraft(c *gin.Context, req req.DraftReq) (*model.PostDraft, error) {
+func (ps *PostService) LoadDraft(c *gin.Context, req req.DraftReq) (model.PostDraft, error) {
 	draft, err := ps.pdh.LoadDraft(c, req.Bid, req.Sid)
 	if err != nil {
-		return nil, err
+		return model.PostDraft{}, err
 	}
 	return draft, nil
 }

@@ -30,6 +30,7 @@ func NewPostController(ps *service.PostService) *PostController {
 // @Tags Post
 // @Summary 获取所有帖子
 // @Produce json
+// @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp
 // @Router /post/all [get]
 func (pc *PostController) GetAllPost() gin.HandlerFunc {
@@ -47,6 +48,7 @@ func (pc *PostController) GetAllPost() gin.HandlerFunc {
 // @Summary 创建帖子
 // @Produce json
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param post body model.Post true "帖子"
 // @Success 200 {object} resp.Resp
 // @Router /post/create [post]
@@ -70,13 +72,21 @@ func (pc *PostController) CreatePost() gin.HandlerFunc {
 // @Tags Post
 // @Summary 通过帖子名查找帖子
 // @Produce json
-// @Param name query string true "帖子名"
+// @Param Authorization header string true "token"
+// @Param name body req.FindCommentReq true "帖子名"
 // @Success 200 {object} resp.Resp
-// @Router /post/find [get]
+// @Router /post/find [post]
 func (pc *PostController) FindPostByName() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		name := c.Query("name")
-		posts, err := pc.ps.FindPostByName(c, name)
+
+		var n req.FindCommentReq
+		err := c.ShouldBindJSON(&n)
+		if err != nil {
+			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
+			return
+		}
+
+		posts, err := pc.ps.FindPostByName(c, n.Name)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
@@ -89,6 +99,7 @@ func (pc *PostController) FindPostByName() gin.HandlerFunc {
 // @Summary 删除帖子
 // @Produce json
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param post body model.Post true "帖子"
 // @Success 200 {object} resp.Resp
 // @Router /post/delete [post]
@@ -113,6 +124,7 @@ func (pc *PostController) DeletePost() gin.HandlerFunc {
 // @Summary 创建草稿
 // @Produce json
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param post body model.PostDraft true "草稿"
 // @Success 200 {object} resp.Resp
 // @Router /post/draft [post]
@@ -137,6 +149,7 @@ func (pr *PostController) CreateDraft() gin.HandlerFunc {
 // @Summary 加载草稿
 // @Produce json
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param draft body req.DraftReq true "草稿请求"
 // @Success 200 {object} resp.Resp
 // @Router /post/load [post]

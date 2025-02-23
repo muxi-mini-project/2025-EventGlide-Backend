@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
+	resp2 "github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/tools"
@@ -34,6 +35,7 @@ func NewActController(as *service.ActivityService, iu *service.ImgUploader) *Act
 // @Produce json
 // @Accept json
 // @Param activity body model.Activity true "活动"
+// @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp
 // @Router /act/create [post]
 func (ac *ActController) NewAct() gin.HandlerFunc {
@@ -63,6 +65,7 @@ func (ac *ActController) NewAct() gin.HandlerFunc {
 // @Produce json
 // @Accept json
 // @Param draft body model.ActivityDraft true "活动草稿"
+// @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp
 // @Router /act/draft [post]
 func (ac *ActController) NewDraft() gin.HandlerFunc {
@@ -78,7 +81,7 @@ func (ac *ActController) NewDraft() gin.HandlerFunc {
 		//直接创建，不管有没有类似的
 		//不保存上传图片，考虑图床空间
 		//不设置绑定id，不一定会发布
-		err = ac.as.NewDraft(c, d)
+		err = ac.as.NewDraft(c, &d)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
@@ -91,6 +94,7 @@ func (ac *ActController) NewDraft() gin.HandlerFunc {
 // @Summary 加载活动草稿
 // @Produce json
 // @Accept json
+// @Param Authorization header string true "token"
 // @Param draft body req.DraftReq true "加载草稿"
 // @Success 200 {object} resp.Resp
 // @Router /act/load [post]
@@ -114,6 +118,7 @@ func (ac ActController) LoadDraft() gin.HandlerFunc {
 // @Tags Activity
 // @Summary 通过名称查找活动
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param name query string true "名称查找"
 // @Success 200 {object} resp.Resp
 // @Router /act/name [get]
@@ -136,6 +141,7 @@ func (ac *ActController) FindActByName() gin.HandlerFunc {
 // @Tags Activity
 // @Summary 通过搜索条件查找活动
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param actSearchReq body req.ActSearchReq true "搜索条件"
 // @Success 200 {object} resp.Resp
 // @Router /act/search [post]
@@ -159,6 +165,7 @@ func (ac *ActController) FindActBySearches() gin.HandlerFunc {
 // @Tags Activity
 // @Summary 通过日期查找活动
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param date query string true "日期"
 // @Success 200 {object} resp.Resp
 // @Router /act/date [get]

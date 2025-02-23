@@ -27,6 +27,13 @@
                         "schema": {
                             "$ref": "#/definitions/model.Activity"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -49,6 +56,13 @@
                 ],
                 "summary": "通过日期查找活动",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "日期",
@@ -89,6 +103,13 @@
                         "schema": {
                             "$ref": "#/definitions/model.ActivityDraft"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -114,6 +135,13 @@
                 ],
                 "summary": "加载活动草稿",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "加载草稿",
                         "name": "draft",
@@ -146,6 +174,13 @@
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "名称查找",
                         "name": "name",
                         "in": "query",
@@ -172,6 +207,13 @@
                 ],
                 "summary": "通过搜索条件查找活动",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "搜索条件",
                         "name": "actSearchReq",
@@ -203,6 +245,13 @@
                 "summary": "回复评论",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "回复",
                         "name": "CommentReq",
                         "in": "body",
@@ -232,6 +281,13 @@
                 ],
                 "summary": "创建评论",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "评论",
                         "name": "CommentReq",
@@ -271,10 +327,19 @@
                     },
                     {
                         "type": "string",
-                        "description": "目标id",
-                        "name": "target_id",
-                        "in": "formData",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "删除评论",
+                        "name": "DeleteCommentReq",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.DeleteCommentReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -297,6 +362,13 @@
                 ],
                 "summary": "增加评论数",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "评论入参",
                         "name": "number",
@@ -328,6 +400,13 @@
                 "summary": "增加点赞数",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "点赞入参",
                         "name": "number",
                         "in": "body",
@@ -357,6 +436,13 @@
                 ],
                 "summary": "减少点赞数",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "点赞入参",
                         "name": "number",
@@ -388,6 +474,13 @@
                 "summary": "更新点赞数和评论数",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "更新入参",
                         "name": "number",
                         "in": "body",
@@ -416,6 +509,15 @@
                     "Post"
                 ],
                 "summary": "获取所有帖子",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -439,6 +541,13 @@
                 ],
                 "summary": "创建帖子",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "帖子",
                         "name": "post",
@@ -473,6 +582,13 @@
                 "summary": "删除帖子",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "帖子",
                         "name": "post",
                         "in": "body",
@@ -506,6 +622,13 @@
                 "summary": "创建草稿",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "草稿",
                         "name": "post",
                         "in": "body",
@@ -526,7 +649,7 @@
             }
         },
         "/post/find": {
-            "get": {
+            "post": {
                 "produces": [
                     "application/json"
                 ],
@@ -537,10 +660,19 @@
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "帖子名",
                         "name": "name",
-                        "in": "query",
-                        "required": true
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.FindCommentReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -566,6 +698,13 @@
                 ],
                 "summary": "加载草稿",
                 "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
                     {
                         "description": "草稿请求",
                         "name": "draft",
@@ -598,6 +737,13 @@
                 "summary": "更新头像",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "用户头像更改",
                         "name": "userAvatarReq",
                         "in": "body",
@@ -629,6 +775,13 @@
                 "parameters": [
                     {
                         "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
                         "description": "学号",
                         "name": "sid",
                         "in": "query",
@@ -656,25 +809,32 @@
                 "summary": "登录",
                 "parameters": [
                     {
-                        "type": "string",
-                        "description": "学号",
-                        "name": "studentid",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "密码",
-                        "name": "password",
-                        "in": "formData",
-                        "required": true
+                        "description": "登录请求",
+                        "name": "user",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.LoginReq"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/resp.Resp"
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/resp.Resp"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/resp.LoginResp"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -719,6 +879,13 @@
                 "summary": "搜索用户活动",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "搜索请求",
                         "name": "ureq",
                         "in": "body",
@@ -749,6 +916,13 @@
                 "summary": "搜索用户帖子",
                 "parameters": [
                     {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
                         "description": "搜索请求",
                         "name": "ureq",
                         "in": "body",
@@ -777,6 +951,15 @@
                     "User"
                 ],
                 "summary": "获取七牛云token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -799,17 +982,19 @@
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "学号",
-                        "name": "sid",
-                        "in": "formData",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
                         "required": true
                     },
                     {
-                        "type": "string",
-                        "description": "新用户名",
-                        "name": "newname",
-                        "in": "formData",
-                        "required": true
+                        "description": "更新用户名",
+                        "name": "unr",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.UpdateNameReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -1003,19 +1188,28 @@
                     "type": "string"
                 },
                 "host": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "if_register": {
                     "type": "string"
                 },
                 "location": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "start_time": {
                     "type": "string"
                 },
                 "type": {
-                    "type": "string"
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -1033,10 +1227,51 @@
                 }
             }
         },
+        "req.DeleteCommentReq": {
+            "type": "object",
+            "properties": {
+                "sid": {
+                    "type": "string"
+                },
+                "target_id": {
+                    "type": "string"
+                }
+            }
+        },
         "req.DraftReq": {
             "type": "object",
             "properties": {
                 "bid": {
+                    "type": "string"
+                },
+                "sid": {
+                    "type": "string"
+                }
+            }
+        },
+        "req.FindCommentReq": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "req.LoginReq": {
+            "type": "object",
+            "properties": {
+                "password": {
+                    "type": "string"
+                },
+                "studentid": {
+                    "type": "string"
+                }
+            }
+        },
+        "req.UpdateNameReq": {
+            "type": "object",
+            "properties": {
+                "new_name": {
                     "type": "string"
                 },
                 "sid": {
@@ -1062,6 +1297,32 @@
                     "type": "string"
                 },
                 "sid": {
+                    "type": "string"
+                }
+            }
+        },
+        "resp.LoginResp": {
+            "type": "object",
+            "properties": {
+                "Id": {
+                    "type": "integer"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "likes": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "school": {
+                    "type": "string"
+                },
+                "sid": {
+                    "type": "string"
+                },
+                "token": {
                     "type": "string"
                 }
             }

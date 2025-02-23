@@ -28,7 +28,7 @@ func (ar ActRouter) RegisterActRouters() error {
 	act := ar.e.Group("act")
 	act.Use(ar.j.WrapCheckToken())
 	{
-		act.POST("/new", ar.ach.NewAct())
+		act.POST("/create", ar.ach.NewAct())
 		act.POST("/draft", ar.ach.NewDraft())
 		act.POST("/load", ar.ach.LoadDraft())
 		act.GET("/name", ar.ach.FindActByName())

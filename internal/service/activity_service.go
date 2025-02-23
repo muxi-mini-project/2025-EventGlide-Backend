@@ -7,13 +7,12 @@ import (
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/tools"
-	"log"
 	"time"
 )
 
 type ActivityServiceHdl interface {
 	NewAct(*gin.Context, *model.Activity) error
-	NewDraft(*gin.Context, model.ActivityDraft) error
+	NewDraft(*gin.Context, *model.ActivityDraft) error
 	LoadDraft(*gin.Context, req.DraftReq) (*model.ActivityDraft, error)
 	FindActBySearches(*gin.Context, *req.ActSearchReq) ([]model.Activity, error)
 	FindActByDate(*gin.Context, string) ([]model.Activity, error)
@@ -59,7 +58,7 @@ func (as *ActivityService) NewAct(c *gin.Context, act *model.Activity) error {
 
 }
 
-func (as *ActivityService) NewDraft(c *gin.Context, d model.ActivityDraft) error {
+func (as *ActivityService) NewDraft(c *gin.Context, d *model.ActivityDraft) error {
 	d.Bid = tools.GenUUID(c)
 	err := as.ad.CreateDraft(c, d)
 	if err != nil {
@@ -68,31 +67,16 @@ func (as *ActivityService) NewDraft(c *gin.Context, d model.ActivityDraft) error
 	return nil
 }
 
-func (as *ActivityService) LoadDraft(c *gin.Context, dReq req.DraftReq) (*model.ActivityDraft, error) {
-	d, err := as.ad.LoadDraft(c, dReq.Bid, dReq.Sid)
+func (as *ActivityService) LoadDraft(c *gin.Context, dReq req.DraftReq) (model.ActivityDraft, error) {
+	d, err := as.ad.LoadDraft(c, dReq.Sid, dReq.Bid)
 	if err != nil {
-		return nil, err
+		return model.ActivityDraft{}, err
 	}
 	return d, nil
 }
 
 func (as *ActivityService) FindActBySearches(ctx *gin.Context, req *req.ActSearchReq) ([]model.Activity, error) {
-	temp := &model.Activity{
-		Type:       req.Type,
-		StartTime:  req.StartTime, // 2021-06-01 00:00:00
-		EndTime:    req.EndTime,
-		Host:       req.Host,
-		Location:   req.Location,
-		IfRegister: req.IfRegister,
-	}
-	state := make(map[string]bool)
-	for k, v := range req.ToMap() {
-		if v != "" {
-			state[k] = true
-		}
-	}
-	log.Println("state:", state)
-	acts, err := as.ad.FindActBySearches(ctx, temp)
+	acts, err := as.ad.FindActBySearches(ctx, req)
 	if err != nil {
 		return nil, err
 	}

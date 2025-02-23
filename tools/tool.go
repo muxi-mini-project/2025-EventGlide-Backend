@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/raiki02/EG/api/resp"
 )
 
 func GenUUID(c *gin.Context) string {
@@ -29,12 +28,9 @@ func Unmarshal(data []byte, v interface{}) interface{} {
 }
 
 func ReturnMSG(c *gin.Context, msg string, res ...interface{}) map[string]interface{} {
-	re := resp.Resp{
-		Code: c.Writer.Status(),
-		Msg:  msg,
-		Data: res,
-	}
 	return gin.H{
-		"response": re,
+		"code": c.Writer.Status(),
+		"msg":  msg,
+		"data": res,
 	}
 }

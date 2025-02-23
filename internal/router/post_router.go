@@ -28,11 +28,11 @@ func (pr *PostRouter) RegisterPostRouters() {
 	post := pr.e.Group("/post")
 	post.Use(pr.j.WrapCheckToken())
 	{
-		post.GET("/list", pr.pch.GetAllPost())
+		post.GET("/all", pr.pch.GetAllPost())
 		post.POST("/create", pr.pch.CreatePost())
-		post.GET("/find", pr.pch.FindPostByName())
+		post.POST("/find", pr.pch.FindPostByName())
 		post.POST("/draft", pr.pch.CreateDraft())
-		post.DELETE("/delete", pr.pch.DeletePost())
+		post.POST("/delete", pr.pch.DeletePost())
 		post.POST("/load", pr.pch.LoadDraft())
 	}
 }

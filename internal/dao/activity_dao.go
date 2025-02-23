@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/model"
 	"gorm.io/gorm"
 )
@@ -39,17 +40,17 @@ func (ad *ActDao) CreateAct(c *gin.Context, a *model.Activity) error {
 	}
 }
 
-func (ad *ActDao) CreateDraft(c *gin.Context, d model.ActivityDraft) error {
-	return ad.db.Create(&d).Error
+func (ad *ActDao) CreateDraft(c *gin.Context, d *model.ActivityDraft) error {
+	return ad.db.Create(d).Error
 }
 
-func (ad *ActDao) LoadDraft(c *gin.Context, s string, b string) (*model.ActivityDraft, error) {
+func (ad *ActDao) LoadDraft(c *gin.Context, s string, b string) (model.ActivityDraft, error) {
 	var d model.ActivityDraft
 	err := ad.db.Where("creator_id = ? and bid = ?", s, b).Find(&d).Error
 	if err != nil {
-		return nil, err
+		return model.ActivityDraft{}, err
 	}
-	return &d, nil
+	return d, nil
 }
 
 // TODO: 是否换成按页展示，每页返回固定个数活动
@@ -120,16 +121,27 @@ func (ad *ActDao) DeleteAct(c *gin.Context, a model.Activity) error {
 }
 
 // todo 过滤器
-func (ad *ActDao) FindActBySearches(c *gin.Context, a *model.Activity) ([]model.Activity, error) {
+func (ad *ActDao) FindActBySearches(c *gin.Context, a *req.ActSearchReq) ([]model.Activity, error) {
 	var as []model.Activity
-	h := fmt.Sprintf("%%%s%%", a.Host)
-	l := fmt.Sprintf("%%%s%%", a.Location)
-	t := fmt.Sprintf("%%%s%%", a.Type)
-	st := fmt.Sprintf("%%%s%%", a.StartTime)
-	et := fmt.Sprintf("%%%s%%", a.EndTime)
-	ir := fmt.Sprintf("%%%s%%", a.IfRegister)
-	err := ad.db.Where("host like ? and location like ? and type like ? and start_time like ? and end_time like ? and if_register like ?", h, l, t, st, et, ir).Find(&as).Error
-	//err := ad.db.Where(&a).Find(&as).Error
+	var q *gorm.DB
+	
+	if a.Type != nil {
+		q = ad.db.Where("type in ?", a.Type)
+	}
+	if a.Host != nil {
+		q = q.Where("host in ?", a.Host)
+	}
+	if a.Location != nil {
+		q = q.Where("location in ?", a.Location)
+	}
+	if a.IfRegister != "" {
+		q = q.Where("if_register = ?", a.IfRegister)
+	}
+	if a.StartTime != "" && a.EndTime != "" {
+		q = q.Where("start_time >= ? and end_time <= ?", a.StartTime, a.EndTime)
+	}
+	err := q.Find(&as).Error
+
 	return as, err
 }
 

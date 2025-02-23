@@ -1,5 +1,7 @@
 package req
 
+import "github.com/spf13/viper"
+
 // todo 写在api的res/req中
 
 type NumberReq struct {
@@ -9,23 +11,33 @@ type NumberReq struct {
 }
 
 type ActSearchReq struct {
-	Type       string `json:"type"`
-	StartTime  string `json:"start_time"`
-	EndTime    string `json:"end_time"`
-	Host       string `json:"host"`
-	Location   string `json:"location"`
-	IfRegister string `json:"if_register"`
+	Type       []string `json:"type"`
+	Host       []string `json:"host"`
+	Location   []string `json:"location"`
+	IfRegister string   `json:"if_register"`
+	StartTime  string   `json:"start_time"`
+	EndTime    string   `json:"end_time"`
 }
 
-func (asr *ActSearchReq) ToMap() map[string]string {
-	m := make(map[string]string)
-	m["type"] = asr.Type
-	m["start_time"] = asr.StartTime
-	m["end_time"] = asr.EndTime
-	m["host"] = asr.Host
-	m["location"] = asr.Location
-	m["if_register"] = asr.IfRegister
-	return m
+func (a *ActSearchReq) GetTypes() []string {
+	if len(a.Type) == 0 || len(a.Type) == viper.GetInt("actselect.max_type_num") {
+		return nil
+	}
+	return a.Type
+}
+
+func (a *ActSearchReq) GetHosts() []string {
+	if len(a.Host) == 0 || len(a.Host) == viper.GetInt("actselect.max_host_num") {
+		return nil
+	}
+	return a.Host
+}
+
+func (a *ActSearchReq) GetLocations() []string {
+	if len(a.Location) == 0 || len(a.Location) == viper.GetInt("actselect.max_location_num") {
+		return nil
+	}
+	return a.Location
 }
 
 type UserSearchReq struct {
@@ -47,4 +59,22 @@ type CommentReq struct {
 type UserAvatarReq struct {
 	Sid       string `json:"sid"`
 	AvatarUrl string `json:"avatar_url"`
+}
+
+type UpdateNameReq struct {
+	Sid  string `json:"sid"`
+	Name string `json:"new_name"`
+}
+type LoginReq struct {
+	Studentid string `json:"studentid"`
+	Password  string `json:"password"`
+}
+
+type DeleteCommentReq struct {
+	Sid      string `json:"sid"`
+	TargetID string `json:"target_id"`
+}
+
+type FindCommentReq struct {
+	Name string `json:"name"`
 }

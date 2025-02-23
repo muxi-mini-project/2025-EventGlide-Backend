@@ -43,7 +43,7 @@ func (pd *PostDao) CreatePost(ctx context.Context, post *model.Post) error {
 
 func (pd *PostDao) FindPostByName(ctx context.Context, name string) ([]model.Post, error) {
 	var posts []model.Post
-	err := pd.db.Where("name = ?", fmt.Sprintf("%%%s%%", name)).Find(&posts).Error
+	err := pd.db.Where("title like ?", fmt.Sprintf("%%%s%%", name)).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
@@ -51,11 +51,8 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string) ([]model.Pos
 }
 
 func (pd *PostDao) DeletePost(ctx context.Context, post *model.Post) error {
-	err := pd.db.Delete(post).Error
-	if err != nil {
-		return err
-	}
-	return nil
+	var p model.Post
+	return pd.db.Where("bid = ? and creator_id = ?", post.Bid, post.CreatorID).Delete(&p).Error
 }
 
 func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword string) ([]model.Post, error) {
@@ -80,13 +77,13 @@ func (pd *PostDao) CreateDraft(ctx context.Context, draft *model.PostDraft) erro
 	return pd.db.Create(draft).Error
 }
 
-func (pd *PostDao) LoadDraft(ctx context.Context, bid string, sid string) (*model.PostDraft, error) {
+func (pd *PostDao) LoadDraft(ctx context.Context, bid string, sid string) (model.PostDraft, error) {
 	var draft model.PostDraft
 	err := pd.db.Where("bid = ? and creator_id = ?", bid, sid).First(&draft).Error
 	if err != nil {
-		return nil, err
+		return model.PostDraft{}, err
 	}
-	return &draft, nil
+	return draft, nil
 }
 
 func (pd *PostDao) UpdateNumbers(c *gin.Context, sid, bid string, like, comment int) error {

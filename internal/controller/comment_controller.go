@@ -26,6 +26,7 @@ func NewCommentController(cs *service.CommentService) *CommentController {
 // @Tags Comment
 // @Summary 创建评论
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param CommentReq body req.CommentReq true "评论"
 // @Success 200 {object} resp.Resp
 // @Router /comment/create [post]
@@ -44,6 +45,7 @@ func (cc *CommentController) CreateComment() gin.HandlerFunc {
 // @Tags Comment
 // @Summary 回复评论
 // @Produce json
+// @Param Authorization header string true "token"
 // @Param CommentReq body req.CommentReq true "回复"
 // @Success 200 {object} resp.Resp
 // @Router /comment/answer [post]
@@ -63,18 +65,24 @@ func (cc *CommentController) AnswerComment() gin.HandlerFunc {
 // @Summary 删除评论
 // @Produce json
 // @Param sid formData string true "学号"
-// @Param target_id formData string true "目标id"
+// @Param Authorization header string true "token"
+// @Param DeleteCommentReq body req.DeleteCommentReq true "删除评论"
 // @Success 200 {object} resp.Resp
 // @Router /comment/delete [post]
 func (cc *CommentController) DeleteComment() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		sid := c.PostForm("sid")
-		targetID := c.PostForm("target_id")
-		if targetID == "" || sid == "" {
+		var dcr req.DeleteCommentReq
+		err := c.ShouldBindJSON(&dcr)
+		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "param error", nil))
 			return
 		}
-		err := cc.cs.DeleteComment(c, sid, targetID)
+
+		if dcr.TargetID == "" || dcr.Sid == "" {
+			c.JSON(200, tools.ReturnMSG(c, "param error", nil))
+			return
+		}
+		err = cc.cs.DeleteComment(c, dcr.Sid, dcr.TargetID)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "delete comment fail", nil))
 			return
