@@ -34,7 +34,7 @@ func (fc *FeedController) GetTotalCnt() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		sid := tools.GetSid(c)
 		if sid == "" {
-			fc.l.Warn("request studentid is empty when create comment")
+			fc.l.Warn("request studentid is empty when get total comment")
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
 			return
 		}
@@ -58,7 +58,7 @@ func (fc *FeedController) GetFeedList() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		sid := tools.GetSid(c)
 		if sid == "" {
-			fc.l.Warn("request studentid or content or parentid is empty when create comment")
+			fc.l.Warn("request studentid is empty when get feed list")
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
 			return
 		}

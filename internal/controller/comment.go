@@ -37,14 +37,20 @@ func NewCommentController(cs *service.CommentService, l *zap.Logger) *CommentCon
 // @Router /comment/create [post]
 func (cc *CommentController) CreateComment() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			cc.l.Warn("request id is empty when create comment")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
+			return
+		}
 		var r req.CreateCommentReq
 		err := c.ShouldBindJSON(&r)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
-		if r.StudentID == "" || r.Content == "" || r.ParentID == "" {
-			cc.l.Warn("request studentid or content or parentid is empty when create comment")
+		if r.Content == "" || r.ParentID == "" {
+			cc.l.Warn("request  content or parentid is empty when create comment")
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
 			return
 		}
@@ -67,17 +73,24 @@ func (cc *CommentController) CreateComment() gin.HandlerFunc {
 // @Router /comment/answer [post]
 func (cc *CommentController) AnswerComment() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			cc.l.Warn("request id is empty when answer comment")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
+			return
+		}
 		var r req.CreateCommentReq
 		err := c.ShouldBindJSON(&r)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
-		if r.StudentID == "" || r.Content == "" || r.ParentID == "" {
-			cc.l.Warn("request studentid or content or parentid is empty when answer comment")
+		if r.Content == "" || r.ParentID == "" {
+			cc.l.Warn("request  content or parentid is empty when answer comment")
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
 			return
 		}
+		r.StudentID=sid
 		res, err := cc.cs.AnswerComment(c, r)
 		if err != nil {
 			cc.l.Error("answer comment failed", zap.Error(err))
@@ -98,17 +111,24 @@ func (cc *CommentController) AnswerComment() gin.HandlerFunc {
 // @Router /comment/delete [post]
 func (cc *CommentController) DeleteComment() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			cc.l.Warn("request id is empty when delete comment")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
+			return
+		}
 		var r req.DeleteCommentReq
 		err := c.ShouldBindJSON(&r)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
-		if r.StudentID == "" || r.TargetID == "" {
-			cc.l.Warn("request studentid or targetid is empty when delete comment")
+		if r.TargetID == "" {
+			cc.l.Warn("request targetid is empty when delete comment")
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
 			return
 		}
+		r.StudentID=sid
 		err = cc.cs.DeleteComment(c, r)
 		if err != nil {
 			cc.l.Error("delete comment failed", zap.Error(err))
@@ -141,6 +161,5 @@ func (cc *CommentController) LoadComments() gin.HandlerFunc {
 			return
 		}
 		c.JSON(200, tools.ReturnMSG(c, "success", res))
-
 	}
 }

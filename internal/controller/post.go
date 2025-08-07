@@ -58,12 +58,19 @@ func (pc *PostController) GetAllPost() gin.HandlerFunc {
 // @Router /post/create [post]
 func (pc *PostController) CreatePost() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			pc.l.Warn("request studentid is empty when create post")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
+			return
+		}
 		var post req.CreatePostReq
 		err := c.ShouldBindJSON(&post)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
+		post.StudentID=sid
 		_, err = pc.ps.CreatePost(c, &post)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
@@ -108,12 +115,19 @@ func (pc *PostController) FindPostByName() gin.HandlerFunc {
 // @Router /post/delete [post]
 func (pc *PostController) DeletePost() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			pc.l.Warn("request studentid is empty when delete post")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
+			return
+		}
 		var post model.Post
 		err := c.ShouldBindJSON(&post)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
+		post.StudentID=sid
 		err = pc.ps.DeletePost(c, &post)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
@@ -133,12 +147,19 @@ func (pc *PostController) DeletePost() gin.HandlerFunc {
 // @Router /post/draft [post]
 func (pr *PostController) CreateDraft() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			pr.l.Warn("request studentid is empty when create draft")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
+			return
+		}
 		var postDraft req.CreatePostReq
 		err := c.ShouldBindJSON(&postDraft)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
+		postDraft.StudentID=sid
 		_, err = pr.ps.CreateDraft(c, &postDraft)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))

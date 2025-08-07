@@ -43,6 +43,12 @@ func NewActController(as *service.ActivityService, iu *service.ImgUploader, l *z
 // @Router /act/create [post]
 func (ac *ActController) NewAct() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			ac.l.Warn("request id is empty when create activity")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
+			return
+		}
 		var act req.CreateActReq
 		//获取用户填写信息
 		err := c.ShouldBindJSON(&act)
@@ -50,7 +56,7 @@ func (ac *ActController) NewAct() gin.HandlerFunc {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
-		if act.StudentID == "" || act.Title == "" || act.Introduce == "" {
+		if act.Title == "" || act.Introduce == "" {
 			c.JSON(200, tools.ReturnMSG(c, "你的参数有误，请重新输入！", nil))
 			return
 		}
@@ -68,7 +74,7 @@ func (ac *ActController) NewAct() gin.HandlerFunc {
 			c.JSON(200, tools.ReturnMSG(c, "活动起始时间不能大于结束时间！", nil))
 			return
 		}
-
+		act.StudentID = sid
 		a, err := ac.as.NewAct(c, &act)
 		if err != nil {
 			ac.l.Error("create activity failed", zap.Error(err))

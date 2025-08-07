@@ -131,17 +131,24 @@ func (uc *UserController) GetUserInfo() gin.HandlerFunc {
 // @Router /user/avatar [post]
 func (uc *UserController) UpdateAvatar() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			uc.l.Warn("request studentid is empty when update avatar")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
+			return
+		}
 		var userAvatarReq req.UserAvatarReq
 		err := c.ShouldBind(&userAvatarReq)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, err.Error(), nil))
 			return
 		}
-		if userAvatarReq.StudentID == "" || userAvatarReq.AvatarUrl == "" {
+		if  userAvatarReq.AvatarUrl == "" {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
-			uc.l.Warn("学生id或头像url为空", zap.String("sid", userAvatarReq.StudentID), zap.String("avatarUrl", userAvatarReq.AvatarUrl))
+			uc.l.Warn("头像url为空", zap.String("avatarUrl", userAvatarReq.AvatarUrl))
 			return
 		}
+		userAvatarReq.StudentID=sid
 		err = uc.ush.UpdateAvatar(c, userAvatarReq)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
@@ -161,6 +168,12 @@ func (uc *UserController) UpdateAvatar() gin.HandlerFunc {
 // @Router /user/username [post]
 func (uc *UserController) UpdateUsername() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		sid := tools.GetSid(c)
+		if sid == "" {
+			uc.l.Warn("request studentid is empty when update username")
+			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦,请稍后再尝试! ", nil))
+			return
+		}
 		var unr req.UpdateNameReq
 		err := c.ShouldBind(&unr)
 		if err != nil {
@@ -170,10 +183,10 @@ func (uc *UserController) UpdateUsername() gin.HandlerFunc {
 		}
 		if unr.Name == "" {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
-			uc.l.Warn("用户名为空", zap.String("studentID", unr.StudentID))
+			uc.l.Warn("用户名为空", zap.String("studentID", sid))
 			return
 		}
-		err = uc.ush.UpdateUsername(c, unr.StudentID, unr.Name)
+		err = uc.ush.UpdateUsername(c, sid, unr.Name)
 		if err != nil {
 			c.JSON(200, tools.ReturnMSG(c, "服务器出错啦, 请稍后尝试!", nil))
 			uc.l.Error("更新用户名失败", zap.Error(err))
