@@ -40,3 +40,12 @@ type ListPostsResp struct {
 	IsCollect  string `json:"isCollect"`
 	IsChecking string `json:"isChecking"`
 }
+
+type LoadPostDraftResp struct {
+	Bid       string   `json:"bid"`
+	Title     string   `json:"title"`
+	Introduce string   `json:"introduce"`
+	ShowImg   []string `json:"showImg"`
+	StudentID string   `json:"studentId"`
+	CreatedAt string   `json:"createdAt"`
+}

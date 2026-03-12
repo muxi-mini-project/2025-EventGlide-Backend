@@ -101,44 +101,6 @@ definitions:
       title:
         type: string
     type: object
-  model.PostDraft:
-    properties:
-      bid:
-        type: string
-      createdAt:
-        type: string
-      introduce:
-        type: string
-      showImg:
-        type: string
-      studentID:
-        type: string
-      title:
-        type: string
-    type: object
-  model.User:
-    properties:
-      avatar:
-        type: string
-      collectAct:
-        type: string
-      collectPost:
-        type: string
-      id:
-        type: integer
-      likeAct:
-        type: string
-      likeComment:
-        type: string
-      likePost:
-        type: string
-      school:
-        type: string
-      studentId:
-        type: string
-      username:
-        type: string
-    type: object
   req.ActSearchReq:
     properties:
       detailTime:
@@ -680,6 +642,23 @@ definitions:
             type: string
         type: object
     type: object
+  resp.LoadPostDraftResp:
+    properties:
+      bid:
+        type: string
+      createdAt:
+        type: string
+      introduce:
+        type: string
+      showImg:
+        items:
+          type: string
+        type: array
+      studentId:
+        type: string
+      title:
+        type: string
+    type: object
   resp.LoginResp:
     properties:
       Id:
@@ -738,6 +717,19 @@ definitions:
   resp.UserInfo:
     properties:
       avatar:
+        type: string
+      studentId:
+        type: string
+      username:
+        type: string
+    type: object
+  resp.UserInfoResp:
+    properties:
+      Id:
+        type: integer
+      avatar:
+        type: string
+      school:
         type: string
       studentId:
         type: string
@@ -1497,7 +1489,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/model.PostDraft'
+                  $ref: '#/definitions/resp.LoadPostDraftResp'
               type: object
       summary: 加载草稿
       tags:
@@ -1660,7 +1652,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/model.User'
+                  $ref: '#/definitions/resp.UserInfoResp'
               type: object
       summary: 获取用户信息
       tags:

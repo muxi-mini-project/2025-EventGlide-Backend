@@ -7,6 +7,7 @@ import (
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
 
@@ -108,7 +109,7 @@ func (pc *PostController) CreateDraft(ctx *gin.Context, req_ req.CreatePostReq, 
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=model.PostDraft}
+// @Success 200 {object} resp.Resp{data=resp.LoadPostDraftResp}
 // @Router /post/load [get]
 func (pc *PostController) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	draft, err := pc.ps.LoadDraft(ctx, claims.Subject)
@@ -116,7 +117,16 @@ func (pc *PostController) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaim
 		return ginx.ReturnError(err)
 	}
 
-	return ginx.ReturnSuccess(draft)
+	res := resp.LoadPostDraftResp{
+		Bid:       draft.Bid,
+		Title:     draft.Title,
+		Introduce: draft.Introduce,
+		ShowImg:   tools.StringToSlice(draft.ShowImg),
+		StudentID: draft.StudentID,
+		CreatedAt: tools.ParseTime(draft.CreatedAt),
+	}
+
+	return ginx.ReturnSuccess(res)
 }
 
 // @Tags Post

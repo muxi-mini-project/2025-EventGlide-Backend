@@ -1243,7 +1243,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.PostDraft"
+                                            "$ref": "#/definitions/resp.LoadPostDraftResp"
                                         }
                                     }
                                 }
@@ -1515,7 +1515,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.User"
+                                            "$ref": "#/definitions/resp.UserInfoResp"
                                         }
                                     }
                                 }
@@ -2031,64 +2031,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.PostDraft": {
-            "type": "object",
-            "properties": {
-                "bid": {
-                    "type": "string"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "introduce": {
-                    "type": "string"
-                },
-                "showImg": {
-                    "type": "string"
-                },
-                "studentID": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.User": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "collectAct": {
-                    "type": "string"
-                },
-                "collectPost": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "likeAct": {
-                    "type": "string"
-                },
-                "likeComment": {
-                    "type": "string"
-                },
-                "likePost": {
-                    "type": "string"
-                },
-                "school": {
-                    "type": "string"
-                },
-                "studentId": {
-                    "type": "string"
-                },
-                "username": {
                     "type": "string"
                 }
             }
@@ -2917,6 +2859,32 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.LoadPostDraftResp": {
+            "type": "object",
+            "properties": {
+                "bid": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "introduce": {
+                    "type": "string"
+                },
+                "showImg": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "studentId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
         "resp.LoginResp": {
             "type": "object",
             "properties": {
@@ -3005,6 +2973,26 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "resp.UserInfoResp": {
+            "type": "object",
+            "properties": {
+                "Id": {
+                    "type": "integer"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "school": {
                     "type": "string"
                 },
                 "studentId": {
