@@ -6,6 +6,7 @@ type LoginResp struct {
 	Username string `json:"username"`
 	Avatar   string `json:"avatar"`
 	School   string `json:"school"`
+	College  string `json:"college"`
 	Token    string `json:"token"`
 }
 

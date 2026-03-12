@@ -40,6 +40,7 @@ func (uc *UserController) Login(ctx *gin.Context, req_ req.LoginReq) (resp.Resp,
 		Sid:      user.StudentID,
 		Username: user.Name,
 		Avatar:   user.Avatar,
+		College:  user.College,
 		School:   user.School,
 		Token:    token,
 	}
