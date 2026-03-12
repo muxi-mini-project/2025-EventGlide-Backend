@@ -78,6 +78,7 @@ func (uc *UserController) GetUserInfo(ctx *gin.Context, req_ req.GetUserInfoReq)
 	}
 
 	resp := resp.UserInfoResp{
+		College:  res.College,
 		Id:       res.Id,
 		Sid:      res.StudentID,
 		Username: res.Name,

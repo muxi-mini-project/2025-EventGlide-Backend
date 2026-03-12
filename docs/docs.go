@@ -2995,6 +2995,9 @@ const docTemplate = `{
                 "avatar": {
                     "type": "string"
                 },
+                "college": {
+                    "type": "string"
+                },
                 "school": {
                     "type": "string"
                 },

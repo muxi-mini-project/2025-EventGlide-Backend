@@ -11,6 +11,7 @@ type LoginResp struct {
 }
 
 type UserInfoResp struct {
+	College  string `json:"college"`
 	Id       int    `json:"Id"`
 	Sid      string `json:"studentId"`
 	Username string `json:"username"`
