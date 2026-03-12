@@ -22,6 +22,11 @@ import (
 	"time"
 )
 
+const (
+	schoolReg = `学院：([^<]+)`
+	schoolUrl = "https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV_new_10511.htmlx?t1=1"
+)
+
 type UserServiceHdl interface {
 	CreateUser(*gin.Context, string) error
 	Login(*gin.Context, string, string) (*model.User, string, error)
@@ -64,13 +69,14 @@ func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *da
 	}
 }
 
-func (us *UserService) CreateUser(ctx *gin.Context, sid string) error {
+func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) error {
 	user := &model.User{
 		StudentID: sid,
 		Name:      sid,
 		//Avatar:    genRandomAvatar(ctx),
-		Avatar: viper.GetString("imgbed.defaultAvatar1"),
-		School: "华中师范大学",
+		Avatar:  viper.GetString("imgbed.defaultAvatar1"),
+		School:  "华中师范大学",
+		College: school,
 	}
 	err := us.udh.Create(ctx, user)
 	if err != nil {
@@ -84,14 +90,20 @@ func (us *UserService) Login(ctx *gin.Context, studentId string, password string
 	if err != nil {
 		return nil, "", err
 	}
-	if !client {
+	if client == nil {
 		return nil, "", errors.New("登录失败")
 	}
+
 	if !us.udh.CheckUserExist(ctx, studentId) {
-		err := us.CreateUser(ctx, studentId)
+		school, err := us.cSvc.getWhichSchool(client)
 		if err != nil {
 			return nil, "", err
 		}
+		err = us.CreateUser(ctx, studentId, school)
+		if err != nil {
+			return nil, "", err
+		}
+
 	}
 	token := us.jwth.GenToken(ctx, studentId)
 	err = us.jwth.StoreInRedis(ctx, studentId, token)
@@ -282,13 +294,17 @@ func NewCCNUService() *ccnuService {
 	}
 }
 
-func (c *ccnuService) Login(ctx context.Context, studentId string, password string) (bool, error) {
+func (c *ccnuService) Login(ctx context.Context, studentId string, password string) (*http.Client, error) {
 	var (
 		client *http.Client
 		err    error
 	)
 	client, err = c.loginUndergraduateClient(ctx, studentId, password)
-	return client != nil, err
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
 }
 
 func (c *ccnuService) client() *http.Client {
@@ -416,4 +432,25 @@ func (c *ccnuService) makeAccountPreflightRequest() (*accountRequestParams, erro
 	params.JSESSIONID = JSESSIONID
 
 	return params, nil
+}
+
+func (c *ccnuService) getWhichSchool(client *http.Client) (string, error) {
+	resp, err := client.Get(schoolUrl)
+	if err != nil {
+		return "", err
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	bodyStr := string(body)
+
+	reg := regexp.MustCompile(schoolReg)
+	matches := reg.FindStringSubmatch(bodyStr)
+	if len(matches) != 2 {
+		return "", errors.New("Can not get school info")
+	}
+	return matches[1], nil
 }

@@ -68,7 +68,7 @@ func (uc *UserController) Logout(ctx *gin.Context) (resp.Resp, error) {
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param id path string true "用户id"
-// @Success 200 {object} resp.Resp{data=model.User}
+// @Success 200 {object} resp.Resp{data=resp.UserInfoResp}
 // @Router /user/info/{id} [get]
 func (uc *UserController) GetUserInfo(ctx *gin.Context, req_ req.GetUserInfoReq) (resp.Resp, error) {
 	res, err := uc.ush.GetUserInfo(ctx, req_.Id)
@@ -76,7 +76,15 @@ func (uc *UserController) GetUserInfo(ctx *gin.Context, req_ req.GetUserInfoReq)
 		return ginx.ReturnError(err)
 	}
 
-	return ginx.ReturnSuccess(res)
+	resp := resp.UserInfoResp{
+		Id:       res.Id,
+		Sid:      res.StudentID,
+		Username: res.Name,
+		Avatar:   res.Avatar,
+		School:   res.School,
+	}
+
+	return ginx.ReturnSuccess(resp)
 }
 
 // @Tags User
