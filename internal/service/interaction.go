@@ -11,22 +11,28 @@ import (
 )
 
 type InteractionService struct {
-	id *dao.InteractionDao
-	mq mq.MQHdl
-	l  *zap.Logger
+	apg ActPostCommentGetter
+	id  *dao.InteractionDao
+	mq  mq.MQHdl
+	l   *zap.Logger
 }
 
-func NewInteractionService(id *dao.InteractionDao, mq mq.MQHdl, l *zap.Logger) *InteractionService {
+func NewInteractionService(id *dao.InteractionDao, mq mq.MQHdl, l *zap.Logger, apg ActPostCommentGetter) *InteractionService {
 	return &InteractionService{
-		id: id,
-		mq: mq,
-		l:  l.Named("interaction/service"),
+		id:  id,
+		apg: apg,
+		mq:  mq,
+		l:   l.Named("interaction/service"),
 	}
 }
 
 func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid string) error {
-	jreq := is.toFeed(r, "like", sid, r.Receiver)
-	err := is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
+	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
+	if err != nil {
+		return err
+	}
+	jreq := is.toFeed(r, "like", sid, ap.GetStudentID())
+	err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 	if err != nil {
 		is.l.Error("Publish Like Feed Failed", zap.Error(err), zap.Any("feed", jreq))
 	} else {
@@ -59,8 +65,12 @@ func (is *InteractionService) Dislike(c *gin.Context, r *req.InteractionReq, sid
 }
 
 func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid string) error {
-	jreq := is.toFeed(r, "comment", sid, r.Receiver)
-	err := is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
+	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
+	if err != nil {
+		return err
+	}
+	jreq := is.toFeed(r, "comment", sid, ap.GetStudentID())
+	err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 	if err != nil {
 		is.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", jreq))
 	} else {
@@ -80,8 +90,12 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 }
 
 func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid string) error {
-	jreq := is.toFeed(r, "collect", sid, r.Receiver)
-	err := is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
+	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
+	if err != nil {
+		return err
+	}
+	jreq := is.toFeed(r, "collect", sid, ap.GetStudentID())
+	err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 	if err != nil {
 		is.l.Error("Publish Collect Feed Failed", zap.Error(err), zap.Any("feed", jreq))
 	} else {

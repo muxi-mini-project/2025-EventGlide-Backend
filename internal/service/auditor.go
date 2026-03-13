@@ -17,11 +17,6 @@ import (
 
 var _ dao.AuditorRepository = (*dao.AuditorRepo)(nil)
 
-const (
-	SubjectActivity = "activities"
-	SubjectPost     = "posts"
-)
-
 type AuditorService interface {
 	UploadForm(c *gin.Context, aw *req.AuditWrapper, FormId uint) error
 	CreateAuditorForm(c *gin.Context, ActId, FormUrl, Sub string) (*model.AuditorForm, error)
@@ -110,7 +105,7 @@ func (a *auditorService) toUploadReq(aw *req.AuditWrapper, id uint) request.Uplo
 }
 
 func extractAuthors(signers []struct {
-	StudentID string `json:"studentid" validate:"len=10"`
+	StudentID string `json:"studentId" validate:"len=10"`
 	Name      string `json:"name"`
 }) string {
 	builder := strings.Builder{}

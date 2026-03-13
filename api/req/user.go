@@ -1,10 +1,10 @@
 package req
 
 type UpdateNameReq struct {
-	Name string `json:"new_name"`
+	Name string `json:"newName" validate:"required"`
 }
 type LoginReq struct {
-	StudentID string `json:"studentid" validate:"required,len=10"`
+	StudentID string `json:"studentId" validate:"required,len=10"`
 	Password  string `json:"password" validate:"required"`
 }
 

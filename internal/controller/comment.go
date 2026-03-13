@@ -77,8 +77,8 @@ func (cc *CommentController) DeleteComment(ctx *gin.Context, req_ req.DeleteComm
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=[]resp.CommentResp}
 // @Router /comment/load/{id} [get]
-func (cc *CommentController) LoadComments(ctx *gin.Context, req_ req.LoadCommentsReq) (resp.Resp, error) {
-	res, err := cc.cs.LoadComments(ctx, req_.Id)
+func (cc *CommentController) LoadComments(ctx *gin.Context, req_ req.LoadCommentsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	res, err := cc.cs.LoadComments(ctx, req_.Id, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

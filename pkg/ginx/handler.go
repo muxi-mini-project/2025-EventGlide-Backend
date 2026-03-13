@@ -22,14 +22,12 @@ func WrapRequest[request any](fn func(*gin.Context, request) (resp.Resp, error))
 		)
 
 		if err = bind(ctx, &req); err != nil {
-			ctx.Error(err)
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(err))
 			return
 		}
 
 		res, err := fn(ctx, req)
 		if err != nil {
-			ctx.Error(err)
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(err))
 			return
 		}
@@ -47,27 +45,23 @@ func WrapRequestWithClaims[request any](fn func(*gin.Context, request, jwt.Regis
 
 		uk, ok := ctx.Get(UserClaimsKey)
 		if !ok {
-			ctx.Error(errors.New("user key not found"))
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(errors.New("user key not found")))
 			return
 		}
 
 		claim, ok := uk.(jwt.RegisteredClaims)
 		if !ok {
-			ctx.Error(errors.New("user claim is not jwt.RegisteredClaims"))
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(errors.New("user claim is not jwt.RegisteredClaims")))
 			return
 		}
 
 		if err = bind(ctx, &req); err != nil {
-			ctx.Error(err)
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(err))
 			return
 		}
 
 		res, err := fn(ctx, req, claim)
 		if err != nil {
-			ctx.Error(err)
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(err))
 			return
 		}
@@ -80,7 +74,6 @@ func Wrap(fn func(*gin.Context) (resp.Resp, error)) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		res, err := fn(ctx)
 		if err != nil {
-			ctx.Error(err)
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(err))
 			return
 		}
@@ -93,21 +86,18 @@ func WrapWithClaims(fn func(*gin.Context, jwt.RegisteredClaims) (resp.Resp, erro
 	return func(ctx *gin.Context) {
 		uk, ok := ctx.Get(UserClaimsKey)
 		if !ok {
-			ctx.Error(errors.New("user claim is not jwt.RegisteredClaims"))
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(errors.New("user claim is not jwt.RegisteredClaims")))
 			return
 		}
 
 		claim, ok := uk.(jwt.RegisteredClaims)
 		if !ok {
-			ctx.Error(errors.New("user claim is not jwt.RegisteredClaims"))
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(errors.New("user claim is not jwt.RegisteredClaims")))
 			return
 		}
 		res, err := fn(ctx, claim)
 
 		if err != nil {
-			ctx.Error(err)
 			ctx.AbortWithStatusJSON(http.StatusBadRequest, ReturnOnlyErrorResp(err))
 			return
 		}
@@ -118,7 +108,6 @@ func WrapWithClaims(fn func(*gin.Context, jwt.RegisteredClaims) (resp.Resp, erro
 
 func bind(ctx *gin.Context, req any) (err error) {
 	if err = ctx.ShouldBindUri(req); err != nil {
-		ctx.Error(err)
 		return
 	}
 
@@ -128,12 +117,10 @@ func bind(ctx *gin.Context, req any) (err error) {
 		err = ctx.ShouldBind(req)
 	}
 	if err != nil {
-		ctx.Error(err)
 		return
 	}
 
 	if err = validateRequest(req); err != nil {
-		ctx.Error(err)
 		return
 	}
 
@@ -157,7 +144,7 @@ func ReturnOnlyErrorResp(err error) resp.Resp {
 func ReturnSuccess(data any) (resp.Resp, error) {
 	return resp.Resp{
 		Code: 200,
-		Msg:  "处理成功",
+		Msg:  "success",
 		Data: data,
 	}, nil
 }

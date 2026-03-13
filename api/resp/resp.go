@@ -7,8 +7,8 @@ type Resp struct {
 }
 
 type ImgBedResp struct {
-	DomainName  string `json:"domain_name"`
-	AccessToken string `json:"access_token"`
+	DomainName  string `json:"domainName"`
+	AccessToken string `json:"accessToken"`
 }
 
 type CheckingResp struct {

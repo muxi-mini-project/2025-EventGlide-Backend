@@ -1243,7 +1243,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.PostDraft"
+                                            "$ref": "#/definitions/resp.LoadPostDraftResp"
                                         }
                                     }
                                 }
@@ -1515,7 +1515,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.User"
+                                            "$ref": "#/definitions/resp.UserInfoResp"
                                         }
                                     }
                                 }
@@ -2027,68 +2027,10 @@ const docTemplate = `{
                 "showImg": {
                     "type": "string"
                 },
-                "studentID": {
+                "studentId": {
                     "type": "string"
                 },
                 "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.PostDraft": {
-            "type": "object",
-            "properties": {
-                "bid": {
-                    "type": "string"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "introduce": {
-                    "type": "string"
-                },
-                "showImg": {
-                    "type": "string"
-                },
-                "studentID": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.User": {
-            "type": "object",
-            "properties": {
-                "avatar": {
-                    "type": "string"
-                },
-                "collectact": {
-                    "type": "string"
-                },
-                "collectpost": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "likeact": {
-                    "type": "string"
-                },
-                "likecomment": {
-                    "type": "string"
-                },
-                "likepost": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "school": {
-                    "type": "string"
-                },
-                "student_id": {
                     "type": "string"
                 }
             }
@@ -2099,10 +2041,10 @@ const docTemplate = `{
                 "detailTime": {
                     "type": "object",
                     "properties": {
-                        "end_time": {
+                        "endTime": {
                             "type": "string"
                         },
-                        "start_time": {
+                        "startTime": {
                             "type": "string"
                         }
                     }
@@ -2113,7 +2055,7 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "if_register": {
+                "ifRegister": {
                     "type": "string"
                 },
                 "location": {
@@ -2148,13 +2090,13 @@ const docTemplate = `{
                         "holderType": {
                             "type": "string"
                         },
-                        "if_register": {
+                        "ifRegister": {
                             "type": "string"
                         },
                         "position": {
                             "type": "string"
                         },
-                        "register_method": {
+                        "registerMethod": {
                             "type": "string"
                         },
                         "signer": {
@@ -2165,7 +2107,7 @@ const docTemplate = `{
                                     "name": {
                                         "type": "string"
                                     },
-                                    "studentid": {
+                                    "studentId": {
                                         "type": "string"
                                     }
                                 }
@@ -2206,7 +2148,7 @@ const docTemplate = `{
                         "activeForm",
                         "endTime",
                         "holderType",
-                        "if_register",
+                        "ifRegister",
                         "position",
                         "startTime",
                         "type"
@@ -2221,7 +2163,7 @@ const docTemplate = `{
                         "holderType": {
                             "type": "string"
                         },
-                        "if_register": {
+                        "ifRegister": {
                             "type": "string",
                             "enum": [
                                 "是",
@@ -2231,7 +2173,7 @@ const docTemplate = `{
                         "position": {
                             "type": "string"
                         },
-                        "register_method": {
+                        "registerMethod": {
                             "type": "string"
                         },
                         "signer": {
@@ -2242,7 +2184,7 @@ const docTemplate = `{
                                     "name": {
                                         "type": "string"
                                     },
-                                    "studentid": {
+                                    "studentId": {
                                         "type": "string"
                                     }
                                 }
@@ -2261,87 +2203,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "title": {
-                    "type": "string"
-                }
-            }
-        },
-        "req.CreateActReq": {
-            "type": "object",
-            "required": [
-                "introduce",
-                "studentid",
-                "title"
-            ],
-            "properties": {
-                "introduce": {
-                    "type": "string"
-                },
-                "labelform": {
-                    "type": "object",
-                    "required": [
-                        "activeForm",
-                        "endTime",
-                        "holderType",
-                        "if_register",
-                        "position",
-                        "startTime",
-                        "type"
-                    ],
-                    "properties": {
-                        "activeForm": {
-                            "type": "string"
-                        },
-                        "endTime": {
-                            "type": "string"
-                        },
-                        "holderType": {
-                            "type": "string"
-                        },
-                        "if_register": {
-                            "type": "string",
-                            "enum": [
-                                "是",
-                                "否"
-                            ]
-                        },
-                        "position": {
-                            "type": "string"
-                        },
-                        "register_method": {
-                            "type": "string"
-                        },
-                        "signer": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "type": "string"
-                                    },
-                                    "studentid": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "startTime": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string"
-                        }
-                    }
-                },
-                "showImg": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "studentid": {
-                    "type": "string"
                 },
                 "title": {
                     "type": "string"
@@ -2352,18 +2213,14 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "content",
-                "parent_id",
-                "receiver",
+                "parentId",
                 "subject"
             ],
             "properties": {
                 "content": {
                     "type": "string"
                 },
-                "parent_id": {
-                    "type": "string"
-                },
-                "receiver": {
+                "parentId": {
                     "type": "string"
                 },
                 "subject": {
@@ -2373,19 +2230,12 @@ const docTemplate = `{
         },
         "req.CreatePostDraftReq": {
             "type": "object",
-            "required": [
-                "introduce",
-                "showImg",
-                "studentid",
-                "title"
-            ],
             "properties": {
                 "introduce": {
                     "type": "string"
                 },
                 "showImg": {
                     "type": "array",
-                    "minItems": 1,
                     "items": {
                         "type": "string"
                     }
@@ -2421,10 +2271,10 @@ const docTemplate = `{
         "req.DeleteCommentReq": {
             "type": "object",
             "required": [
-                "target_id"
+                "targetId"
             ],
             "properties": {
-                "target_id": {
+                "targetId": {
                     "type": "string"
                 }
             }
@@ -2432,10 +2282,10 @@ const docTemplate = `{
         "req.DeletePostReq": {
             "type": "object",
             "required": [
-                "target_id"
+                "targetId"
             ],
             "properties": {
-                "target_id": {
+                "targetId": {
                     "type": "string"
                 }
             }
@@ -2477,18 +2327,14 @@ const docTemplate = `{
         "req.InteractionReq": {
             "type": "object",
             "required": [
-                "receiver",
                 "subject",
-                "targetid"
+                "targetId"
             ],
             "properties": {
-                "receiver": {
-                    "type": "string"
-                },
                 "subject": {
                     "type": "string"
                 },
-                "targetid": {
+                "targetId": {
                     "type": "string"
                 }
             }
@@ -2497,13 +2343,13 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "password",
-                "studentid"
+                "studentId"
             ],
             "properties": {
                 "password": {
                     "type": "string"
                 },
-                "studentid": {
+                "studentId": {
                     "type": "string"
                 }
             }
@@ -2517,15 +2363,18 @@ const docTemplate = `{
                 "object": {
                     "type": "string"
                 },
-                "target_id": {
+                "targetId": {
                     "type": "string"
                 }
             }
         },
         "req.UpdateNameReq": {
             "type": "object",
+            "required": [
+                "newName"
+            ],
             "properties": {
-                "new_name": {
+                "newName": {
                     "type": "string"
                 }
             }
@@ -2533,10 +2382,10 @@ const docTemplate = `{
         "req.UserAvatarReq": {
             "type": "object",
             "required": [
-                "avatar_url"
+                "avatarUrl"
             ],
             "properties": {
-                "avatar_url": {
+                "avatarUrl": {
                     "type": "string"
                 }
             }
@@ -2552,10 +2401,10 @@ const docTemplate = `{
         "resp.BriefFeedResp": {
             "type": "object",
             "properties": {
-                "commentandat": {
+                "commentAndAt": {
                     "type": "integer"
                 },
-                "likeandcollect": {
+                "likeAndCollect": {
                     "type": "integer"
                 },
                 "total": {
@@ -2586,10 +2435,10 @@ const docTemplate = `{
                 "bid": {
                     "type": "string"
                 },
-                "commented_pos": {
+                "commentedPos": {
                     "type": "string"
                 },
-                "commented_time": {
+                "commentedTime": {
                     "type": "string"
                 },
                 "content": {
@@ -2601,7 +2450,7 @@ const docTemplate = `{
                         "avatar": {
                             "type": "string"
                         },
-                        "studentid": {
+                        "studentId": {
                             "type": "string"
                         },
                         "username": {
@@ -2615,7 +2464,7 @@ const docTemplate = `{
                 "likeNum": {
                     "type": "integer"
                 },
-                "parent_id": {
+                "parentId": {
                     "type": "string"
                 },
                 "reply": {
@@ -2627,7 +2476,7 @@ const docTemplate = `{
                 "replyNum": {
                     "type": "integer"
                 },
-                "root_id": {
+                "rootId": {
                     "type": "string"
                 }
             }
@@ -2641,7 +2490,7 @@ const docTemplate = `{
                 "bid": {
                     "type": "string"
                 },
-                "if_register": {
+                "ifRegister": {
                     "type": "string"
                 },
                 "introduce": {
@@ -2667,7 +2516,7 @@ const docTemplate = `{
                             "name": {
                                 "type": "string"
                             },
-                            "studentid": {
+                            "studentId": {
                                 "type": "string"
                             }
                         }
@@ -2688,7 +2537,7 @@ const docTemplate = `{
                         "school": {
                             "type": "string"
                         },
-                        "studentid": {
+                        "studentId": {
                             "type": "string"
                         },
                         "username": {
@@ -2701,7 +2550,7 @@ const docTemplate = `{
         "resp.FeedAtResp": {
             "type": "object",
             "properties": {
-                "first_pic": {
+                "firstPic": {
                     "type": "string"
                 },
                 "id": {
@@ -2710,13 +2559,13 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "published_at": {
+                "publishedAt": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "target_bid": {
+                "targetBid": {
                     "type": "string"
                 },
                 "userInfo": {
@@ -2727,7 +2576,7 @@ const docTemplate = `{
         "resp.FeedCollectResp": {
             "type": "object",
             "properties": {
-                "first_pic": {
+                "firstPic": {
                     "type": "string"
                 },
                 "id": {
@@ -2736,13 +2585,13 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "published_at": {
+                "publishedAt": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "target_bid": {
+                "targetBid": {
                     "type": "string"
                 },
                 "userInfo": {
@@ -2753,7 +2602,7 @@ const docTemplate = `{
         "resp.FeedCommentResp": {
             "type": "object",
             "properties": {
-                "first_pic": {
+                "firstPic": {
                     "type": "string"
                 },
                 "id": {
@@ -2762,13 +2611,13 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "published_at": {
+                "publishedAt": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "target_bid": {
+                "targetBid": {
                     "type": "string"
                 },
                 "userInfo": {
@@ -2779,7 +2628,7 @@ const docTemplate = `{
         "resp.FeedInvitationResp": {
             "type": "object",
             "properties": {
-                "first_pic": {
+                "firstPic": {
                     "type": "string"
                 },
                 "id": {
@@ -2788,13 +2637,13 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "published_at": {
+                "publishedAt": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "target_bid": {
+                "targetBid": {
                     "type": "string"
                 },
                 "userInfo": {
@@ -2805,7 +2654,7 @@ const docTemplate = `{
         "resp.FeedLikeResp": {
             "type": "object",
             "properties": {
-                "first_pic": {
+                "firstPic": {
                     "type": "string"
                 },
                 "id": {
@@ -2814,13 +2663,13 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "published_at": {
+                "publishedAt": {
                     "type": "string"
                 },
                 "status": {
                     "type": "string"
                 },
-                "target_bid": {
+                "targetBid": {
                     "type": "string"
                 },
                 "userInfo": {
@@ -2866,10 +2715,10 @@ const docTemplate = `{
         "resp.ImgBedResp": {
             "type": "object",
             "properties": {
-                "access_token": {
+                "accessToken": {
                     "type": "string"
                 },
-                "domain_name": {
+                "domainName": {
                     "type": "string"
                 }
             }
@@ -2900,7 +2749,7 @@ const docTemplate = `{
                 "holderType": {
                     "type": "string"
                 },
-                "if_register": {
+                "ifRegister": {
                     "type": "string"
                 },
                 "introduce": {
@@ -2942,7 +2791,7 @@ const docTemplate = `{
                         "school": {
                             "type": "string"
                         },
-                        "studentid": {
+                        "studentId": {
                             "type": "string"
                         },
                         "username": {
@@ -3000,13 +2849,39 @@ const docTemplate = `{
                         "school": {
                             "type": "string"
                         },
-                        "studentid": {
+                        "studentId": {
                             "type": "string"
                         },
                         "username": {
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "resp.LoadPostDraftResp": {
+            "type": "object",
+            "properties": {
+                "bid": {
+                    "type": "string"
+                },
+                "createdAt": {
+                    "type": "string"
+                },
+                "introduce": {
+                    "type": "string"
+                },
+                "showImg": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "studentId": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
@@ -3019,16 +2894,19 @@ const docTemplate = `{
                 "avatar": {
                     "type": "string"
                 },
-                "name": {
+                "college": {
                     "type": "string"
                 },
                 "school": {
                     "type": "string"
                 },
-                "sid": {
+                "studentId": {
                     "type": "string"
                 },
                 "token": {
+                    "type": "string"
+                },
+                "username": {
                     "type": "string"
                 }
             }
@@ -3045,25 +2923,22 @@ const docTemplate = `{
                 "likeNum": {
                     "type": "integer"
                 },
+                "parentId": {
+                    "type": "string"
+                },
                 "parentUserName": {
                     "type": "string"
                 },
-                "parent_id": {
+                "replyContent": {
                     "type": "string"
                 },
-                "replyNum": {
-                    "type": "integer"
-                },
-                "reply_content": {
-                    "type": "string"
-                },
-                "reply_creator": {
+                "replyCreator": {
                     "type": "object",
                     "properties": {
                         "avatar": {
                             "type": "string"
                         },
-                        "studentid": {
+                        "studentId": {
                             "type": "string"
                         },
                         "username": {
@@ -3071,13 +2946,16 @@ const docTemplate = `{
                         }
                     }
                 },
-                "reply_pos": {
+                "replyNum": {
+                    "type": "integer"
+                },
+                "replyPos": {
                     "type": "string"
                 },
-                "reply_time": {
+                "replyTime": {
                     "type": "string"
                 },
-                "root_id": {
+                "rootId": {
                     "type": "string"
                 }
             }
@@ -3100,7 +2978,30 @@ const docTemplate = `{
                 "avatar": {
                     "type": "string"
                 },
-                "studentid": {
+                "studentId": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "resp.UserInfoResp": {
+            "type": "object",
+            "properties": {
+                "Id": {
+                    "type": "integer"
+                },
+                "avatar": {
+                    "type": "string"
+                },
+                "college": {
+                    "type": "string"
+                },
+                "school": {
+                    "type": "string"
+                },
+                "studentId": {
                     "type": "string"
                 },
                 "username": {

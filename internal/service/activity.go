@@ -240,7 +240,7 @@ func toAct(r *req.CreateActReq, studentId string) *model.Activity {
 }
 
 func joinSigners(signers []struct {
-	StudentID string `json:"studentid" validate:"len=10"`
+	StudentID string `json:"studentId" validate:"len=10"`
 	Name      string `json:"name"`
 }) []string {
 	var res []string
@@ -252,17 +252,17 @@ func joinSigners(signers []struct {
 }
 
 func separateSigners(signers []string) []struct {
-	StudentID string `json:"studentid"`
+	StudentID string `json:"studentId"`
 	Name      string `json:"name"`
 } {
 	var res []struct {
-		StudentID string `json:"studentid"`
+		StudentID string `json:"studentId"`
 		Name      string `json:"name"`
 	}
 	for _, s := range signers {
 		ss := strings.Split(s, ":")
 		res = append(res, struct {
-			StudentID string `json:"studentid"`
+			StudentID string `json:"studentId"`
 			Name      string `json:"name"`
 		}{StudentID: ss[0], Name: ss[1]})
 	}

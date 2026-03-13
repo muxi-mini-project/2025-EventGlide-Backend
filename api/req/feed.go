@@ -1,7 +1,7 @@
 package req
 
 type NumReq struct {
-	TargetId string `json:"target_id"`
+	TargetId string `json:"targetId"`
 	Object   string `json:"object"`
 	Action   string `json:"action"`
 }

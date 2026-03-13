@@ -4,19 +4,19 @@ type CommentResp struct {
 	Bid string `json:"bid"`
 
 	Creator struct {
-		StudentID string `json:"studentid"`
+		StudentID string `json:"studentId"`
 		Username  string `json:"username"`
 		Avatar    string `json:"avatar"`
 	} `json:"creator"`
 
-	CommentedTime string `json:"commented_time"`
-	CommentedPos  string `json:"commented_pos"`
+	CommentedTime string `json:"commentedTime"`
+	CommentedPos  string `json:"commentedPos"`
 	Content       string `json:"content"`
 	LikeNum       int    `json:"likeNum"`
 	ReplyNum      int    `json:"replyNum"`
 	IsLike        string `json:"isLike"`
-	ParentID      string `json:"parent_id"`
-	RootID        string `json:"root_id"`
+	ParentID      string `json:"parentId"`
+	RootID        string `json:"rootId"`
 
 	Reply []ReplyResp `json:"reply"`
 }
@@ -25,17 +25,17 @@ type ReplyResp struct {
 	Bid string `json:"bid"`
 
 	ReplyCreator struct {
-		StudentID string `json:"studentid"`
+		StudentID string `json:"studentId"`
 		Username  string `json:"username"`
 		Avatar    string `json:"avatar"`
-	} `json:"reply_creator"`
+	} `json:"replyCreator"`
 
-	ReplyContent string `json:"reply_content"`
-	ReplyTime    string `json:"reply_time"`
-	ReplyPos     string `json:"reply_pos"`
+	ReplyContent string `json:"replyContent"`
+	ReplyTime    string `json:"replyTime"`
+	ReplyPos     string `json:"replyPos"`
 
-	ParentID       string `json:"parent_id"`
-	RootID         string `json:"root_id"`
+	ParentID       string `json:"parentId"`
+	RootID         string `json:"rootId"`
 	ParentUserName string `json:"parentUserName"`
 
 	IsLike   string `json:"isLike"`

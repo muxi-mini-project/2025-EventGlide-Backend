@@ -5,7 +5,7 @@ type DraftReq struct {
 }
 
 type UserAvatarReq struct {
-	AvatarUrl string `json:"avatar_url" validate:"required,url"`
+	AvatarUrl string `json:"avatarUrl" validate:"required,url"`
 }
 
 type AuditWrapper struct {

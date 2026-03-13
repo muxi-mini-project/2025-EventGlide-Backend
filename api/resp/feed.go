@@ -1,8 +1,8 @@
 package resp
 
 type BriefFeedResp struct {
-	LikeAndCollect int `json:"likeandcollect"`
-	CommentAndAt   int `json:"commentandat"`
+	LikeAndCollect int `json:"likeAndCollect"`
+	CommentAndAt   int `json:"commentAndAt"`
 	Total          int `json:"total"`
 }
 
@@ -15,7 +15,7 @@ type FeedResp struct {
 }
 
 type UserInfo struct {
-	StudentID string `json:"studentid"`
+	StudentID string `json:"studentId"`
 	Avatar    string `json:"avatar"`
 	Username  string `json:"username"`
 }
@@ -24,9 +24,9 @@ type FeedLikeResp struct {
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
-	PubLishedAt string `json:"published_at"`
-	TargetBid   string `json:"target_bid"`
-	FirstPic    string `json:"first_pic,omitempty"`
+	PublishedAt string `json:"publishedAt"`
+	TargetBid   string `json:"targetBid"`
+	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
 }
 
@@ -35,9 +35,9 @@ type FeedCommentResp struct {
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
-	PubLishedAt string `json:"published_at"`
-	TargetBid   string `json:"target_bid"`
-	FirstPic    string `json:"first_pic,omitempty"`
+	PublishedAt string `json:"publishedAt"`
+	TargetBid   string `json:"targetBid"`
+	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
 }
 
@@ -46,9 +46,9 @@ type FeedAtResp struct {
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
-	PubLishedAt string `json:"published_at"`
-	TargetBid   string `json:"target_bid"`
-	FirstPic    string `json:"first_pic,omitempty"`
+	PublishedAt string `json:"publishedAt"`
+	TargetBid   string `json:"targetBid"`
+	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
 }
 
@@ -57,9 +57,9 @@ type FeedCollectResp struct {
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
-	PubLishedAt string `json:"published_at"`
-	FirstPic    string `json:"first_pic,omitempty"`
-	TargetBid   string `json:"target_bid"`
+	PublishedAt string `json:"publishedAt"`
+	FirstPic    string `json:"firstPic,omitempty"`
+	TargetBid   string `json:"targetBid"`
 	Status      string `json:"status"`
 }
 
@@ -68,8 +68,8 @@ type FeedInvitationResp struct {
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
-	PubLishedAt string `json:"published_at"`
-	TargetBid   string `json:"target_bid"`
-	FirstPic    string `json:"first_pic,omitempty"`
+	PublishedAt string `json:"publishedAt"`
+	TargetBid   string `json:"targetBid"`
+	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
 }

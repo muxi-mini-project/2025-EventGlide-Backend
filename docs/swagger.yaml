@@ -96,63 +96,25 @@ definitions:
         type: integer
       showImg:
         type: string
-      studentID:
+      studentId:
         type: string
       title:
-        type: string
-    type: object
-  model.PostDraft:
-    properties:
-      bid:
-        type: string
-      createdAt:
-        type: string
-      introduce:
-        type: string
-      showImg:
-        type: string
-      studentID:
-        type: string
-      title:
-        type: string
-    type: object
-  model.User:
-    properties:
-      avatar:
-        type: string
-      collectact:
-        type: string
-      collectpost:
-        type: string
-      id:
-        type: integer
-      likeact:
-        type: string
-      likecomment:
-        type: string
-      likepost:
-        type: string
-      name:
-        type: string
-      school:
-        type: string
-      student_id:
         type: string
     type: object
   req.ActSearchReq:
     properties:
       detailTime:
         properties:
-          end_time:
+          endTime:
             type: string
-          start_time:
+          startTime:
             type: string
         type: object
       holderType:
         items:
           type: string
         type: array
-      if_register:
+      ifRegister:
         type: string
       location:
         items:
@@ -175,21 +137,18 @@ definitions:
             type: string
           holderType:
             type: string
-          if_register:
-            enum:
-            - 是
-            - 否
+          ifRegister:
             type: string
           position:
             type: string
-          register_method:
+          registerMethod:
             type: string
           signer:
             items:
               properties:
                 name:
                   type: string
-                studentid:
+                studentId:
                   type: string
               type: object
             type: array
@@ -197,14 +156,6 @@ definitions:
             type: string
           type:
             type: string
-        required:
-        - activeForm
-        - endTime
-        - holderType
-        - if_register
-        - position
-        - startTime
-        - type
         type: object
       showImg:
         items:
@@ -225,21 +176,21 @@ definitions:
             type: string
           holderType:
             type: string
-          if_register:
+          ifRegister:
             enum:
             - 是
             - 否
             type: string
           position:
             type: string
-          register_method:
+          registerMethod:
             type: string
           signer:
             items:
               properties:
                 name:
                   type: string
-                studentid:
+                studentId:
                   type: string
               type: object
             type: array
@@ -251,7 +202,7 @@ definitions:
         - activeForm
         - endTime
         - holderType
-        - if_register
+        - ifRegister
         - position
         - startTime
         - type
@@ -270,16 +221,13 @@ definitions:
     properties:
       content:
         type: string
-      parent_id:
-        type: string
-      receiver:
+      parentId:
         type: string
       subject:
         type: string
     required:
     - content
-    - parent_id
-    - receiver
+    - parentId
     - subject
     type: object
   req.CreatePostDraftReq:
@@ -289,7 +237,6 @@ definitions:
       showImg:
         items:
           type: string
-        minItems: 1
         type: array
       title:
         type: string
@@ -312,17 +259,17 @@ definitions:
     type: object
   req.DeleteCommentReq:
     properties:
-      target_id:
+      targetId:
         type: string
     required:
-    - target_id
+    - targetId
     type: object
   req.DeletePostReq:
     properties:
-      target_id:
+      targetId:
         type: string
     required:
-    - target_id
+    - targetId
     type: object
   req.FindActByDateReq:
     properties:
@@ -348,26 +295,23 @@ definitions:
     type: object
   req.InteractionReq:
     properties:
-      receiver:
-        type: string
       subject:
         type: string
-      targetid:
+      targetId:
         type: string
     required:
-    - receiver
     - subject
-    - targetid
+    - targetId
     type: object
   req.LoginReq:
     properties:
       password:
         type: string
-      studentid:
+      studentId:
         type: string
     required:
     - password
-    - studentid
+    - studentId
     type: object
   req.NumReq:
     properties:
@@ -375,20 +319,22 @@ definitions:
         type: string
       object:
         type: string
-      target_id:
+      targetId:
         type: string
     type: object
   req.UpdateNameReq:
     properties:
-      new_name:
+      newName:
         type: string
+    required:
+    - newName
     type: object
   req.UserAvatarReq:
     properties:
-      avatar_url:
+      avatarUrl:
         type: string
     required:
-    - avatar_url
+    - avatarUrl
     type: object
   req.UserSearchReq:
     properties:
@@ -397,9 +343,9 @@ definitions:
     type: object
   resp.BriefFeedResp:
     properties:
-      commentandat:
+      commentAndAt:
         type: integer
-      likeandcollect:
+      likeAndCollect:
         type: integer
       total:
         type: integer
@@ -419,9 +365,9 @@ definitions:
     properties:
       bid:
         type: string
-      commented_pos:
+      commentedPos:
         type: string
-      commented_time:
+      commentedTime:
         type: string
       content:
         type: string
@@ -429,7 +375,7 @@ definitions:
         properties:
           avatar:
             type: string
-          studentid:
+          studentId:
             type: string
           username:
             type: string
@@ -438,7 +384,7 @@ definitions:
         type: string
       likeNum:
         type: integer
-      parent_id:
+      parentId:
         type: string
       reply:
         items:
@@ -446,7 +392,7 @@ definitions:
         type: array
       replyNum:
         type: integer
-      root_id:
+      rootId:
         type: string
     type: object
   resp.CreateActivityResp:
@@ -455,7 +401,7 @@ definitions:
         type: string
       bid:
         type: string
-      if_register:
+      ifRegister:
         type: string
       introduce:
         type: string
@@ -472,7 +418,7 @@ definitions:
           properties:
             name:
               type: string
-            studentid:
+            studentId:
               type: string
           type: object
         type: array
@@ -486,7 +432,7 @@ definitions:
             type: string
           school:
             type: string
-          studentid:
+          studentId:
             type: string
           username:
             type: string
@@ -494,85 +440,85 @@ definitions:
     type: object
   resp.FeedAtResp:
     properties:
-      first_pic:
+      firstPic:
         type: string
       id:
         type: integer
       message:
         type: string
-      published_at:
+      publishedAt:
         type: string
       status:
         type: string
-      target_bid:
+      targetBid:
         type: string
       userInfo:
         $ref: '#/definitions/resp.UserInfo'
     type: object
   resp.FeedCollectResp:
     properties:
-      first_pic:
+      firstPic:
         type: string
       id:
         type: integer
       message:
         type: string
-      published_at:
+      publishedAt:
         type: string
       status:
         type: string
-      target_bid:
+      targetBid:
         type: string
       userInfo:
         $ref: '#/definitions/resp.UserInfo'
     type: object
   resp.FeedCommentResp:
     properties:
-      first_pic:
+      firstPic:
         type: string
       id:
         type: integer
       message:
         type: string
-      published_at:
+      publishedAt:
         type: string
       status:
         type: string
-      target_bid:
+      targetBid:
         type: string
       userInfo:
         $ref: '#/definitions/resp.UserInfo'
     type: object
   resp.FeedInvitationResp:
     properties:
-      first_pic:
+      firstPic:
         type: string
       id:
         type: integer
       message:
         type: string
-      published_at:
+      publishedAt:
         type: string
       status:
         type: string
-      target_bid:
+      targetBid:
         type: string
       userInfo:
         $ref: '#/definitions/resp.UserInfo'
     type: object
   resp.FeedLikeResp:
     properties:
-      first_pic:
+      firstPic:
         type: string
       id:
         type: integer
       message:
         type: string
-      published_at:
+      publishedAt:
         type: string
       status:
         type: string
-      target_bid:
+      targetBid:
         type: string
       userInfo:
         $ref: '#/definitions/resp.UserInfo'
@@ -602,9 +548,9 @@ definitions:
     type: object
   resp.ImgBedResp:
     properties:
-      access_token:
+      accessToken:
         type: string
-      domain_name:
+      domainName:
         type: string
     type: object
   resp.ListActivitiesResp:
@@ -624,7 +570,7 @@ definitions:
         type: object
       holderType:
         type: string
-      if_register:
+      ifRegister:
         type: string
       introduce:
         type: string
@@ -652,7 +598,7 @@ definitions:
             type: string
           school:
             type: string
-          studentid:
+          studentId:
             type: string
           username:
             type: string
@@ -690,11 +636,28 @@ definitions:
             type: string
           school:
             type: string
-          studentid:
+          studentId:
             type: string
           username:
             type: string
         type: object
+    type: object
+  resp.LoadPostDraftResp:
+    properties:
+      bid:
+        type: string
+      createdAt:
+        type: string
+      introduce:
+        type: string
+      showImg:
+        items:
+          type: string
+        type: array
+      studentId:
+        type: string
+      title:
+        type: string
     type: object
   resp.LoginResp:
     properties:
@@ -702,13 +665,15 @@ definitions:
         type: integer
       avatar:
         type: string
-      name:
+      college:
         type: string
       school:
         type: string
-      sid:
+      studentId:
         type: string
       token:
+        type: string
+      username:
         type: string
     type: object
   resp.ReplyResp:
@@ -719,28 +684,28 @@ definitions:
         type: string
       likeNum:
         type: integer
-      parent_id:
+      parentId:
         type: string
       parentUserName:
         type: string
-      reply_content:
+      replyContent:
         type: string
-      reply_creator:
+      replyCreator:
         properties:
           avatar:
             type: string
-          studentid:
+          studentId:
             type: string
           username:
             type: string
         type: object
-      reply_pos:
-        type: string
-      reply_time:
-        type: string
       replyNum:
         type: integer
-      root_id:
+      replyPos:
+        type: string
+      replyTime:
+        type: string
+      rootId:
         type: string
     type: object
   resp.Resp:
@@ -755,7 +720,22 @@ definitions:
     properties:
       avatar:
         type: string
-      studentid:
+      studentId:
+        type: string
+      username:
+        type: string
+    type: object
+  resp.UserInfoResp:
+    properties:
+      Id:
+        type: integer
+      avatar:
+        type: string
+      college:
+        type: string
+      school:
+        type: string
+      studentId:
         type: string
       username:
         type: string
@@ -1513,7 +1493,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/model.PostDraft'
+                  $ref: '#/definitions/resp.LoadPostDraftResp'
               type: object
       summary: 加载草稿
       tags:
@@ -1676,7 +1656,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/model.User'
+                  $ref: '#/definitions/resp.UserInfoResp'
               type: object
       summary: 获取用户信息
       tags:

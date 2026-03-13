@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	SubjectActivity = "activities"
-	SubjectPost     = "posts"
+	SubjectActivity = "activity"
+	SubjectPost     = "post"
 )
 
 type AuditorForm struct {

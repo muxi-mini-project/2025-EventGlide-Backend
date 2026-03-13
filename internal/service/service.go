@@ -13,4 +13,6 @@ var Provider = wire.NewSet(
 	NewPostService,
 	NewInteractionService,
 	NewUserService,
+
+	NewActPostCommentGetter,
 )

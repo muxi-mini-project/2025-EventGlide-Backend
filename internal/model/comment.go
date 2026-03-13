@@ -10,7 +10,7 @@ type Comment struct {
 	Content   string `gorm:"not null;type:text;comment:评论内容;column:content"`
 	ParentID  string `gorm:"type:varchar(255);comment:父评论ID;column:parent_id"`
 	Position  string `gorm:"not null;type:varchar(255);comment:位置;column:position"`
-	Type      int    `gorm:"not null;default:0;comment:评论类型;column:type"`
+	Subject   string `gorm:"not null;comment:评论类型;column:subject"` // activity/post/comment
 	RootId    string `gorm:"type:varchar(255);comment:根评论ID;column:root_id"`
 
 	LikeNum  int `gorm:"not null;default:0;comment:点赞数;column:like_num"`
