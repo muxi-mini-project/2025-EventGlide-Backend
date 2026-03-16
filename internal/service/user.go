@@ -97,7 +97,7 @@ func (us *UserService) Login(ctx *gin.Context, studentId string, password string
 	if !us.udh.CheckUserExist(ctx, studentId) {
 		school, err := us.cSvc.getWhichSchool(client)
 		if err != nil {
-			return nil, "", err
+			school = "数据加载中..."
 		}
 		err = us.CreateUser(ctx, studentId, school)
 		if err != nil {
@@ -320,11 +320,12 @@ func (c *ccnuService) client() *http.Client {
 }
 
 func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId string, password string) (*http.Client, error) {
-	params, err := c.makeAccountPreflightRequest()
+	client, params, err := c.makeAccountPreflightRequest()
 	if err != nil {
 		return nil, err
 	}
 
+	id := tools.RandomMD5()
 	v := url.Values{}
 	v.Set("username", studentId)
 	v.Set("password", password)
@@ -332,19 +333,18 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	v.Set("execution", params.execution)
 	v.Set("_eventId", params._eventId)
 	v.Set("submit", params.submit)
-	v.Set("visitorid", tools.RandomMD5())
-	v.Set("epid", "Edge145.0.0.0")
-	v.Set("ugt", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
-	v.Set("bz", tools.RandomMD5())
+
+	v.Set("visitorId1", id)
+	v.Set("visitorId", id)
 
 	request, err := http.NewRequest("POST", "https://account.ccnu.edu.cn/cas/login;jsessionid="+params.JSESSIONID, strings.NewReader(v.Encode()))
+	if err != nil {
+		return nil, err
+	}
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	request.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.109 Safari/537.36")
-	request.WithContext(ctx)
 
-	client := c.client()
 	resp, err := client.Do(request)
-	defer resp.Body.Close()
 	if err != nil {
 		var opErr *net.OpError
 		if errors.As(err, &opErr) {
@@ -352,6 +352,7 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 		}
 		return nil, err
 	}
+	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if strings.Contains(string(body), "有误") {
 		return client, errors.New("密码账号错误")
@@ -367,24 +368,25 @@ type accountRequestParams struct {
 	JSESSIONID string
 }
 
-func (c *ccnuService) makeAccountPreflightRequest() (*accountRequestParams, error) {
+func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountRequestParams, error) {
 	var JSESSIONID string
 	var lt string
 	var execution string
 	var _eventId string
+	client := c.client()
 
 	params := &accountRequestParams{}
 
 	// 初始化 http request
 	request, err := http.NewRequest("GET", "https://account.ccnu.edu.cn/cas/login", nil)
 	if err != nil {
-		return params, err
+		return client, params, err
 	}
 
 	// 发起请求
-	resp, err := c.client().Do(request)
+	resp, err := client.Do(request)
 	if err != nil {
-		return params, err
+		return client, params, err
 	}
 
 	// 读取 Body
@@ -392,7 +394,7 @@ func (c *ccnuService) makeAccountPreflightRequest() (*accountRequestParams, erro
 	defer resp.Body.Close()
 
 	if err != nil {
-		return params, err
+		return client, params, err
 	}
 
 	// 获取 Cookie 中的 JSESSIONID
@@ -403,7 +405,7 @@ func (c *ccnuService) makeAccountPreflightRequest() (*accountRequestParams, erro
 	}
 
 	if JSESSIONID == "" {
-		return params, errors.New("Can not get JSESSIONID")
+		return client, params, errors.New("Can not get JSESSIONID")
 	}
 
 	// 正则匹配 HTML 返回的表单字段
@@ -415,19 +417,19 @@ func (c *ccnuService) makeAccountPreflightRequest() (*accountRequestParams, erro
 
 	ltArr := ltReg.FindStringSubmatch(bodyStr)
 	if len(ltArr) != 2 {
-		return params, errors.New("Can not get form paramater: lt")
+		return client, params, errors.New("Can not get form paramater: lt")
 	}
 	lt = ltArr[1]
 
 	execArr := executionReg.FindStringSubmatch(bodyStr)
 	if len(execArr) != 2 {
-		return params, errors.New("Can not get form paramater: execution")
+		return client, params, errors.New("Can not get form paramater: execution")
 	}
 	execution = execArr[1]
 
 	_eventIdArr := _eventIdReg.FindStringSubmatch(bodyStr)
 	if len(_eventIdArr) != 2 {
-		return params, errors.New("Can not get form paramater: _eventId")
+		return client, params, errors.New("Can not get form paramater: _eventId")
 	}
 	_eventId = _eventIdArr[1]
 
@@ -437,21 +439,45 @@ func (c *ccnuService) makeAccountPreflightRequest() (*accountRequestParams, erro
 	params.submit = "LOGIN"
 	params.JSESSIONID = JSESSIONID
 
-	return params, nil
+	return client, params, nil
 }
 
 func (c *ccnuService) getWhichSchool(client *http.Client) (string, error) {
-	resp, err := client.Get(schoolUrl)
+	req, err := http.NewRequest("GET", schoolUrl, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Referer", "https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV.htmlx")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
+	req.Header.Set("Host", "bkzhjw.ccnu.edu.cn")
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 
 	body, err := io.ReadAll(resp.Body)
-	defer resp.Body.Close()
+	resp.Body.Close()
 	if err != nil {
 		return "", err
 	}
 	bodyStr := string(body)
+	req, err = http.NewRequest("GET", schoolUrl, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Referer", "https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV.htmlx")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
+	req.Header.Set("Host", "bkzhjw.ccnu.edu.cn")
+	resp, err = client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	body, err = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	bodyStr = string(body)
 
 	reg := regexp.MustCompile(schoolReg)
 	matches := reg.FindStringSubmatch(bodyStr)
