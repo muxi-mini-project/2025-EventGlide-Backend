@@ -89,7 +89,7 @@ jobs:
             --username=${{ secrets.ALIYUN_USERNAME }} \
             --password-stdin \
             ${{ secrets.ALIYUN_REGISTRY }}
-            echo 'VERSION=${{ needs.test.outputs.id }}' > .env
+            echo 'EVENT_GLIDE=${{ needs.test.outputs.id }}' > .env
             docker compose -f docker-compose.yaml pull
             docker compose -f docker-compose.yaml up -d
             docker image prune -a -f
