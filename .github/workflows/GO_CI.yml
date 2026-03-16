@@ -58,7 +58,7 @@ jobs:
         with:
           context: .
           push: true
-          tags: ${{ secrets.ALIYUN_REGISTRY }}/muxi/EventGlide:v1.0.0
+          tags: ${{ secrets.ALIYUN_REGISTRY }}/muxi/event-glide:v1.0.0
           file: ./Dockerfile
           build-args:
             Project_Name=eventglide
@@ -77,12 +77,12 @@ jobs:
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.DEV_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SERVER_ADDR }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.DEV_SERVER }} >> ~/.ssh/known_hosts
       - name: SSH into server and deploy
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_ADDR }} << EOF
+          ssh -o StrictHostKeyChecking=no ${{ secrets.DEV_SERVER_USER }}@${{ secrets.DEV_SERVER }} << EOF
            docker pull ${{ secrets.ALIYUN_REGISTRY }}/muxi/EventGlide:v1.0.0
            docker image prune -f
            cd ./eg
