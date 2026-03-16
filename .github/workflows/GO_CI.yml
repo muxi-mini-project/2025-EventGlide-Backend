@@ -2,11 +2,9 @@ name: EventGlide/build
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, master]
   pull_request:
-    branches:
-      - main
+    branches: [main, master]
 
 jobs:
 
@@ -83,7 +81,7 @@ jobs:
       - name: SSH into server and deploy
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.DEV_SERVER_USER }}@${{ secrets.DEV_SERVER }} << EOF
-           docker pull ${{ secrets.ALIYUN_REGISTRY }}/muxi/EventGlide:v1.0.0
+           docker pull ${{ secrets.ALIYUN_REGISTRY }}/muxi/event-glide:v1.0.0
            docker image prune -f
            cd ./eg
            docker compose -f docker-compose.yml up -d
