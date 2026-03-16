@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"strings"
@@ -67,4 +69,10 @@ func StatusMapper(auditStatus string) string {
 
 func IfRegisterMapper(_if string) bool {
 	return _if == "是"
+}
+
+func RandomMD5() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }

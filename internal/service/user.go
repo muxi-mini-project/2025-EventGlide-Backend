@@ -332,6 +332,10 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	v.Set("execution", params.execution)
 	v.Set("_eventId", params._eventId)
 	v.Set("submit", params.submit)
+	v.Set("visitorid", tools.RandomMD5())
+	v.Set("epid", "Edge145.0.0.0")
+	v.Set("ugt", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
+	v.Set("bz", tools.RandomMD5())
 
 	request, err := http.NewRequest("POST", "https://account.ccnu.edu.cn/cas/login;jsessionid="+params.JSESSIONID, strings.NewReader(v.Encode()))
 	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -340,6 +344,7 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 
 	client := c.client()
 	resp, err := client.Do(request)
+	defer resp.Body.Close()
 	if err != nil {
 		var opErr *net.OpError
 		if errors.As(err, &opErr) {
@@ -347,8 +352,9 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 		}
 		return nil, err
 	}
-	if len(resp.Header.Get("Set-Cookie")) == 0 {
-		return nil, errors.New("学号或密码错误")
+	body, err := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "有误") {
+		return client, errors.New("密码账号错误")
 	}
 	return client, nil
 }
