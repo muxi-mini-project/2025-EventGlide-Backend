@@ -83,6 +83,6 @@ jobs:
           ssh -o StrictHostKeyChecking=no ${{ secrets.DEV_SERVER_USER }}@${{ secrets.DEV_SERVER }} << EOF
            docker pull ${{ secrets.ALIYUN_REGISTRY }}/muxi/event-glide:v1.0.0
            docker image prune -f
-           cd ./eg
+           cd ./eventglide
            docker compose -f docker-compose.yml up -d
           EOF
