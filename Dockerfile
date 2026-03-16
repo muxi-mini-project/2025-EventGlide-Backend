@@ -7,18 +7,13 @@ ENV GOPROXY=https://goproxy.cn,direct
 # 声明构建参数，并赋值给环境变量
 ARG Project_Name
 ARG PORT
-ENV Project_Name=be-answer
 
 # 切换到 /app 目录
 WORKDIR /app
 
 # 拷贝基础文件和项目目录
 COPY . /app
-RUN go mod download
-COPY be-answer /app/be-answer
-
-# 切换到项目目录
-WORKDIR /app/be-answer
+RUN go mod tidy
 
 # 构建应用
 RUN GO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app
@@ -40,10 +35,7 @@ RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 WORKDIR /app
 
 # 从 builder 复制编译好的二进制文件（如果只需要二进制文件，可直接复制 app 文件）
-COPY --from=builder /app/be-answer/app .
-
-# 复制配置文件到最终镜像（如果需要）
-# COPY --from=builder /app/be-answer/config /app/config
+COPY --from=builder /app .
 
 # 设置环境变量 PORT
 ENV PORT=${PORT}
