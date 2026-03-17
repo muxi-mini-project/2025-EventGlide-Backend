@@ -4,10 +4,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
+	gonanoid "github.com/matoous/go-nanoid/v2"
 	"strings"
 	"time"
 )
+
+const ab = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
 
 func GenUUID() string {
 	return uuid.New().String()
@@ -75,4 +79,36 @@ func RandomMD5() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+type Claims struct {
+	*jwt.RegisteredClaims
+	Random string `json:"random,omitempty"`
+}
+
+func GenerateRand4() string {
+	return gonanoid.MustGenerate(ab, 4)
+}
+
+func SignRandJwt(studentId string) (string, error) {
+	now := time.Now()
+	c := &Claims{
+		&jwt.RegisteredClaims{
+			Subject:   studentId,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Minute)),
+		},
+		GenerateRand4(),
+	}
+
+	secret := GenerateRand4()
+
+	t := jwt.NewWithClaims(jwt.SigningMethodHS512, c)
+
+	j, err := t.SignedString([]byte(secret))
+	if err != nil {
+		return "", err
+	}
+
+	return j, nil
 }
