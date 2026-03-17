@@ -2,16 +2,9 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"github.com/gin-gonic/gin"
-	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/api/resp"
-	"github.com/raiki02/EG/internal/dao"
-	"github.com/raiki02/EG/internal/middleware"
-	"github.com/raiki02/EG/internal/model"
-	"github.com/raiki02/EG/tools"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -20,11 +13,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
-)
 
-const (
-	schoolReg = `学院：([^<]+)`
-	schoolUrl = "https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV_new_10511.htmlx?t1=1"
+	"github.com/gin-gonic/gin"
+	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/middleware"
+	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/tools"
+	"go.uber.org/zap"
 )
 
 type UserServiceHdl interface {
@@ -52,9 +50,10 @@ type UserService struct {
 	as   *ActivityService
 	ps   *PostService
 	l    *zap.Logger
+	cfg  *config.Conf
 }
 
-func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *dao.CommentDao, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *zap.Logger) *UserService {
+func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *dao.CommentDao, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *zap.Logger, cfg *config.Conf) *UserService {
 	return &UserService{
 		udh:  udh,
 		adh:  adh,
@@ -65,6 +64,7 @@ func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *da
 		iuh:  iuh,
 		as:   as,
 		ps:   ps,
+		cfg:  cfg,
 		l:    l.Named("user/service"),
 	}
 }
@@ -74,7 +74,7 @@ func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) e
 		StudentID: sid,
 		Name:      sid,
 		//Avatar:    genRandomAvatar(ctx),
-		Avatar:  viper.GetString("imgbed.defaultAvatar1"),
+		Avatar:  us.cfg.Imgbed.DefaultAvatar1,
 		School:  "华中师范大学",
 		College: school,
 	}
@@ -95,7 +95,7 @@ func (us *UserService) Login(ctx *gin.Context, studentId string, password string
 	}
 
 	if !us.udh.CheckUserExist(ctx, studentId) {
-		school, err := us.cSvc.getWhichSchool(client)
+		school, err := us.cSvc.getWhichSchool(client, studentId)
 		if err != nil {
 			school = "数据加载中..."
 		}
@@ -442,47 +442,40 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 	return client, params, nil
 }
 
-func (c *ccnuService) getWhichSchool(client *http.Client) (string, error) {
-	req, err := http.NewRequest("GET", schoolUrl, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Referer", "https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV.htmlx")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
-	req.Header.Set("Host", "bkzhjw.ccnu.edu.cn")
-	resp, err := client.Do(req)
+type Resp struct {
+	Data struct {
+		UserInfo struct {
+			Department string `json:"department"`
+		} `json:"userInfo"`
+	} `json:"data"`
+}
+
+func (c *ccnuService) getWhichSchool(client *http.Client, studentId string) (string, error) {
+	token, err := tools.SignRandJwt(studentId)
 	if err != nil {
 		return "", err
 	}
 
-	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return "", err
-	}
-	bodyStr := string(body)
-	req, err = http.NewRequest("GET", schoolUrl, nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Referer", "https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV.htmlx")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0")
-	req.Header.Set("Host", "bkzhjw.ccnu.edu.cn")
-	resp, err = client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	body, err = io.ReadAll(resp.Body)
-	resp.Body.Close()
-	if err != nil {
-		return "", err
-	}
-	bodyStr = string(body)
+	url := fmt.Sprintf("https://kjyy.ccnu.edu.cn/spa/static/public/api/remoteCasLogin?sign=&ticketCode=&account=&token=%s&ticket=%s&noAuth=true", token, tools.GenerateRand4())
 
-	reg := regexp.MustCompile(schoolReg)
-	matches := reg.FindStringSubmatch(bodyStr)
-	if len(matches) != 2 {
-		return "", errors.New("Can not get school info")
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return "", err
 	}
-	return matches[1], nil
+
+	res, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", err
+	}
+	var r Resp
+	if err = json.Unmarshal(body, &r); err != nil {
+		return "", err
+	}
+
+	return r.Data.UserInfo.Department, nil
 }

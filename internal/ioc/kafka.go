@@ -2,6 +2,7 @@ package ioc
 
 import (
 	"github.com/IBM/sarama"
+	"github.com/raiki02/EG/config"
 	"github.com/spf13/viper"
 )
 
@@ -10,7 +11,7 @@ type Kafka struct {
 	C sarama.Consumer
 }
 
-func NewKafkaClient() *sarama.Client {
+func NewKafkaClient(cfg *config.Conf) *sarama.Client {
 	addr := []string{viper.GetString("kafka.addr")}
 	config := sarama.NewConfig()
 	config.Producer.RequiredAcks = sarama.WaitForAll

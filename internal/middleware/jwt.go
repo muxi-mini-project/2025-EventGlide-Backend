@@ -2,16 +2,17 @@ package middleware
 
 import (
 	"errors"
+	"fmt"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/raiki02/EG/tools"
 	"github.com/redis/go-redis/v9"
-	"github.com/spf13/viper"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type JwtHdl interface {
@@ -22,21 +23,23 @@ type JwtHdl interface {
 }
 type Jwt struct {
 	rdb    *redis.Client
+	cfg *config.Conf
 	jwtKey []byte
 }
 
-func NewJwt(rdb *redis.Client) *Jwt {
-	jwtKey := viper.GetString("jwt.key")
+func NewJwt(rdb *redis.Client, cfg *config.Conf) *Jwt {
+	jwtKey := cfg.JWT.Key
 	return &Jwt{
 		jwtKey: []byte(jwtKey),
+		cfg:cfg,
 		rdb:    rdb,
 	}
 }
 
-func (c *Jwt) GenToken(ctx *gin.Context, sid string) string {
+func (c *Jwt) GenToken(ctx *gin.Context,  sid string) string {
 	claims := jwt.RegisteredClaims{
 		ID:        uuid.New().String(),
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(setTTL())),
+		ExpiresAt: jwt.NewNumericDate(time.Now().Add(setTTL(c.cfg))),
 		Subject:   sid,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -47,10 +50,10 @@ func (c *Jwt) GenToken(ctx *gin.Context, sid string) string {
 	return t
 }
 
-func (c *Jwt) StoreInRedis(ctx *gin.Context, sid string, token string) error {
+func (c *Jwt) StoreInRedis(ctx *gin.Context,sid string, token string) error {
 	id := c.parseTokenId(token)
 	key := "token:" + id
-	err := c.rdb.Set(ctx, key, sid, setTTL()).Err()
+	err := c.rdb.Set(ctx, key, sid, setTTL(c.cfg)).Err()
 	if err != nil {
 		return err
 	}
@@ -99,8 +102,9 @@ func (c *Jwt) parseTokenId(token string) string {
 	return ""
 }
 
-func setTTL() time.Duration {
-	ttl, _ := strconv.Atoi(viper.GetString("jwt.ttl"))
+func setTTL(cfg *config.Conf) time.Duration {
+	ttl := cfg.JWT.Ttl
+	fmt.Println(ttl)
 	return time.Second * time.Duration(ttl)
 }
 

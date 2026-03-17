@@ -1,18 +1,18 @@
 package ioc
 
 import (
+	"log"
+
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
-	"github.com/spf13/viper"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
-	"log"
 )
 
-func InitDB() *gorm.DB {
-	dsn := viper.GetString("mysql.dsn")
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
+func InitDB(cfg *config.Conf) *gorm.DB {
+	db, err := gorm.Open(mysql.Open(cfg.Mysql.DSN), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
@@ -24,8 +24,8 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	sqldb.SetMaxIdleConns(viper.GetInt("mysql.maxIdleConns"))
-	sqldb.SetMaxOpenConns(viper.GetInt("mysql.maxOpenConns"))
+	sqldb.SetMaxIdleConns(cfg.Mysql.MaxIdleConns)
+	sqldb.SetMaxOpenConns(cfg.Mysql.MaxOpenConns)
 
 	err = migrate(db)
 	if err != nil {

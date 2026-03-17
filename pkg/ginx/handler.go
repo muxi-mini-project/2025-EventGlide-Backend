@@ -2,10 +2,11 @@ package ginx
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/resp"
-	"net/http"
 )
 
 type userClaims struct{}

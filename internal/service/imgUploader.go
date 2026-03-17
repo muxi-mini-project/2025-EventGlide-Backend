@@ -4,7 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/qiniu/go-sdk/v7/auth"
 	"github.com/qiniu/go-sdk/v7/storage"
-	"github.com/spf13/viper"
+	"github.com/raiki02/EG/config"
 )
 
 type ImgUploaderHdl interface {
@@ -18,12 +18,12 @@ type ImgUploader struct {
 	ImgUrl    string
 }
 
-func NewImgUploader() *ImgUploader {
+func NewImgUploader(cfg *config.Conf) *ImgUploader {
 	img := &ImgUploader{
-		AccessKey: viper.GetString("imgbed.accessKey"),
-		SerectKey: viper.GetString("imgbed.secretKey"),
-		Bucket:    viper.GetString("imgbed.bucket"),
-		ImgUrl:    viper.GetString("imgbed.imgUrl"),
+		AccessKey: cfg.Imgbed.AccessKey,
+		SerectKey: cfg.Imgbed.SecretKey,
+		Bucket:    cfg.Imgbed.Bucket,
+		ImgUrl:    cfg.Imgbed.ImgURL,
 	}
 	return img
 }

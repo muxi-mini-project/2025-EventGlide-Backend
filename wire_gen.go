@@ -7,6 +7,7 @@
 package main
 
 import (
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/controller"
 	"github.com/raiki02/EG/internal/dao"
@@ -22,24 +23,25 @@ import (
 
 func InitApp() *server.Server {
 	engine := ioc.InitGinHandler()
-	db := ioc.InitDB()
+	conf := config.InitConf()
+	db := ioc.InitDB(conf)
 	logger := ioc.Newlogger()
 	userDao := dao.NewUserDao(db, logger)
 	actDao := dao.NewActDao(db, logger)
 	postDao := dao.NewPostDao(db, logger)
 	commentDao := dao.NewCommentDao(db, logger)
-	client := ioc.InitRedis()
-	jwt := middleware.NewJwt(client)
+	client := ioc.InitRedis(conf)
+	jwt := middleware.NewJwt(client, conf)
 	ccnuService := service.NewCCNUService()
-	imgUploader := service.NewImgUploader()
+	imgUploader := service.NewImgUploader(conf)
 	cacheCache := cache.NewCache(client)
 	interactionDao := dao.NewInteractionDao(db, commentDao, userDao, actDao, postDao, logger)
 	mqHdl := mq.NewMQ(client)
 	auditorRepository := dao.NewAuditorRepo(db, logger)
-	auditorService := service.NewAuditorService(auditorRepository, logger)
+	auditorService := service.NewAuditorService(auditorRepository, logger, conf)
 	activityService := service.NewActivityService(actDao, cacheCache, userDao, logger, interactionDao, mqHdl, auditorService)
 	postService := service.NewPostService(postDao, userDao, logger, auditorService)
-	userService := service.NewUserService(userDao, actDao, postDao, commentDao, jwt, ccnuService, imgUploader, activityService, postService, logger)
+	userService := service.NewUserService(userDao, actDao, postDao, commentDao, jwt, ccnuService, imgUploader, activityService, postService, logger, conf)
 	userController := controller.NewUserController(engine, userService, logger)
 	userRouter := router.NewUserRouter(engine, userController, jwt)
 	actController := controller.NewActController(activityService, imgUploader, logger)

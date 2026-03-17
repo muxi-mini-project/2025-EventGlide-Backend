@@ -1,5 +1,7 @@
 .idea
 /config/conf.yaml
+/config/data/
+/log
 /volumes
 /tmp
 /config/dev-conf.yml
