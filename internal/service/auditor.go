@@ -1,18 +1,19 @@
 package service
 
 import (
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/client"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/dto"
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/tools"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 var _ dao.AuditorRepository = (*dao.AuditorRepo)(nil)
@@ -31,10 +32,10 @@ type auditorService struct {
 	l *zap.Logger
 }
 
-func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger) AuditorService {
+func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger, cfg *config.Conf) AuditorService {
 	muxiCli, err := client.NewClient(client.Config{
-		ApiKey: viper.GetString("auditor.apiKey"),
-		Region: viper.GetString("auditor.region"),
+		ApiKey: cfg.Auditor.ApiKey,
+		Region: cfg.Auditor.Region,
 	})
 	if err != nil {
 		l.Fatal("Failed to create Muxi Auditor client", zap.Error(err))
@@ -42,8 +43,8 @@ func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger) AuditorService
 	}
 
 	c := &auditorService{
-		ApiKey:      viper.GetString("auditor.apiKey"),
-		HookUrl:     viper.GetString("auditor.hookUrl"),
+		ApiKey:      cfg.Auditor.ApiKey,
+		HookUrl:     cfg.Auditor.HookURL,
 		MuxiCli:     muxiCli,
 		AuditorRepo: repo,
 		l:           l.Named("auditor/service"),

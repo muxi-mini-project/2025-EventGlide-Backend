@@ -1,13 +1,13 @@
 package ioc
 
 import (
+	"github.com/raiki02/EG/config"
 	"github.com/redis/go-redis/v9"
-	"github.com/spf13/viper"
 )
 
-func InitRedis() *redis.Client {
-	addr := viper.GetString("redis.addr")
-	pw := viper.GetString("redis.password")
+func InitRedis(cfg *config.Conf) *redis.Client {
+	addr := cfg.Redis.Addr
+	pw := cfg.Redis.Password
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: pw,

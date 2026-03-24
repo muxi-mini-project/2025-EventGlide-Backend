@@ -5,15 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/api/resp"
-	"github.com/raiki02/EG/internal/dao"
-	"github.com/raiki02/EG/internal/middleware"
-	"github.com/raiki02/EG/internal/model"
-	"github.com/raiki02/EG/tools"
-	"github.com/spf13/viper"
-	"go.uber.org/zap"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +13,16 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/middleware"
+	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/tools"
+	"go.uber.org/zap"
 )
 
 type UserServiceHdl interface {
@@ -49,9 +50,10 @@ type UserService struct {
 	as   *ActivityService
 	ps   *PostService
 	l    *zap.Logger
+	cfg  *config.Conf
 }
 
-func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *dao.CommentDao, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *zap.Logger) *UserService {
+func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *dao.CommentDao, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *zap.Logger, cfg *config.Conf) *UserService {
 	return &UserService{
 		udh:  udh,
 		adh:  adh,
@@ -63,6 +65,7 @@ func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *da
 		as:   as,
 		ps:   ps,
 		l:    l.Named("user/service"),
+		cfg:  cfg,
 	}
 }
 
@@ -71,7 +74,7 @@ func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) e
 		StudentID: sid,
 		Name:      sid,
 		//Avatar:    genRandomAvatar(ctx),
-		Avatar:  viper.GetString("imgbed.defaultAvatar1"),
+		Avatar:  us.cfg.Imgbed.DefaultAvatar1,
 		School:  "华中师范大学",
 		College: school,
 	}

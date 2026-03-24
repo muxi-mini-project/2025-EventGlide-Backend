@@ -2,6 +2,8 @@
 /config/conf.yaml
 /volumes
 /tmp
+/config/data
+/config/log
 /config/dev-conf.yml
 EG
 docker-compose.yml
