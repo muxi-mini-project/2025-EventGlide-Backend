@@ -4,6 +4,7 @@ package main
 
 import (
 	"github.com/google/wire"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/controller"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/ioc"
@@ -15,6 +16,7 @@ import (
 
 func InitApp() *server.Server {
 	panic(wire.Build(
+		config.InitConf,
 		ioc.Provider,
 		middleware.Provider,
 		dao.Provider,
