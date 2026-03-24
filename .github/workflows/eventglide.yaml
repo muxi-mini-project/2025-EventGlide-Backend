@@ -29,6 +29,8 @@ jobs:
         run: go build -v ./...
 
       - name: Test
+        env: 
+          EVENTGLIDE_NACOS_CONF: ${{ secrets.EVENTGLIDE_NACOS_CONF }}
         run: go test -v ./...
 
   build:

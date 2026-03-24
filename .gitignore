@@ -2,8 +2,8 @@
 /config/conf.yaml
 /volumes
 /tmp
-/config/data
-/config/log
+**/event-glide@@DEV@@event-glide
+*.log
 /config/dev-conf.yml
 EG
 docker-compose.yml

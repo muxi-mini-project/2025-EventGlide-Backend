@@ -2,13 +2,13 @@
 package main
 
 import (
+	"log"
+	"sync"
+
 	"github.com/fsnotify/fsnotify"
-	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/server"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/spf13/viper"
-	"log"
-	"sync"
 )
 
 var (
@@ -21,7 +21,6 @@ var (
 // @verstion 1.0
 func main() {
 	ginx.InitValidation()
-	config.Init()
 	app = InitApp()
 
 	if err := app.Run(); err != nil {
