@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/joho/godotenv"
+
 	"github.com/nacos-group/nacos-sdk-go/clients"
 	"github.com/nacos-group/nacos-sdk-go/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/vo"
@@ -64,6 +66,7 @@ const (
 )
 
 func InitConf() *Conf {
+	var _ = godotenv.Load()
 	content, err := getConfigFromNacos(EgConf)
 	if err != nil {
 		log.Println(err)

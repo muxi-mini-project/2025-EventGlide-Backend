@@ -14,6 +14,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/uuid v1.6.0
 	github.com/google/wire v0.7.0
+	github.com/joho/godotenv v1.5.1
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/muxi-Infra/auditor-Backend/sdk v0.0.0-20251218062019-590a7f87e9f7
 	github.com/nacos-group/nacos-sdk-go v1.1.6
