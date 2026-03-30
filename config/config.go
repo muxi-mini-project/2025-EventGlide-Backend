@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -62,23 +63,20 @@ type KafkaConf struct {
 }
 
 const (
-	EgConf = "EVENTGLIDE_NACOS_CONF"
+	EgConf           = "EVENTGLIDE_NACOS_CONF"
+	LocalConfPathEnv = "EVENTGLIDE_LOCAL_CONF"
 )
 
 func InitConf() *Conf {
 	var _ = godotenv.Load()
 	content, err := getConfigFromNacos(EgConf)
 	if err != nil {
-		log.Println(err)
-
-		localPath := "./conf.yaml"
-		fileContent, err := os.ReadFile(localPath)
+		log.Printf("Nacos 配置读取失败，尝试本地配置: %v", err)
+		content, err = readLocalConfig()
 		if err != nil {
-			// 如果本地文件也读取失败，则彻底失败
-			log.Fatalf("无法读取本地配置文件 %s，且 Nacos 配置获取失败: %v", localPath, err)
+			log.Fatalf("无法读取本地配置，且 Nacos 配置获取失败: %v", err)
 			return nil
 		}
-		content = string(fileContent)
 	}
 
 	v := viper.New()
@@ -100,7 +98,17 @@ func InitConf() *Conf {
 }
 
 func getConfigFromNacos(env string) (string, error) {
-	server, port, namespace, user, pass, group, dataId := parseNacosDSN(env)
+	server, port, namespace, user, pass, group, dataId, err := parseNacosDSN(env)
+	if err != nil {
+		return "", err
+	}
+
+	if group == "" {
+		group = "DEFAULT_GROUP"
+	}
+	if dataId == "" {
+		return "", fmt.Errorf("nacos dataId is empty in %s", env)
+	}
 
 	serverConfigs := []constant.ServerConfig{
 		{
@@ -124,7 +132,7 @@ func getConfigFromNacos(env string) (string, error) {
 		"clientConfig":  clientConfig,
 	})
 	if err != nil {
-		log.Fatal("初始化失败:", err)
+		return "", fmt.Errorf("nacos client init failed: %w", err)
 	}
 
 	content, err := configClient.GetConfig(vo.ConfigParam{
@@ -132,19 +140,28 @@ func getConfigFromNacos(env string) (string, error) {
 		Group:  group,
 	})
 	if err != nil {
-		log.Fatal("拉取配置失败:", err)
+		return "", fmt.Errorf("nacos get config failed: %w", err)
+	}
+
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("nacos returned empty config content")
 	}
 	return content, nil
 }
 
-func parseNacosDSN(env string) (server string, port uint64, ns, user, pass, group, dataId string) {
+func parseNacosDSN(env string) (server string, port uint64, ns, user, pass, group, dataId string, err error) {
 	dsn := os.Getenv(env)
 	if dsn == "" {
-		log.Fatalf("%s 环境变量未设置", env)
+		err = fmt.Errorf("%s 环境变量未设置", env)
+		return
 	}
 
 	parts := strings.SplitN(dsn, "?", 2)
 	host := parts[0]
+	if host == "" {
+		err = fmt.Errorf("%s 环境变量格式错误：缺少 host", env)
+		return
+	}
 	params := url.Values{}
 
 	if len(parts) == 2 {
@@ -153,8 +170,16 @@ func parseNacosDSN(env string) (server string, port uint64, ns, user, pass, grou
 
 	hostParts := strings.Split(host, ":")
 	server = hostParts[0]
+	if server == "" {
+		err = fmt.Errorf("%s 环境变量格式错误：缺少 server", env)
+		return
+	}
 	if len(hostParts) > 1 {
-		p, _ := strconv.Atoi(hostParts[1])
+		p, convErr := strconv.Atoi(hostParts[1])
+		if convErr != nil || p <= 0 {
+			err = fmt.Errorf("%s 环境变量端口非法: %s", env, hostParts[1])
+			return
+		}
 		port = uint64(p)
 	} else {
 		port = 8848
@@ -170,4 +195,33 @@ func parseNacosDSN(env string) (server string, port uint64, ns, user, pass, grou
 	group = params.Get("group")
 	dataId = params.Get("dataId")
 	return
+}
+
+func readLocalConfig() (string, error) {
+	candidates := make([]string, 0, 4)
+	if p := strings.TrimSpace(os.Getenv(LocalConfPathEnv)); p != "" {
+		candidates = append(candidates, p)
+	}
+	candidates = append(candidates,
+		"./config/conf.yaml",
+		"./config/conf1.yaml",
+		"./config/conf-example.yaml",
+	)
+
+	var errs []string
+	for _, path := range candidates {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		if strings.TrimSpace(string(content)) == "" {
+			errs = append(errs, fmt.Sprintf("%s: empty file", path))
+			continue
+		}
+		log.Printf("使用本地配置文件: %s", path)
+		return string(content), nil
+	}
+
+	return "", fmt.Errorf("all local config candidates failed: %s", strings.Join(errs, "; "))
 }

@@ -44,4 +44,4 @@ ENV PORT=${PORT}
 EXPOSE ${PORT}
 
 # 启动用户服务
-CMD ["./app"]
+CMD ["./app","--config","/app/config/conf.yaml"]
