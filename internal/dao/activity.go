@@ -3,10 +3,11 @@ package dao
 import (
 	"errors"
 	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -30,10 +31,10 @@ type ActDao struct {
 	l      *zap.Logger
 }
 
-func NewActDao(db *gorm.DB, l *zap.Logger) *ActDao {
+func NewActDao(db *gorm.DB, l *zap.Logger, cfg *config.Conf) *ActDao {
 	return &ActDao{
 		db:     db,
-		effect: viper.GetString("auditor.effect"),
+		effect: cfg.Auditor.Effect,
 		l:      l.Named("activity/dao"),
 	}
 }
@@ -194,7 +195,9 @@ func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
 			return db.Where("is_checking != ?", "reject")
 		}
 	}
-	return nil
+	return func(db *gorm.DB) *gorm.DB {
+		return db
+	}
 }
 
 func (ad *ActDao) GetChecking(c *gin.Context, sid string) ([]model.Activity, error) {

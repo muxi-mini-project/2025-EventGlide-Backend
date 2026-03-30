@@ -5,8 +5,8 @@ import (
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/response"
 	sdk "github.com/muxi-Infra/auditor-Backend/sdk/v2/server/gin"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/service"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
@@ -15,14 +15,14 @@ type CallbackAuditorController struct {
 	l   *zap.Logger
 }
 
-func NewCallbackAuditorController(e *gin.Engine, svc service.CallbackAuditorService) *CallbackAuditorController {
+func NewCallbackAuditorController(e *gin.Engine, svc service.CallbackAuditorService, cfg *config.Conf) *CallbackAuditorController {
 	c := &CallbackAuditorController{
 		svc: svc,
 		l:   zap.L().Named("callbackAuditor/controller"),
 	}
 	s := sdk.NewGinRegistrar(&e.RouterGroup)
 	chain := sdk.NewChain()
-	s.WebHook(viper.GetString("auditor.webhookPath"), chain, c.CallbackAuditor)
+	s.WebHook(cfg.Auditor.WebHookPath, chain, c.CallbackAuditor)
 
 	return c
 }

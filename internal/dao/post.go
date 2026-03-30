@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/gin-gonic/gin"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
-	"github.com/spf13/viper"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -28,10 +29,10 @@ type PostDao struct {
 	l      *zap.Logger
 }
 
-func NewPostDao(db *gorm.DB, l *zap.Logger) *PostDao {
+func NewPostDao(db *gorm.DB, l *zap.Logger, cfg *config.Conf) *PostDao {
 	return &PostDao{
 		db:     db,
-		effect: viper.GetString("auditor.effect"),
+		effect: cfg.Auditor.Effect,
 		l:      l.Named("post/dao"),
 	}
 }
@@ -127,7 +128,9 @@ func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
 			return db.Where("is_checking != ?", "reject")
 		}
 	}
-	return nil
+	return func(db *gorm.DB) *gorm.DB {
+		return db
+	}
 }
 
 func (pd *PostDao) GetChecking(c *gin.Context, sid string) ([]model.Post, error) {
