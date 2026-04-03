@@ -95,27 +95,26 @@ func (c *MultiLevelCache) get(
 ) (any, error) {
 	if value, err := c.readLocal(ctx, key); err == nil {
 		return value, nil
-	} else if c.isLocalCachedNotFoundError(err) {
-		// L1 negative cache cannot be treated as final truth in multi-instance deployments.
-		// Another instance may already have repopulated Redis.
+	} else if !c.isLocalCachedNotFoundError(err) {
+		return nil, err
 	}
 
 	if value, err := c.readRemote(ctx, key, ttl, decode); err == nil {
 		return value, nil
-	} else if c.isRemoteCachedNotFoundError(err) {
+	} else if !c.isRemoteCachedNotFoundError(err) {
 		return nil, ErrNotFound
 	}
 
 	res, err, _ := c.sf.Do(key, func() (any, error) {
 		if value, readErr := c.readLocal(ctx, key); readErr == nil {
 			return value, nil
-		} else if c.isLocalCachedNotFoundError(readErr) {
-			// Still need to verify L2 before concluding not found.
+		} else if !c.isLocalCachedNotFoundError(readErr) {
+			return nil, readErr
 		}
 
 		if value, readErr := c.readRemote(ctx, key, ttl, decode); readErr == nil {
 			return value, nil
-		} else if c.isRemoteCachedNotFoundError(readErr) {
+		} else if !c.isRemoteCachedNotFoundError(readErr) {
 			return nil, ErrNotFound
 		}
 
