@@ -18,9 +18,9 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/config"
-	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
@@ -40,10 +40,9 @@ type UserServiceHdl interface {
 }
 
 type UserService struct {
-	udh  *dao.UserDao
-	adh  *dao.ActDao
-	pdh  *dao.PostDao
-	cdh  *dao.CommentDao
+	udh  *repo.UserRepo
+	adh  *repo.ActivityRepo
+	pdh  *repo.PostRepo
 	jwth *middleware.Jwt
 	cSvc *ccnuService
 	iuh  *ImgUploader
@@ -53,12 +52,11 @@ type UserService struct {
 	cfg  *config.Conf
 }
 
-func NewUserService(udh *dao.UserDao, adh *dao.ActDao, pdh *dao.PostDao, cdh *dao.CommentDao, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *zap.Logger, cfg *config.Conf) *UserService {
+func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *zap.Logger, cfg *config.Conf) *UserService {
 	return &UserService{
 		udh:  udh,
 		adh:  adh,
 		pdh:  pdh,
-		cdh:  cdh,
 		jwth: jwth,
 		cSvc: cSvc,
 		iuh:  iuh,
