@@ -4,8 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
-	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"strings"
@@ -24,12 +24,12 @@ type PostServiceHdl interface {
 
 type PostService struct {
 	aud AuditorService
-	pdh *dao.PostDao
-	ud  *dao.UserDao
+	pdh *repo.PostRepo
+	ud  *repo.UserRepo
 	l   *zap.Logger
 }
 
-func NewPostService(pdh *dao.PostDao, ud *dao.UserDao, l *zap.Logger, aud AuditorService) *PostService {
+func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, l *zap.Logger, aud AuditorService) *PostService {
 	return &PostService{
 		pdh: pdh,
 		ud:  ud,

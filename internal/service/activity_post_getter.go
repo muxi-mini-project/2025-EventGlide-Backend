@@ -5,6 +5,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/internal/repo"
 )
 
 const (
@@ -50,12 +51,12 @@ type ActPostCommentGetter interface {
 }
 
 type actPostCommentGetter struct {
-	ad *dao.ActDao
-	pd *dao.PostDao
+	ad *repo.ActivityRepo
+	pd *repo.PostRepo
 	cd *dao.CommentDao
 }
 
-func NewActPostCommentGetter(ad *dao.ActDao, pd *dao.PostDao, cd *dao.CommentDao) ActPostCommentGetter {
+func NewActPostCommentGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentDao) ActPostCommentGetter {
 	return &actPostCommentGetter{
 		ad: ad,
 		cd: cd,

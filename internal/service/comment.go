@@ -7,6 +7,7 @@ import (
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
+	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"strings"
@@ -18,14 +19,14 @@ type CommentServiceHdl interface {
 
 type CommentService struct {
 	cd  *dao.CommentDao
-	ud  *dao.UserDao
-	id  *dao.InteractionDao
+	ud  *repo.UserRepo
+	id  *repo.InteractionRepo
 	mq  mq.MQHdl
 	apg ActPostCommentGetter
 	l   *zap.Logger
 }
 
-func NewCommentService(cd *dao.CommentDao, ud *dao.UserDao, id *dao.InteractionDao, l *zap.Logger, mq mq.MQHdl,
+func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, l *zap.Logger, mq mq.MQHdl,
 	apg ActPostCommentGetter) *CommentService {
 	return &CommentService{
 		cd:  cd,

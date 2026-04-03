@@ -4,10 +4,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
-	"github.com/raiki02/EG/internal/cache"
-	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
+	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"strings"
@@ -15,19 +14,17 @@ import (
 )
 
 type ActivityService struct {
-	ad  *dao.ActDao
-	ch  *cache.Cache
-	ud  *dao.UserDao
-	id  *dao.InteractionDao
+	ad  *repo.ActivityRepo
+	ud  *repo.UserRepo
+	id  *repo.InteractionRepo
 	mq  mq.MQHdl
 	aud AuditorService
 	l   *zap.Logger
 }
 
-func NewActivityService(ad *dao.ActDao, ch *cache.Cache, ud *dao.UserDao, l *zap.Logger, id *dao.InteractionDao, mq mq.MQHdl, aud AuditorService) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, l *zap.Logger, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService) *ActivityService {
 	return &ActivityService{
 		ad:  ad,
-		ch:  ch,
 		ud:  ud,
 		id:  id,
 		aud: aud,
