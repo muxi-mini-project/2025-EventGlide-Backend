@@ -12,6 +12,7 @@ import (
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
+	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
@@ -30,11 +31,11 @@ type FeedServiceHdl interface {
 type FeedService struct {
 	fd *dao.FeedDao
 	mq mq.MQHdl
-	ud *dao.UserDao
+	ud *repo.UserRepo
 	l  *zap.Logger
 }
 
-func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *dao.UserDao, l *zap.Logger) *FeedService {
+func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *zap.Logger) *FeedService {
 	fs := &FeedService{
 		fd: fd,
 		mq: mq,

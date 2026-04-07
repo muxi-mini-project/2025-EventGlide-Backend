@@ -4,20 +4,20 @@ import (
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
+	"github.com/raiki02/EG/internal/repo"
 	"go.uber.org/zap"
 )
 
 type InteractionService struct {
 	apg ActPostCommentGetter
-	id  *dao.InteractionDao
+	id  *repo.InteractionRepo
 	mq  mq.MQHdl
 	l   *zap.Logger
 }
 
-func NewInteractionService(id *dao.InteractionDao, mq mq.MQHdl, l *zap.Logger, apg ActPostCommentGetter) *InteractionService {
+func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, l *zap.Logger, apg ActPostCommentGetter) *InteractionService {
 	return &InteractionService{
 		id:  id,
 		apg: apg,
