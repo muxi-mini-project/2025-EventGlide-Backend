@@ -36,15 +36,33 @@ func InitDB(cfg *config.Conf) *gorm.DB {
 }
 
 func migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
+	if err := db.AutoMigrate(
 		&model.User{},
 		&model.Activity{},
 		&model.ActivityDraft{},
 		&model.Comment{},
 		&model.Post{},
 		&model.PostDraft{},
-		&model.Feed{},
 		&model.Approvement{},
 		&model.AuditorForm{},
-	)
+	); err != nil {
+		return err
+	}
+
+	if db.Migrator().HasTable(&model.Feed{}) {
+		if err := db.Exec(`
+DELETE f1 FROM feed AS f1
+INNER JOIN feed AS f2
+ON f1.receiver = f2.receiver
+AND f1.student_id = f2.student_id
+AND f1.action = f2.action
+AND f1.object = f2.object
+AND f1.target_bid = f2.target_bid
+AND f1.id > f2.id
+`).Error; err != nil {
+			return err
+		}
+	}
+
+	return db.AutoMigrate(&model.Feed{})
 }
