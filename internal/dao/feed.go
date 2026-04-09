@@ -3,11 +3,11 @@ package dao
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -28,13 +28,9 @@ func NewFeedDao(db *gorm.DB, l *zap.Logger) *FeedDao {
 }
 
 func (fd *FeedDao) CreateFeed(ctx context.Context, feed *model.Feed) error {
-	var existing model.Feed
-	if fd.db.WithContext(ctx).Where("receiver = ? AND student_id = ? AND action = ? AND object = ? AND target_bid = ? AND status = ?", feed.Receiver, feed.StudentId, feed.Action, feed.Object, feed.TargetBid, feed.Status).First(&existing); existing.Id != 0 {
-		// 已经存在
-		fmt.Println("feed重复操作，忽略创建")
-		return nil
-	}
-	return fd.db.Create(feed).Error
+	return fd.db.WithContext(ctx).Clauses(clause.OnConflict{
+		DoNothing: true,
+	}).Create(feed).Error
 }
 
 func (fd *FeedDao) GetTotalCnt(ctx *gin.Context, id string) ([]int, error) {

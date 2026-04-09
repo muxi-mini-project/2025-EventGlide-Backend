@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +36,11 @@ type FeedService struct {
 	mq mq.MQHdl
 	ud *repo.UserRepo
 	l  *zap.Logger
+}
+
+var feedConsumerLifecycle struct {
+	mu     sync.Mutex
+	cancel context.CancelFunc
 }
 
 func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *zap.Logger) *FeedService {
@@ -87,13 +95,40 @@ func (fs *FeedService) GetFeedList(ctx *gin.Context, sid string) (resp.FeedResp,
 }
 
 func (fs *FeedService) ConsumeFeedStream() {
+	feedConsumerLifecycle.mu.Lock()
+	if feedConsumerLifecycle.cancel != nil {
+		feedConsumerLifecycle.cancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	feedConsumerLifecycle.cancel = cancel
+	feedConsumerLifecycle.mu.Unlock()
+
 	go func() {
-		ctx := context.Background()
-		lastIDKey := "feed_last_id"
+		const (
+			stream   = "feed_stream"
+			group    = "feed_consumers"
+			batch    = int64(15)
+			blockFor = 30 * time.Second
+		)
+
+		host, err := os.Hostname()
+		if err != nil {
+			host = "unknown-host"
+		}
+		consumer := fmt.Sprintf("%s-%d", host, time.Now().UnixNano())
+
+		if err := fs.mq.EnsureConsumerGroup(ctx, stream, group); err != nil {
+			fs.l.Error("Failed to ensure feed consumer group", zap.Error(err))
+			return
+		}
 
 		for {
-			msgs, err := fs.mq.Consume(ctx, "feed_stream", lastIDKey, 15, 30*time.Second)
+			msgs, err := fs.mq.ConsumeGroup(ctx, stream, group, consumer, batch, blockFor)
 			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					fs.l.Info("Feed consumer stopped")
+					return
+				}
 				fs.l.Error("Failed to read feed stream", zap.Error(err))
 				time.Sleep(time.Second)
 				continue
@@ -107,12 +142,18 @@ func (fs *FeedService) ConsumeFeedStream() {
 				data, ok := msg.Values["data"].(string)
 				if !ok {
 					fs.l.Warn("Message data is not string", zap.Any("msg", msg))
+					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+						fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+					}
 					continue
 				}
 
 				var feed model.Feed
 				if err := json.Unmarshal([]byte(data), &feed); err != nil {
 					fs.l.Error("Failed to unmarshal feed", zap.Error(err))
+					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+						fs.l.Error("Failed to ack malformed feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+					}
 					continue
 				}
 
@@ -123,6 +164,10 @@ func (fs *FeedService) ConsumeFeedStream() {
 					fs.l.Error("Failed to consume feed", zap.Error(err), zap.String("msgID", msg.ID))
 				} else {
 					fs.l.Info("Feed processed", zap.Any("feed", feed))
+				}
+
+				if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+					fs.l.Error("Failed to ack feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
 				}
 			}
 		}
