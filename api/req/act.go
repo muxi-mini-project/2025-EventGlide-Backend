@@ -29,7 +29,7 @@ type CreateActReq struct {
 		Signer []struct {
 			StudentID string `json:"studentId" validate:"len=10"`
 			Name      string `json:"name"`
-		} `json:"signer" validate:"required_if=HolderType 个人,dive"`
+		} `json:"signer" validate:"required_if=HolderType 个人,unique=StudentID,dive"`
 	} `json:"labelform"`
 }
 
