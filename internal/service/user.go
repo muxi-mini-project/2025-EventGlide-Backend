@@ -84,14 +84,13 @@ func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) e
 }
 
 func (us *UserService) Login(ctx *gin.Context, studentId string, password string) (*model.User, string, error) {
-	//client, err := us.cSvc.Login(ctx, studentId, password)
-	//if err != nil {
-	//	return nil, "", err
-	//}
-	//if client == nil {
-	//	return nil, "", errors.New("登录失败")
-	//}
-	client := http.DefaultClient
+	client, err := us.cSvc.Login(ctx, studentId, password)
+	if err != nil {
+		return nil, "", err
+	}
+	if client == nil {
+		return nil, "", errors.New("登录失败")
+	}
 
 	if !us.udh.CheckUserExist(ctx, studentId) {
 		school, err := us.cSvc.getWhichSchool(client, studentId)
@@ -105,7 +104,7 @@ func (us *UserService) Login(ctx *gin.Context, studentId string, password string
 
 	}
 	token := us.jwth.GenToken(ctx, studentId)
-	err := us.jwth.StoreInRedis(ctx, studentId, token)
+	err = us.jwth.StoreInRedis(ctx, studentId, token)
 	if err != nil {
 		return nil, "", err
 	}
@@ -381,6 +380,7 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 	if err != nil {
 		return client, params, err
 	}
+	request.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/72.0.3626.109 Safari/537.36")
 
 	// 发起请求
 	resp, err := client.Do(request)
