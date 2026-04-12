@@ -84,13 +84,14 @@ func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) e
 }
 
 func (us *UserService) Login(ctx *gin.Context, studentId string, password string) (*model.User, string, error) {
-	client, err := us.cSvc.Login(ctx, studentId, password)
-	if err != nil {
-		return nil, "", err
-	}
-	if client == nil {
-		return nil, "", errors.New("登录失败")
-	}
+	//client, err := us.cSvc.Login(ctx, studentId, password)
+	//if err != nil {
+	//	return nil, "", err
+	//}
+	//if client == nil {
+	//	return nil, "", errors.New("登录失败")
+	//}
+	client := http.DefaultClient
 
 	if !us.udh.CheckUserExist(ctx, studentId) {
 		school, err := us.cSvc.getWhichSchool(client, studentId)
@@ -104,7 +105,7 @@ func (us *UserService) Login(ctx *gin.Context, studentId string, password string
 
 	}
 	token := us.jwth.GenToken(ctx, studentId)
-	err = us.jwth.StoreInRedis(ctx, studentId, token)
+	err := us.jwth.StoreInRedis(ctx, studentId, token)
 	if err != nil {
 		return nil, "", err
 	}
