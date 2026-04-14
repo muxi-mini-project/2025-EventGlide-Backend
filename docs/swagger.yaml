@@ -194,6 +194,7 @@ definitions:
                   type: string
               type: object
             type: array
+            uniqueItems: true
           startTime:
             type: string
           type:
@@ -448,7 +449,11 @@ definitions:
         type: string
       publishedAt:
         type: string
+      rootId:
+        type: string
       status:
+        type: string
+      subject:
         type: string
       targetBid:
         type: string
@@ -467,6 +472,8 @@ definitions:
         type: string
       status:
         type: string
+      subject:
+        type: string
       targetBid:
         type: string
       userInfo:
@@ -482,7 +489,11 @@ definitions:
         type: string
       publishedAt:
         type: string
+      rootId:
+        type: string
       status:
+        type: string
+      subject:
         type: string
       targetBid:
         type: string
@@ -501,6 +512,8 @@ definitions:
         type: string
       status:
         type: string
+      subject:
+        type: string
       targetBid:
         type: string
       userInfo:
@@ -516,7 +529,11 @@ definitions:
         type: string
       publishedAt:
         type: string
+      rootId:
+        type: string
       status:
+        type: string
+      subject:
         type: string
       targetBid:
         type: string

@@ -1,6 +1,9 @@
 package service
 
 import (
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
@@ -8,8 +11,6 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 type PostServiceHdl interface {
@@ -196,6 +197,7 @@ func (ps *PostService) toCreateResp(c *gin.Context, p any) resp.CreatePostResp {
 		res.UserInfo.School = user.School
 		res.UserInfo.Username = user.Name
 		res.UserInfo.Avatar = user.Avatar
+		res.StudentID = user.StudentID
 		res.UserInfo.StudentID = user.StudentID
 		res.Title = post.Title
 		res.Bid = post.Bid
