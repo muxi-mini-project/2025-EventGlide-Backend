@@ -2178,6 +2178,7 @@ const docTemplate = `{
                         },
                         "signer": {
                             "type": "array",
+                            "uniqueItems": true,
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -2562,7 +2563,13 @@ const docTemplate = `{
                 "publishedAt": {
                     "type": "string"
                 },
+                "rootId": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "subject": {
                     "type": "string"
                 },
                 "targetBid": {
@@ -2591,6 +2598,9 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
+                "subject": {
+                    "type": "string"
+                },
                 "targetBid": {
                     "type": "string"
                 },
@@ -2614,7 +2624,13 @@ const docTemplate = `{
                 "publishedAt": {
                     "type": "string"
                 },
+                "rootId": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "subject": {
                     "type": "string"
                 },
                 "targetBid": {
@@ -2643,6 +2659,9 @@ const docTemplate = `{
                 "status": {
                     "type": "string"
                 },
+                "subject": {
+                    "type": "string"
+                },
                 "targetBid": {
                     "type": "string"
                 },
@@ -2666,7 +2685,13 @@ const docTemplate = `{
                 "publishedAt": {
                     "type": "string"
                 },
+                "rootId": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "subject": {
                     "type": "string"
                 },
                 "targetBid": {

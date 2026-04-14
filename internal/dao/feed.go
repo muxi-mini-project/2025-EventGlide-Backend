@@ -3,6 +3,7 @@ package dao
 import (
 	"context"
 	"errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
@@ -13,6 +14,7 @@ import (
 const (
 	TableNameActivity = "activity"
 	TableNamePost     = "post"
+	TableNameComment  = "comment"
 )
 
 type FeedDao struct {
@@ -122,4 +124,86 @@ func (fd *FeedDao) GetPictureFromObj(ctx *gin.Context, targetId, object string) 
 	}
 
 	return res.ShowImg, nil
+}
+
+func (fd *FeedDao) ResolveRootIDByCommentID(ctx context.Context, commentID string) (string, error) {
+	curID := commentID
+	for i := 0; i < 20; i++ {
+		var cmt model.Comment
+		if err := fd.db.WithContext(ctx).Where("bid = ?", curID).First(&cmt).Error; err != nil {
+			return "", err
+		}
+
+		switch cmt.Subject {
+		case TableNamePost, TableNameActivity:
+			return cmt.ParentID, nil
+		case TableNameComment:
+			if cmt.ParentID == "" {
+				return "", errors.New("comment parent id is empty")
+			}
+			curID = cmt.ParentID
+		default:
+			return "", errors.New("unknown comment subject")
+		}
+	}
+
+	return "", errors.New("comment chain too deep")
+}
+
+func (fd *FeedDao) GetPictureFromRootID(ctx *gin.Context, rootID string) (string, error) {
+	if pic, ok, err := fd.findShowImgByTable(ctx, TableNamePost, rootID); err != nil {
+		return "", err
+	} else if ok {
+		return pic, nil
+	}
+
+	if pic, ok, err := fd.findShowImgByTable(ctx, TableNameActivity, rootID); err != nil {
+		return "", err
+	} else if ok {
+		return pic, nil
+	}
+
+	return "", gorm.ErrRecordNotFound
+}
+
+func (fd *FeedDao) ResolveRootSubjectByID(ctx *gin.Context, rootID string) (string, error) {
+	if ok, err := fd.existsByTableAndBid(ctx, TableNamePost, rootID); err != nil {
+		return "", err
+	} else if ok {
+		return TableNamePost, nil
+	}
+
+	if ok, err := fd.existsByTableAndBid(ctx, TableNameActivity, rootID); err != nil {
+		return "", err
+	} else if ok {
+		return TableNameActivity, nil
+	}
+
+	return "", gorm.ErrRecordNotFound
+}
+
+func (fd *FeedDao) findShowImgByTable(ctx *gin.Context, tableName, bid string) (string, bool, error) {
+	type Result struct {
+		ShowImg string `gorm:"column:show_img"`
+	}
+	var res Result
+	err := fd.db.WithContext(ctx).Table(tableName).Where("bid = ?", bid).Select("show_img").Take(&res).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		fd.l.Error("Get First Pic Failed", zap.Error(err), zap.String("table", tableName), zap.String("bid", bid))
+		return "", false, err
+	}
+	return res.ShowImg, true, nil
+}
+
+func (fd *FeedDao) existsByTableAndBid(ctx *gin.Context, tableName, bid string) (bool, error) {
+	var cnt int64
+	err := fd.db.WithContext(ctx).Table(tableName).Where("bid = ?", bid).Count(&cnt).Error
+	if err != nil {
+		fd.l.Error("Check Record Exists Failed", zap.Error(err), zap.String("table", tableName), zap.String("bid", bid))
+		return false, err
+	}
+	return cnt > 0, nil
 }

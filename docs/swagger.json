@@ -2169,6 +2169,7 @@
                         },
                         "signer": {
                             "type": "array",
+                            "uniqueItems": true,
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -2553,7 +2554,13 @@
                 "publishedAt": {
                     "type": "string"
                 },
+                "rootId": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "subject": {
                     "type": "string"
                 },
                 "targetBid": {
@@ -2582,6 +2589,9 @@
                 "status": {
                     "type": "string"
                 },
+                "subject": {
+                    "type": "string"
+                },
                 "targetBid": {
                     "type": "string"
                 },
@@ -2605,7 +2615,13 @@
                 "publishedAt": {
                     "type": "string"
                 },
+                "rootId": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "subject": {
                     "type": "string"
                 },
                 "targetBid": {
@@ -2634,6 +2650,9 @@
                 "status": {
                     "type": "string"
                 },
+                "subject": {
+                    "type": "string"
+                },
                 "targetBid": {
                     "type": "string"
                 },
@@ -2657,7 +2676,13 @@
                 "publishedAt": {
                     "type": "string"
                 },
+                "rootId": {
+                    "type": "string"
+                },
                 "status": {
+                    "type": "string"
+                },
+                "subject": {
                     "type": "string"
                 },
                 "targetBid": {
