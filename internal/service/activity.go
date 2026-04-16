@@ -1,6 +1,9 @@
 package service
 
 import (
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
@@ -9,8 +12,6 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 type ActivityService struct {
@@ -118,6 +119,38 @@ func (as *ActivityService) LoadDraft(c *gin.Context, sid string) (model.Activity
 	}
 
 	return d, nil
+}
+
+func (as *ActivityService) ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
+	var res resp.LoadActivitiesDraftResp
+
+	res.Title = d.Title
+	res.Introduce = d.Introduce
+	res.ShowImg = tools.StringToSlice(d.ShowImg)
+
+	res.LabelForm.HolderType = d.HolderType
+	res.LabelForm.Position = d.Position
+	res.LabelForm.IfRegister = d.IfRegister
+	res.LabelForm.RegisterMethod = d.RegisterMethod
+	res.LabelForm.StartTime = d.StartTime
+	res.LabelForm.ActiveForm = d.ActiveForm
+	res.LabelForm.EndTime = d.EndTime
+	res.LabelForm.Type = d.Type
+	for _, s := range tools.StringToSlice(d.Signer) {
+		ss := strings.SplitN(s, ":", 2)
+		if len(ss) != 2 {
+			continue
+		}
+		res.LabelForm.Signer = append(res.LabelForm.Signer, struct {
+			StudentID string `json:"studentId" validate:"len=10"`
+			Name      string `json:"name"`
+		}{
+			StudentID: ss[0],
+			Name:      ss[1],
+		})
+	}
+
+	return res
 }
 
 func (as *ActivityService) FindActBySearches(c *gin.Context, req *req.ActSearchReq) ([]resp.ListActivitiesResp, error) {

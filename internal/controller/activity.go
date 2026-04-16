@@ -64,7 +64,7 @@ func (ac *ActController) NewDraft(ctx *gin.Context, req_ req.CreateActDraftReq, 
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=model.ActivityDraft}
+// @Success 200 {object} resp.Resp{data=resp.LoadActivitiesDraftResp}
 // @Router /act/load [get]
 func (ac *ActController) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	draft, err := ac.as.LoadDraft(ctx, claims.Subject)
@@ -72,7 +72,7 @@ func (ac *ActController) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims
 		return ginx.ReturnError(err)
 	}
 
-	return ginx.ReturnSuccess(draft)
+	return ginx.ReturnSuccess(ac.as.ToLoadDraftResp(draft))
 }
 
 // @Tags Activity
