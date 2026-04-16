@@ -52,3 +52,25 @@ type ListActivitiesResp struct {
 	IsLike    string `json:"isLike"`
 	IsCollect string `json:"isCollect"`
 }
+
+type LoadActivitiesDraftResp struct {
+	Title     string   `json:"title"`
+	Introduce string   `json:"introduce"`
+	ShowImg   []string `json:"showImg"`
+
+	LabelForm struct {
+		HolderType     string `json:"holderType"`
+		Position       string `json:"position"`
+		IfRegister     string `json:"ifRegister"`
+		RegisterMethod string `json:"registerMethod"`
+		StartTime      string `json:"startTime"`
+		ActiveForm     string `json:"activeForm"`
+		EndTime        string `json:"endTime"`
+		Type           string `json:"type"`
+
+		Signer []struct {
+			StudentID string `json:"studentId" validate:"len=10"`
+			Name      string `json:"name"`
+		} `json:"signer"`
+	} `json:"labelform"`
+}
