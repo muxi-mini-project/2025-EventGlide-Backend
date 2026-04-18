@@ -1,7 +1,10 @@
 package service
 
 import (
-	"github.com/gin-gonic/gin"
+	"context"
+	"strings"
+	"time"
+
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/dao"
@@ -10,8 +13,6 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 type CommentServiceHdl interface {
@@ -50,7 +51,7 @@ func (cs *CommentService) toComment(r req.CreateCommentReq, studentId string) *m
 	}
 }
 
-func (cs *CommentService) CreateComment(c *gin.Context, r req.CreateCommentReq, studentId string) (resp.CommentResp, error) {
+func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentReq, studentId string) (resp.CommentResp, error) {
 	cmt := cs.toComment(r, studentId)
 	err := cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
@@ -78,7 +79,7 @@ func (cs *CommentService) CreateComment(c *gin.Context, r req.CreateCommentReq, 
 		Receiver:  ap.GetStudentID(),
 	}
 
-	err = cs.mq.Publish(c.Request.Context(), "feed_stream", f)
+	err = cs.mq.Publish(c, "feed_stream", f)
 	if err != nil {
 		cs.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", f))
 	} else {
@@ -102,7 +103,7 @@ func (cs *CommentService) CreateComment(c *gin.Context, r req.CreateCommentReq, 
 	return cs.toResp(c, cmt, studentId), nil
 }
 
-func (cs *CommentService) DeleteComment(c *gin.Context, targetId, studentId string) error {
+func (cs *CommentService) DeleteComment(c context.Context, targetId, studentId string) error {
 	err := cs.cd.DeleteComment(c, studentId, targetId)
 	if err != nil {
 		cs.l.Error("Error comment delete failed", zap.Error(err))
@@ -112,7 +113,7 @@ func (cs *CommentService) DeleteComment(c *gin.Context, targetId, studentId stri
 }
 
 // 二级评论
-func (cs *CommentService) AnswerComment(c *gin.Context, r req.CreateCommentReq, studentId string) (resp.ReplyResp, error) {
+func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentReq, studentId string) (resp.ReplyResp, error) {
 	cmt := cs.toComment(r, studentId)
 	var parentCmt *model.Comment // 根评论
 
@@ -155,7 +156,7 @@ func (cs *CommentService) AnswerComment(c *gin.Context, r req.CreateCommentReq, 
 		Receiver:  ap.GetStudentID(),
 	}
 
-	err = cs.mq.Publish(c.Request.Context(), "feed_stream", f)
+	err = cs.mq.Publish(c, "feed_stream", f)
 	if err != nil {
 		cs.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", f))
 	} else {
@@ -165,7 +166,7 @@ func (cs *CommentService) AnswerComment(c *gin.Context, r req.CreateCommentReq, 
 	return cs.toReply(c, cmt, studentId), nil
 }
 
-func (cs *CommentService) LoadComments(c *gin.Context, parentid string, studentId string) ([]resp.CommentResp, error) {
+func (cs *CommentService) LoadComments(c context.Context, parentid string, studentId string) ([]resp.CommentResp, error) {
 	// 加载一级评论
 	cmts, err := cs.cd.LoadComments(c, parentid)
 	if err != nil {
@@ -176,7 +177,7 @@ func (cs *CommentService) LoadComments(c *gin.Context, parentid string, studentI
 	return res, nil
 }
 
-func (cs *CommentService) toResp(c *gin.Context, cmt *model.Comment, studentId string) resp.CommentResp {
+func (cs *CommentService) toResp(c context.Context, cmt *model.Comment, studentId string) resp.CommentResp {
 	var res resp.CommentResp                         //返回值
 	user, err := cs.ud.GetUserInfo(c, cmt.StudentID) //该条评论用户信息
 	if err != nil {
@@ -216,7 +217,7 @@ func (cs *CommentService) toResp(c *gin.Context, cmt *model.Comment, studentId s
 	return res
 }
 
-func (cs *CommentService) toResps(c *gin.Context, cmts []model.Comment, studentId string) []resp.CommentResp {
+func (cs *CommentService) toResps(c context.Context, cmts []model.Comment, studentId string) []resp.CommentResp {
 	var res []resp.CommentResp
 	for _, cmt := range cmts {
 		res = append(res, cs.toResp(c, &cmt, studentId))
@@ -224,7 +225,7 @@ func (cs *CommentService) toResps(c *gin.Context, cmts []model.Comment, studentI
 	return res
 }
 
-func (cs *CommentService) toReply(c *gin.Context, cmt *model.Comment, studentId string) resp.ReplyResp {
+func (cs *CommentService) toReply(c context.Context, cmt *model.Comment, studentId string) resp.ReplyResp {
 	var res resp.ReplyResp                           //返回值
 	user, err := cs.ud.GetUserInfo(c, cmt.StudentID) //该条回复用户信息
 	if err != nil {
@@ -268,7 +269,7 @@ func (cs *CommentService) toReply(c *gin.Context, cmt *model.Comment, studentId 
 	return res
 }
 
-func (cs *CommentService) IncreaseCommentNum(c *gin.Context, parent *ActPostCommentWrapper) error {
+func (cs *CommentService) IncreaseCommentNum(c context.Context, parent *ActPostCommentWrapper) error {
 	studentId := parent.GetStudentID()
 	bid := parent.GetBid()
 	switch {

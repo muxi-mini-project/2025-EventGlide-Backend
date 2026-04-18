@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -35,10 +34,10 @@ func (fd *FeedDao) CreateFeed(ctx context.Context, feed *model.Feed) error {
 	}).Create(feed).Error
 }
 
-func (fd *FeedDao) GetTotalCnt(ctx *gin.Context, id string) ([]int, error) {
+func (fd *FeedDao) GetTotalCnt(ctx context.Context, id string) ([]int, error) {
 	var lc, ca int64
-	err1 := fd.db.Model(&model.Feed{}).Where("receiver = ? and action in ? and status = ? and student_id != ?", id, []string{"like", "collect"}, "未读", id).Count(&lc).Error
-	err2 := fd.db.Model(&model.Feed{}).Where("receiver = ? and action in ? and status = ? and student_id != ?", id, []string{"comment", "at"}, "未读", id).Count(&ca).Error
+	err1 := fd.db.WithContext(ctx).Model(&model.Feed{}).Where("receiver = ? and action in ? and status = ? and student_id != ?", id, []string{"like", "collect"}, "未读", id).Count(&lc).Error
+	err2 := fd.db.WithContext(ctx).Model(&model.Feed{}).Where("receiver = ? and action in ? and status = ? and student_id != ?", id, []string{"comment", "at"}, "未读", id).Count(&ca).Error
 	if err1 != nil || err2 != nil {
 		fd.l.Error("Get Total Cnt Failed", zap.Error(err1), zap.Error(err2))
 		return nil, errors.Join(err1, err2)
@@ -46,9 +45,9 @@ func (fd *FeedDao) GetTotalCnt(ctx *gin.Context, id string) ([]int, error) {
 	return []int{int(lc), int(ca), int(lc + ca)}, nil
 }
 
-func (fd *FeedDao) GetLikeFeed(ctx *gin.Context, id string) ([]*model.Feed, error) {
+func (fd *FeedDao) GetLikeFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.Where("receiver = ? and action = ? and student_id != ?", id, "like", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "like", id).Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get Like Feed Failed", zap.Error(err))
 		return nil, err
@@ -56,9 +55,9 @@ func (fd *FeedDao) GetLikeFeed(ctx *gin.Context, id string) ([]*model.Feed, erro
 	return feeds, nil
 }
 
-func (fd *FeedDao) GetCollectFeed(ctx *gin.Context, id string) ([]*model.Feed, error) {
+func (fd *FeedDao) GetCollectFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.Where("receiver = ? and action = ? and student_id != ?", id, "collect", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "collect", id).Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get Collect Feed Failed", zap.Error(err))
 		return nil, err
@@ -66,9 +65,9 @@ func (fd *FeedDao) GetCollectFeed(ctx *gin.Context, id string) ([]*model.Feed, e
 	return feeds, nil
 }
 
-func (fd *FeedDao) GetCommentFeed(ctx *gin.Context, id string) ([]*model.Feed, error) {
+func (fd *FeedDao) GetCommentFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.Where("receiver = ? and action = ? and student_id != ?", id, "comment", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "comment", id).Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get Comment Feed Failed", zap.Error(err))
 		return nil, err
@@ -76,9 +75,9 @@ func (fd *FeedDao) GetCommentFeed(ctx *gin.Context, id string) ([]*model.Feed, e
 	return feeds, nil
 }
 
-func (fd *FeedDao) GetAtFeed(ctx *gin.Context, id string) ([]*model.Feed, error) {
+func (fd *FeedDao) GetAtFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.Where("receiver = ? and action = ? and student_id != ?", id, "at", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "at", id).Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get At Feed Failed", zap.Error(err))
 		return nil, err
@@ -86,7 +85,7 @@ func (fd *FeedDao) GetAtFeed(ctx *gin.Context, id string) ([]*model.Feed, error)
 	return feeds, nil
 }
 
-func (fd *FeedDao) GetAuditorFeed(ctx *gin.Context, id string) ([]*model.Approvement, error) {
+func (fd *FeedDao) GetAuditorFeed(ctx context.Context, id string) ([]*model.Approvement, error) {
 	var a []*model.Approvement
 	if err := fd.db.WithContext(ctx).Where("stance = ? and student_id = ?", "pending", id).Find(&a).Error; err != nil {
 		fd.l.Error("Get Auditor Feed Failed", zap.Error(err))
@@ -95,15 +94,15 @@ func (fd *FeedDao) GetAuditorFeed(ctx *gin.Context, id string) ([]*model.Approve
 	return a, nil
 }
 
-func (fd *FeedDao) ReadFeedDetail(ctx *gin.Context, sid, id string) error {
+func (fd *FeedDao) ReadFeedDetail(ctx context.Context, sid, id string) error {
 	return fd.db.WithContext(ctx).Model(&model.Feed{}).Where("receiver = ? AND id = ? ", sid, id).Update("status", "已读").Error
 }
 
-func (fd *FeedDao) ReadAllFeed(ctx *gin.Context, sid string) error {
+func (fd *FeedDao) ReadAllFeed(ctx context.Context, sid string) error {
 	return fd.db.WithContext(ctx).Model(&model.Feed{}).Where("receiver = ? ", sid).Update("status", "已读").Error
 }
 
-func (fd *FeedDao) GetPictureFromObj(ctx *gin.Context, targetId, object string) (string, error) {
+func (fd *FeedDao) GetPictureFromObj(ctx context.Context, targetId, object string) (string, error) {
 	type Result struct {
 		ShowImg string `gorm:"column:show_img"`
 	}
@@ -150,7 +149,7 @@ func (fd *FeedDao) ResolveRootIDByCommentID(ctx context.Context, commentID strin
 	return "", errors.New("comment chain too deep")
 }
 
-func (fd *FeedDao) GetPictureFromRootID(ctx *gin.Context, rootID string) (string, error) {
+func (fd *FeedDao) GetPictureFromRootID(ctx context.Context, rootID string) (string, error) {
 	if pic, ok, err := fd.findShowImgByTable(ctx, TableNamePost, rootID); err != nil {
 		return "", err
 	} else if ok {
@@ -166,7 +165,7 @@ func (fd *FeedDao) GetPictureFromRootID(ctx *gin.Context, rootID string) (string
 	return "", gorm.ErrRecordNotFound
 }
 
-func (fd *FeedDao) ResolveRootSubjectByID(ctx *gin.Context, rootID string) (string, error) {
+func (fd *FeedDao) ResolveRootSubjectByID(ctx context.Context, rootID string) (string, error) {
 	if ok, err := fd.existsByTableAndBid(ctx, TableNamePost, rootID); err != nil {
 		return "", err
 	} else if ok {
@@ -182,7 +181,7 @@ func (fd *FeedDao) ResolveRootSubjectByID(ctx *gin.Context, rootID string) (stri
 	return "", gorm.ErrRecordNotFound
 }
 
-func (fd *FeedDao) findShowImgByTable(ctx *gin.Context, tableName, bid string) (string, bool, error) {
+func (fd *FeedDao) findShowImgByTable(ctx context.Context, tableName, bid string) (string, bool, error) {
 	type Result struct {
 		ShowImg string `gorm:"column:show_img"`
 	}
@@ -198,7 +197,7 @@ func (fd *FeedDao) findShowImgByTable(ctx *gin.Context, tableName, bid string) (
 	return res.ShowImg, true, nil
 }
 
-func (fd *FeedDao) existsByTableAndBid(ctx *gin.Context, tableName, bid string) (bool, error) {
+func (fd *FeedDao) existsByTableAndBid(ctx context.Context, tableName, bid string) (bool, error) {
 	var cnt int64
 	err := fd.db.WithContext(ctx).Table(tableName).Where("bid = ?", bid).Count(&cnt).Error
 	if err != nil {

@@ -26,17 +26,17 @@ import (
 )
 
 type UserServiceHdl interface {
-	CreateUser(*gin.Context, string) error
-	Login(*gin.Context, string, string) (*model.User, string, error)
-	Logout(*gin.Context, string) error
-	GetUserInfo(*gin.Context, string) (model.User, error)
-	UpdateAvatar(*gin.Context, req.UserAvatarReq) error
-	UpdateUsername(*gin.Context, string, string) error
-	SearchUserAct(*gin.Context, string, string) ([]model.Activity, error)
-	SearchUserPost(*gin.Context, string, string) ([]model.Post, error)
-	GenQINIUToken(*gin.Context) string
-	Like(*gin.Context, string, string) error
-	Comment(*gin.Context, string, string) error
+	CreateUser(context.Context, string) error
+	Login(context.Context, string, string) (*model.User, string, error)
+	Logout(context.Context, string) error
+	GetUserInfo(context.Context, string) (model.User, error)
+	UpdateAvatar(context.Context, req.UserAvatarReq) error
+	UpdateUsername(context.Context, string, string) error
+	SearchUserAct(context.Context, string, string) ([]model.Activity, error)
+	SearchUserPost(context.Context, string, string) ([]model.Post, error)
+	GenQINIUToken(context.Context) string
+	Like(context.Context, string, string) error
+	Comment(context.Context, string, string) error
 }
 
 type UserService struct {
@@ -67,7 +67,7 @@ func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRe
 	}
 }
 
-func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) error {
+func (us *UserService) CreateUser(ctx context.Context, sid string, school string) error {
 	user := &model.User{
 		StudentID: sid,
 		Name:      sid,
@@ -83,7 +83,7 @@ func (us *UserService) CreateUser(ctx *gin.Context, sid string, school string) e
 	return nil
 }
 
-func (us *UserService) Login(ctx *gin.Context, studentId string, password string) (*model.User, string, error) {
+func (us *UserService) Login(ctx context.Context, studentId string, password string) (*model.User, string, error) {
 	client, err := us.cSvc.Login(ctx, studentId, password)
 	if err != nil {
 		return nil, "", err

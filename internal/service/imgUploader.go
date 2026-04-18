@@ -1,14 +1,15 @@
 package service
 
 import (
-	"github.com/gin-gonic/gin"
+	"context"
+
 	"github.com/qiniu/go-sdk/v7/auth"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/raiki02/EG/config"
 )
 
 type ImgUploaderHdl interface {
-	GetQIQIUToken(*gin.Context) string
+	GetQIQIUToken(context.Context) string
 }
 
 type ImgUploader struct {
@@ -28,7 +29,7 @@ func NewImgUploader(cfg *config.Conf) *ImgUploader {
 	return img
 }
 
-func (iu *ImgUploader) GenQINIUToken(c *gin.Context) string {
+func (iu *ImgUploader) GenQINIUToken(c context.Context) string {
 	mac := auth.New(iu.AccessKey, iu.SerectKey)
 	putPolicy := storage.PutPolicy{
 		Scope:   iu.Bucket,

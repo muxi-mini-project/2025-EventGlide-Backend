@@ -1,10 +1,10 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
@@ -34,7 +34,7 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, l *zap.Logger,
 	}
 }
 
-func (as *ActivityService) NewAct(c *gin.Context, r *req.CreateActReq, studentId string) (resp.CreateActivityResp, error) {
+func (as *ActivityService) NewAct(c context.Context, r *req.CreateActReq, studentId string) (resp.CreateActivityResp, error) {
 	var (
 		form *model.AuditorForm
 		err  error
@@ -98,7 +98,7 @@ func (as *ActivityService) NewAct(c *gin.Context, r *req.CreateActReq, studentId
 
 }
 
-func (as *ActivityService) NewDraft(c *gin.Context, r *req.CreateActDraftReq, studentId string) (resp.CreateActivityResp, error) {
+func (as *ActivityService) NewDraft(c context.Context, r *req.CreateActDraftReq, studentId string) (resp.CreateActivityResp, error) {
 
 	d := toActDraft(r, studentId)
 
@@ -112,7 +112,7 @@ func (as *ActivityService) NewDraft(c *gin.Context, r *req.CreateActDraftReq, st
 	return as.toCreateResp(c, d), nil
 }
 
-func (as *ActivityService) LoadDraft(c *gin.Context, sid string) (model.ActivityDraft, error) {
+func (as *ActivityService) LoadDraft(c context.Context, sid string) (model.ActivityDraft, error) {
 	d, err := as.ad.LoadDraft(c, sid)
 	if err != nil {
 		return model.ActivityDraft{}, err
@@ -153,7 +153,7 @@ func (as *ActivityService) ToLoadDraftResp(d model.ActivityDraft) resp.LoadActiv
 	return res
 }
 
-func (as *ActivityService) FindActBySearches(c *gin.Context, req *req.ActSearchReq) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActBySearches(c context.Context, req *req.ActSearchReq) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActBySearches(c, req)
 	if err != nil {
 		as.l.Error("Failed to search acts", zap.Error(err))
@@ -163,7 +163,7 @@ func (as *ActivityService) FindActBySearches(c *gin.Context, req *req.ActSearchR
 	return res, nil
 }
 
-func (as *ActivityService) FindActByDate(c *gin.Context, date string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActByDate(c context.Context, date string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActByDate(c, date)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func (as *ActivityService) FindActByDate(c *gin.Context, date string) ([]resp.Li
 	return res, nil
 }
 
-func (as *ActivityService) FindActByName(c *gin.Context, name string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActByName(c context.Context, name string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActByName(c, name)
 	if err != nil {
 		return nil, err
@@ -181,7 +181,7 @@ func (as *ActivityService) FindActByName(c *gin.Context, name string) ([]resp.Li
 	return res, nil
 }
 
-func (as *ActivityService) FindActByOwnerID(c *gin.Context, id string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActByOwnerID(c context.Context, id string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActByOwnerID(c, id)
 	if err != nil {
 		return nil, err
@@ -190,7 +190,7 @@ func (as *ActivityService) FindActByOwnerID(c *gin.Context, id string) ([]resp.L
 	return res, nil
 }
 
-func (as *ActivityService) ListAllActs(c *gin.Context, id string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) ListAllActs(c context.Context, id string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.ListAllActs(c)
 	if err != nil {
 		return nil, err
@@ -199,7 +199,7 @@ func (as *ActivityService) ListAllActs(c *gin.Context, id string) ([]resp.ListAc
 	return res, nil
 }
 
-func (as *ActivityService) ToListResp(c *gin.Context, acts []model.Activity) []resp.ListActivitiesResp {
+func (as *ActivityService) ToListResp(c context.Context, acts []model.Activity) []resp.ListActivitiesResp {
 	var res []resp.ListActivitiesResp
 	for _, act := range acts {
 		res = append(res, as.toListActResp(c, &act))
@@ -207,7 +207,7 @@ func (as *ActivityService) ToListResp(c *gin.Context, acts []model.Activity) []r
 	return res
 }
 
-func (as *ActivityService) toListActResp(c *gin.Context, act *model.Activity) resp.ListActivitiesResp {
+func (as *ActivityService) toListActResp(c context.Context, act *model.Activity) resp.ListActivitiesResp {
 
 	var res resp.ListActivitiesResp
 	sid := tools.GetSid(c)
@@ -322,7 +322,7 @@ func toActDraft(r *req.CreateActDraftReq, studentId string) *model.ActivityDraft
 	return &ad
 }
 
-func (as *ActivityService) toCreateResp(c *gin.Context, act any) resp.CreateActivityResp {
+func (as *ActivityService) toCreateResp(c context.Context, act any) resp.CreateActivityResp {
 	var res resp.CreateActivityResp
 
 	switch act.(type) {

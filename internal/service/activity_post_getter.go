@@ -1,8 +1,9 @@
 package service
 
 import (
+	"context"
 	"errors"
-	"github.com/gin-gonic/gin"
+
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
@@ -47,7 +48,7 @@ func (apw *ActPostCommentWrapper) GetBid() string {
 }
 
 type ActPostCommentGetter interface {
-	GetActivityOrPostOrComment(ctx *gin.Context, bid string, sub string) (ActPostCommentWrapper, error)
+	GetActivityOrPostOrComment(ctx context.Context, bid string, sub string) (ActPostCommentWrapper, error)
 }
 
 type actPostCommentGetter struct {
@@ -64,7 +65,7 @@ func NewActPostCommentGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.C
 	}
 }
 
-func (apg *actPostCommentGetter) GetActivityOrPostOrComment(ctx *gin.Context, bid string, sub string) (ActPostCommentWrapper, error) {
+func (apg *actPostCommentGetter) GetActivityOrPostOrComment(ctx context.Context, bid string, sub string) (ActPostCommentWrapper, error) {
 	var wrapper ActPostCommentWrapper
 	switch sub {
 	case SubjectActivity:

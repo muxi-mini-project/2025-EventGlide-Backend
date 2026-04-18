@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
@@ -67,7 +66,7 @@ func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string) ([]model.Po
 	return r.dao.FindPostByOwnerID(ctx, id)
 }
 
-func (r *PostRepo) FindPostByBid(ctx *gin.Context, bid string) (model.Post, error) {
+func (r *PostRepo) FindPostByBid(ctx context.Context, bid string) (model.Post, error) {
 	return cache.GetTyped(r.ch, ctx, r.postByBidKey(bid), 5*time.Minute, func(context.Context) (model.Post, error) {
 		post, err := r.dao.FindPostByBid(ctx, bid)
 		if err != nil {
@@ -80,7 +79,7 @@ func (r *PostRepo) FindPostByBid(ctx *gin.Context, bid string) (model.Post, erro
 	})
 }
 
-func (r *PostRepo) GetChecking(ctx *gin.Context, sid string) ([]model.Post, error) {
+func (r *PostRepo) GetChecking(ctx context.Context, sid string) ([]model.Post, error) {
 	return r.dao.GetChecking(ctx, sid)
 }
 

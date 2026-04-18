@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"github.com/gin-gonic/gin"
@@ -31,24 +32,23 @@ func StringToSlice(s string) []string {
 	return strings.Split(s, ",")
 }
 
-func ReturnMSG(c *gin.Context, msg string, res interface{}) map[string]interface{} {
+func ReturnMSG(code int, msg string, res interface{}) map[string]interface{} {
 	return gin.H{
-		"code": c.Writer.Status(),
+		"code": code,
 		"msg":  msg,
 		"data": res,
 	}
 }
 
-func GetSid(c *gin.Context) string {
-	sid, ok := c.Get("studentid")
+func GetSid(c context.Context) string {
+	sid, ok := c.Value("studentid").(string)
 	if !ok {
 		return ""
 	}
-	res, ok := sid.(string)
 	if !ok {
 		return ""
 	}
-	return res
+	return sid
 }
 
 func ParseTime(t time.Time) string {

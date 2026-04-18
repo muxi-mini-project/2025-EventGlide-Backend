@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"time"
@@ -15,10 +16,10 @@ import (
 )
 
 type JwtHdl interface {
-	GenToken(*gin.Context, string) string
-	StoreInRedis(*gin.Context, string, string) error
-	CheckToken(*gin.Context, string) error
-	ClearToken(*gin.Context, string) error
+	GenToken(context.Context, string) string
+	StoreInRedis(context.Context, string, string) error
+	CheckToken(context.Context, string) error
+	ClearToken(context.Context, string) error
 }
 type Jwt struct {
 	rdb    *redis.Client
@@ -35,7 +36,7 @@ func NewJwt(rdb *redis.Client, cfg *config.Conf) *Jwt {
 	}
 }
 
-func (c *Jwt) GenToken(ctx *gin.Context, sid string) string {
+func (c *Jwt) GenToken(ctx context.Context, sid string) string {
 	claims := jwt.RegisteredClaims{
 		ID:        uuid.New().String(),
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(setTTL(c.cfg))),
@@ -49,7 +50,7 @@ func (c *Jwt) GenToken(ctx *gin.Context, sid string) string {
 	return t
 }
 
-func (c *Jwt) StoreInRedis(ctx *gin.Context, sid string, token string) error {
+func (c *Jwt) StoreInRedis(ctx context.Context, sid string, token string) error {
 	id := c.parseTokenId(token)
 	key := "token:" + id
 	err := c.rdb.Set(ctx, key, sid, setTTL(c.cfg)).Err()
@@ -59,7 +60,7 @@ func (c *Jwt) StoreInRedis(ctx *gin.Context, sid string, token string) error {
 	return nil
 }
 
-func (c *Jwt) CheckToken(ctx *gin.Context, token string) error {
+func (c *Jwt) CheckToken(ctx context.Context, token string) error {
 	id := c.parseTokenId(token)
 	if id == "" {
 		return errors.New("token is invalid")
@@ -72,7 +73,7 @@ func (c *Jwt) CheckToken(ctx *gin.Context, token string) error {
 	return nil
 }
 
-func (c *Jwt) ClearToken(ctx *gin.Context, token string) error {
+func (c *Jwt) ClearToken(ctx context.Context, token string) error {
 	id := c.parseTokenId(token)
 	id = "token:" + id
 	err := c.rdb.Del(ctx, id).Err()
@@ -110,17 +111,20 @@ func (c *Jwt) WrapCheckToken() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		token := ctx.GetHeader("Authorization")
 		if token == "" {
-			ctx.JSON(401, tools.ReturnMSG(ctx, "token is empty", nil))
+			ctx.JSON(401, tools.ReturnMSG(401, "token is empty", nil))
 			ctx.Abort()
 			return
 		}
-		err := c.CheckToken(ctx, token)
+		reqCtx:=ctx.Request.Context()
+		err := c.CheckToken(reqCtx, token)
 		if err != nil {
-			ctx.JSON(401, tools.ReturnMSG(ctx, "token is invalid", nil))
+			ctx.JSON(401, tools.ReturnMSG(401, "token is invalid", nil))
 			ctx.Abort()
 			return
 		}
-		ctx.Set("studentid", c.parseSid(token))
+		rawCtx := ctx.Request.Context()
+		rawCtx = context.WithValue(rawCtx, "studentid", c.parseSid(token))
+		ctx.Request = ctx.Request.WithContext(rawCtx)
 		claims := c.parseToken(token)
 		ctx.Set(ginx.UserClaimsKey, *claims)
 		ctx.Next()
