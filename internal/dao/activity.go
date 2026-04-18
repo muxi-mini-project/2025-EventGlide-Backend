@@ -132,21 +132,21 @@ func (ad *ActDao) DeleteAct(c context.Context, a model.Activity) error {
 
 func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]model.Activity, error) {
 	var as []model.Activity
-	q := ad.db // 确保 q 初始化
+	q := ad.db.WithContext(c) // 确保 q 初始化
 	if len(a.Type) > 0 {
-		q = q.WithContext(c).Where("type IN ?", a.Type)
+		q = q.Where("type IN ?", a.Type)
 	}
 	if len(a.HolderType) > 0 {
-		q = q.WithContext(c).Where("holder_type IN ?", a.HolderType)
+		q = q.Where("holder_type IN ?", a.HolderType)
 	}
 	if len(a.Location) > 0 {
-		q = q.WithContext(c).Where("position IN ?", a.Location)
+		q = q.Where("position IN ?", a.Location)
 	}
 	if a.IfRegister != "" {
-		q = q.WithContext(c).Where("if_register = ?", a.IfRegister)
+		q = q.Where("if_register = ?", a.IfRegister)
 	}
 	if a.DetailTime.StartTime != "" && a.DetailTime.EndTime != "" {
-		q = q.WithContext(c).Where("start_time >= ? AND end_time <= ?", a.DetailTime.StartTime, a.DetailTime.EndTime)
+		q = q.Where("start_time >= ? AND end_time <= ?", a.DetailTime.StartTime, a.DetailTime.EndTime)
 	}
 
 	err := q.Scopes(ad.SetEffect()).Find(&as).Error
