@@ -122,7 +122,9 @@ func (c *Jwt) WrapCheckToken() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
-		ctx.Set("studentid", c.parseSid(token))
+		rawCtx := c.Request.Context()
+		rawCtx = context.WithValue(rawCtx, "studentid", c.parseSid(token))
+		c.Request = c.Request.WithContext(rawCtx)
 		claims := c.parseToken(token)
 		ctx.Set(ginx.UserClaimsKey, *claims)
 		ctx.Next()
