@@ -1,10 +1,10 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/client"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/dto"
@@ -19,8 +19,8 @@ import (
 var _ dao.AuditorRepository = (*dao.AuditorRepo)(nil)
 
 type AuditorService interface {
-	UploadForm(c *gin.Context, aw *req.AuditWrapper, FormId uint) error
-	CreateAuditorForm(c *gin.Context, ActId, FormUrl, Sub string) (*model.AuditorForm, error)
+	UploadForm(c context.Context, aw *req.AuditWrapper, FormId uint) error
+	CreateAuditorForm(c context.Context, ActId, FormUrl, Sub string) (*model.AuditorForm, error)
 }
 
 type auditorService struct {
@@ -52,7 +52,7 @@ func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger, cfg *config.Co
 	return c
 }
 
-func (a *auditorService) UploadForm(c *gin.Context, aw *req.AuditWrapper, id uint) error {
+func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id uint) error {
 	uploadReq := a.toUploadReq(aw, id)
 	_, err := a.MuxiCli.UploadItem(c, &uploadReq)
 	if err != nil {
@@ -62,7 +62,7 @@ func (a *auditorService) UploadForm(c *gin.Context, aw *req.AuditWrapper, id uin
 	return nil
 }
 
-func (a *auditorService) CreateAuditorForm(c *gin.Context, ActId, FormUrl string, sub string) (*model.AuditorForm, error) {
+func (a *auditorService) CreateAuditorForm(c context.Context, ActId, FormUrl string, sub string) (*model.AuditorForm, error) {
 	return a.AuditorRepo.Insert(c, ActId, FormUrl, sub)
 }
 

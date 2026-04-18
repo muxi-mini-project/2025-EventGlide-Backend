@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
@@ -26,13 +27,13 @@ func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, l *zap.Logger,
 	}
 }
 
-func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid string) error {
+func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid string) error {
 	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
 	if err != nil {
 		return err
 	}
 	jreq := is.toFeed(r, "like", sid, ap.GetStudentID())
-	err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
+	err = is.mq.Publish(c, "feed_stream", jreq)
 	if err != nil {
 		is.l.Error("Publish Like Feed Failed", zap.Error(err), zap.Any("feed", jreq))
 	} else {

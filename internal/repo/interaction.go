@@ -1,7 +1,8 @@
 package repo
 
 import (
-	"github.com/gin-gonic/gin"
+	"context"
+
 	"github.com/raiki02/EG/internal/dao"
 )
 
@@ -21,7 +22,7 @@ func NewInteractionRepo(dao *dao.InteractionDao, users *UserRepo, acts *Activity
 	}
 }
 
-func (r *InteractionRepo) LikeActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) LikeActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.LikeActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -31,7 +32,7 @@ func (r *InteractionRepo) LikeActivity(ctx *gin.Context, studentID, targetID str
 	)
 }
 
-func (r *InteractionRepo) LikePost(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) LikePost(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.LikePost(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -41,11 +42,11 @@ func (r *InteractionRepo) LikePost(ctx *gin.Context, studentID, targetID string)
 	)
 }
 
-func (r *InteractionRepo) LikeComment(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) LikeComment(ctx context.Context, studentID, targetID string) error {
 	return r.dao.LikeComment(ctx, studentID, targetID)
 }
 
-func (r *InteractionRepo) DislikeActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) DislikeActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.DislikeActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -55,7 +56,7 @@ func (r *InteractionRepo) DislikeActivity(ctx *gin.Context, studentID, targetID 
 	)
 }
 
-func (r *InteractionRepo) DislikePost(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) DislikePost(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.DislikePost(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -65,29 +66,29 @@ func (r *InteractionRepo) DislikePost(ctx *gin.Context, studentID, targetID stri
 	)
 }
 
-func (r *InteractionRepo) DislikeComment(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) DislikeComment(ctx context.Context, studentID, targetID string) error {
 	return r.dao.DislikeComment(ctx, studentID, targetID)
 }
 
-func (r *InteractionRepo) CommentActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) CommentActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.CommentActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
 	return r.acts.Invalidate(ctx, targetID)
 }
 
-func (r *InteractionRepo) CommentPost(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) CommentPost(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.CommentPost(ctx, studentID, targetID); err != nil {
 		return err
 	}
 	return r.posts.Invalidate(ctx, targetID)
 }
 
-func (r *InteractionRepo) CommentComment(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) CommentComment(ctx context.Context, studentID, targetID string) error {
 	return r.dao.CommentComment(ctx, studentID, targetID)
 }
 
-func (r *InteractionRepo) CollectActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) CollectActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.CollectActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -97,7 +98,7 @@ func (r *InteractionRepo) CollectActivity(ctx *gin.Context, studentID, targetID 
 	)
 }
 
-func (r *InteractionRepo) CollectPost(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) CollectPost(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.CollectPost(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -107,7 +108,7 @@ func (r *InteractionRepo) CollectPost(ctx *gin.Context, studentID, targetID stri
 	)
 }
 
-func (r *InteractionRepo) DiscollectActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) DiscollectActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.DiscollectActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -117,7 +118,7 @@ func (r *InteractionRepo) DiscollectActivity(ctx *gin.Context, studentID, target
 	)
 }
 
-func (r *InteractionRepo) DiscollectPost(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) DiscollectPost(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.DiscollectPost(ctx, studentID, targetID); err != nil {
 		return err
 	}
@@ -127,21 +128,21 @@ func (r *InteractionRepo) DiscollectPost(ctx *gin.Context, studentID, targetID s
 	)
 }
 
-func (r *InteractionRepo) ApproveActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) ApproveActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.ApproveActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
 	return r.acts.Invalidate(ctx, targetID)
 }
 
-func (r *InteractionRepo) RejectActivity(ctx *gin.Context, studentID, targetID string) error {
+func (r *InteractionRepo) RejectActivity(ctx context.Context, studentID, targetID string) error {
 	if err := r.dao.RejectActivity(ctx, studentID, targetID); err != nil {
 		return err
 	}
 	return r.acts.Invalidate(ctx, targetID)
 }
 
-func (r *InteractionRepo) InsertApprovement(ctx *gin.Context, studentID, studentName, targetID string) error {
+func (r *InteractionRepo) InsertApprovement(ctx context.Context, studentID, studentName, targetID string) error {
 	return r.dao.InsertApprovement(ctx, studentID, studentName, targetID)
 }
 

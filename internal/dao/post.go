@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
@@ -109,7 +108,7 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string) ([]model.Po
 	return posts, nil
 }
 
-func (pd *PostDao) FindPostByBid(ctx *gin.Context, bid string) (model.Post, error) {
+func (pd *PostDao) FindPostByBid(ctx context.Context, bid string) (model.Post, error) {
 	var post model.Post
 	err := pd.db.WithContext(ctx).Where("bid = ?", bid).First(&post).Error
 	if err != nil {
@@ -133,7 +132,7 @@ func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
 	}
 }
 
-func (pd *PostDao) GetChecking(c *gin.Context, sid string) ([]model.Post, error) {
+func (pd *PostDao) GetChecking(c context.Context, sid string) ([]model.Post, error) {
 	var posts []model.Post
 	err := pd.db.WithContext(c).Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&posts).Error
 	if err != nil {

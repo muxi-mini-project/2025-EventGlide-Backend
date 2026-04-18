@@ -1,10 +1,10 @@
 package dao
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
@@ -13,16 +13,16 @@ import (
 )
 
 type ActDaoHdl interface {
-	CreateAct(*gin.Context, *model.Activity) error
-	CreateDraft(*gin.Context, *model.ActivityDraft) error
-	DeleteAct(*gin.Context, model.Activity) error
-	LoadDraft(*gin.Context, string, string) (*model.ActivityDraft, error)
-	FindActByName(*gin.Context, string) ([]model.Activity, error)
-	FindActByDate(*gin.Context, string) ([]model.Activity, error)
-	FindActByOwnerID(*gin.Context, string) ([]model.Activity, error)
-	CheckExist(*gin.Context, *model.Activity) bool
-	ListAllActs(*gin.Context) ([]model.Activity, error)
-	FindActBySearches(*gin.Context, *req.ActSearchReq) ([]model.Activity, error)
+	CreateAct(context.Context, *model.Activity) error
+	CreateDraft(context.Context, *model.ActivityDraft) error
+	DeleteAct(context.Context, model.Activity) error
+	LoadDraft(context.Context, string, string) (*model.ActivityDraft, error)
+	FindActByName(context.Context, string) ([]model.Activity, error)
+	FindActByDate(context.Context, string) ([]model.Activity, error)
+	FindActByOwnerID(context.Context, string) ([]model.Activity, error)
+	CheckExist(context.Context, *model.Activity) bool
+	ListAllActs(context.Context) ([]model.Activity, error)
+	FindActBySearches(context.Context, *req.ActSearchReq) ([]model.Activity, error)
 }
 
 type ActDao struct {
@@ -39,24 +39,24 @@ func NewActDao(db *gorm.DB, l *zap.Logger, cfg *config.Conf) *ActDao {
 	}
 }
 
-func (ad *ActDao) CreateAct(c *gin.Context, a *model.Activity) error {
+func (ad *ActDao) CreateAct(c context.Context, a *model.Activity) error {
 	if ad.CheckExist(c, a) {
 		ad.l.Warn("tried to create an exist activity", zap.Any("act-bid", a.Bid))
 		return errors.New("activity exist")
 	} else {
-		ad.db.Where("student_id = ?", a.StudentID).Delete(model.ActivityDraft{})
+		ad.db.WithContext(c).Where("student_id = ?", a.StudentID).Delete(model.ActivityDraft{})
 		return ad.db.Create(a).Error
 	}
 }
 
-func (ad *ActDao) CreateDraft(c *gin.Context, d *model.ActivityDraft) error {
-	ad.db.Where("student_id = ?", d.StudentID).Delete(&model.ActivityDraft{})
+func (ad *ActDao) CreateDraft(c context.Context, d *model.ActivityDraft) error {
+	ad.db.WithContext(c).Where("student_id = ?", d.StudentID).Delete(&model.ActivityDraft{})
 	return ad.db.Create(d).Error
 }
 
-func (ad *ActDao) LoadDraft(c *gin.Context, s string) (model.ActivityDraft, error) {
+func (ad *ActDao) LoadDraft(c context.Context, s string) (model.ActivityDraft, error) {
 	var d model.ActivityDraft
-	err := ad.db.Where("student_id = ?", s).Find(&d).Error
+	err := ad.db.WithContext(c).Where("student_id = ?", s).Find(&d).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return d, nil
@@ -67,16 +67,16 @@ func (ad *ActDao) LoadDraft(c *gin.Context, s string) (model.ActivityDraft, erro
 }
 
 // TODO: 换成按页展示，每页返回固定个数活动
-func (ad *ActDao) FindActByUser(c *gin.Context, s string, keyword string) ([]model.Activity, error) {
+func (ad *ActDao) FindActByUser(c context.Context, s string, keyword string) ([]model.Activity, error) {
 	var as []model.Activity
 	if keyword == "" {
-		err := ad.db.Where("student_id = ? ", s).Find(&as).Error
+		err := ad.db.WithContext(c).Where("student_id = ? ", s).Find(&as).Error
 		if err != nil {
 			return nil, err
 		}
 		return as, nil
 	} else {
-		err := ad.db.Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Find(&as).Error
+		err := ad.db.WithContext(c).Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Find(&as).Error
 		if err != nil {
 			return nil, err
 		}
@@ -84,26 +84,26 @@ func (ad *ActDao) FindActByUser(c *gin.Context, s string, keyword string) ([]mod
 	}
 }
 
-func (ad *ActDao) FindActByName(c *gin.Context, n string) ([]model.Activity, error) {
+func (ad *ActDao) FindActByName(c context.Context, n string) ([]model.Activity, error) {
 	var as []model.Activity
-	err := ad.db.Scopes(ad.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", n)).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", n)).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
 	return as, nil
 }
 
-func (ad *ActDao) FindActByDate(c *gin.Context, d string) ([]model.Activity, error) {
+func (ad *ActDao) FindActByDate(c context.Context, d string) ([]model.Activity, error) {
 	var as []model.Activity
-	err := ad.db.Scopes(ad.SetEffect()).Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
 	return as, nil
 }
 
-func (ad *ActDao) CheckExist(c *gin.Context, a *model.Activity) bool {
-	ret := ad.db.Where(&model.Activity{
+func (ad *ActDao) CheckExist(c context.Context, a *model.Activity) bool {
+	ret := ad.db.WithContext(c).Where(&model.Activity{
 		Type:       a.Type,
 		HolderType: a.HolderType,
 		Position:   a.Position,
@@ -116,8 +116,8 @@ func (ad *ActDao) CheckExist(c *gin.Context, a *model.Activity) bool {
 	}
 }
 
-func (ad *ActDao) DeleteAct(c *gin.Context, a model.Activity) error {
-	ret := ad.db.Where(&model.Activity{
+func (ad *ActDao) DeleteAct(c context.Context, a model.Activity) error {
+	ret := ad.db.WithContext(c).Where(&model.Activity{
 		Type:       a.Type,
 		HolderType: a.HolderType,
 		Position:   a.Position,
@@ -130,23 +130,23 @@ func (ad *ActDao) DeleteAct(c *gin.Context, a model.Activity) error {
 	}
 }
 
-func (ad *ActDao) FindActBySearches(c *gin.Context, a *req.ActSearchReq) ([]model.Activity, error) {
+func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]model.Activity, error) {
 	var as []model.Activity
 	q := ad.db // 确保 q 初始化
 	if len(a.Type) > 0 {
-		q = q.Where("type IN ?", a.Type)
+		q = q.WithContext(c).Where("type IN ?", a.Type)
 	}
 	if len(a.HolderType) > 0 {
-		q = q.Where("holder_type IN ?", a.HolderType)
+		q = q.WithContext(c).Where("holder_type IN ?", a.HolderType)
 	}
 	if len(a.Location) > 0 {
-		q = q.Where("position IN ?", a.Location)
+		q = q.WithContext(c).Where("position IN ?", a.Location)
 	}
 	if a.IfRegister != "" {
-		q = q.Where("if_register = ?", a.IfRegister)
+		q = q.WithContext(c).Where("if_register = ?", a.IfRegister)
 	}
 	if a.DetailTime.StartTime != "" && a.DetailTime.EndTime != "" {
-		q = q.Where("start_time >= ? AND end_time <= ?", a.DetailTime.StartTime, a.DetailTime.EndTime)
+		q = q.WithContext(c).Where("start_time >= ? AND end_time <= ?", a.DetailTime.StartTime, a.DetailTime.EndTime)
 	}
 
 	err := q.Scopes(ad.SetEffect()).Find(&as).Error
@@ -157,28 +157,28 @@ func (ad *ActDao) FindActBySearches(c *gin.Context, a *req.ActSearchReq) ([]mode
 	return as, err
 }
 
-func (ad *ActDao) FindActByOwnerID(c *gin.Context, s string) ([]model.Activity, error) {
+func (ad *ActDao) FindActByOwnerID(c context.Context, s string) ([]model.Activity, error) {
 	var as []model.Activity
-	err := ad.db.Where("student_id = ?", s).Find(&as).Error
+	err := ad.db.WithContext(c).Where("student_id = ?", s).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
 	return as, nil
 }
 
-func (ad *ActDao) ListAllActs(c *gin.Context) ([]model.Activity, error) {
+func (ad *ActDao) ListAllActs(c context.Context) ([]model.Activity, error) {
 	var as []model.Activity
 
-	err := ad.db.Scopes(ad.SetEffect()).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
 	return as, nil
 }
 
-func (ad *ActDao) FindActByBid(c *gin.Context, bid string) (model.Activity, error) {
+func (ad *ActDao) FindActByBid(c context.Context, bid string) (model.Activity, error) {
 	var act model.Activity
-	err := ad.db.WithContext(c).Where("bid = ?", bid).First(&act).Error
+	err := ad.db.WithContext(c).Where("bid = ?", bid).Find(&act).Error
 	if err != nil {
 		return model.Activity{}, err
 	}
@@ -200,7 +200,7 @@ func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
 	}
 }
 
-func (ad *ActDao) GetChecking(c *gin.Context, sid string) ([]model.Activity, error) {
+func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, error) {
 	var acts []model.Activity
 	err := ad.db.WithContext(c).Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&acts).Error
 	if err != nil {

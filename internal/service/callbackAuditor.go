@@ -1,20 +1,21 @@
 package service
 
 import (
-	"github.com/gin-gonic/gin"
+	"context"
+
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/tools"
 )
 
 type CallbackAuditorService interface {
-	UpdateStatus(c *gin.Context, id uint, status string) error
+	UpdateStatus(c context.Context, id uint, status string) error
 }
 
 type callbackAuditorService struct {
 	repo dao.AuditorRepository
 }
 
-func (ad *callbackAuditorService) UpdateStatus(c *gin.Context, id uint, status string) error {
+func (ad *callbackAuditorService) UpdateStatus(c context.Context, id uint, status string) error {
 	return ad.repo.Update(c, id, tools.StatusMapper(status))
 }
 

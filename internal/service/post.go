@@ -1,10 +1,10 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
@@ -14,13 +14,13 @@ import (
 )
 
 type PostServiceHdl interface {
-	GetAllPost(*gin.Context) ([]resp.ListPostsResp, error)
-	CreatePost(*gin.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
-	FindPostByName(*gin.Context, string) ([]resp.ListPostsResp, error)
-	DeletePost(*gin.Context, *model.Post) error
-	CreateDraft(*gin.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
-	LoadDraft(*gin.Context, req.DraftReq) (resp.CreatePostResp, error)
-	FindPostByOwnerID(*gin.Context, string) ([]resp.ListPostsResp, error)
+	GetAllPost(context.Context) ([]resp.ListPostsResp, error)
+	CreatePost(context.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
+	FindPostByName(context.Context, string) ([]resp.ListPostsResp, error)
+	DeletePost(context.Context, *model.Post) error
+	CreateDraft(context.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
+	LoadDraft(context.Context, req.DraftReq) (resp.CreatePostResp, error)
+	FindPostByOwnerID(context.Context, string) ([]resp.ListPostsResp, error)
 }
 
 type PostService struct {
@@ -39,7 +39,7 @@ func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, l *zap.Logger, aud Au
 	}
 }
 
-func (ps *PostService) GetAllPost(c *gin.Context) ([]resp.ListPostsResp, error) {
+func (ps *PostService) GetAllPost(c context.Context) ([]resp.ListPostsResp, error) {
 	posts, err := ps.pdh.GetAllPost(c)
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (ps *PostService) GetAllPost(c *gin.Context) ([]resp.ListPostsResp, error) 
 	return res, nil
 }
 
-func (ps *PostService) CreatePost(c *gin.Context, r *req.CreatePostReq, studentId string) (resp.CreatePostResp, error) {
+func (ps *PostService) CreatePost(c context.Context, r *req.CreatePostReq, studentId string) (resp.CreatePostResp, error) {
 	var (
 		err  error
 		form *model.AuditorForm
@@ -80,7 +80,7 @@ func (ps *PostService) CreatePost(c *gin.Context, r *req.CreatePostReq, studentI
 	return ps.toCreateResp(c, post), nil
 }
 
-func (ps *PostService) FindPostByName(c *gin.Context, name string) ([]resp.ListPostsResp, error) {
+func (ps *PostService) FindPostByName(c context.Context, name string) ([]resp.ListPostsResp, error) {
 	posts, err := ps.pdh.FindPostByName(c, name)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (ps *PostService) FindPostByName(c *gin.Context, name string) ([]resp.ListP
 	res := ps.ToListResp(c, posts)
 	return res, nil
 }
-func (ps *PostService) DeletePost(c *gin.Context, post *req.DeletePostReq, studentId string) error {
+func (ps *PostService) DeletePost(c context.Context, post *req.DeletePostReq, studentId string) error {
 	err := ps.pdh.DeletePost(c, &model.Post{
 		Bid:       post.TargetID,
 		StudentID: studentId,
@@ -99,7 +99,7 @@ func (ps *PostService) DeletePost(c *gin.Context, post *req.DeletePostReq, stude
 	return nil
 }
 
-func (ps *PostService) CreateDraft(c *gin.Context, r *req.CreatePostReq, studentId string) (resp.CreatePostResp, error) {
+func (ps *PostService) CreateDraft(c context.Context, r *req.CreatePostReq, studentId string) (resp.CreatePostResp, error) {
 	draft := toDraft(r, studentId)
 	err := ps.pdh.CreateDraft(c, draft)
 	if err != nil {
@@ -108,7 +108,7 @@ func (ps *PostService) CreateDraft(c *gin.Context, r *req.CreatePostReq, student
 	return ps.toCreateResp(c, draft), nil
 }
 
-func (ps *PostService) LoadDraft(c *gin.Context, sid string) (model.PostDraft, error) {
+func (ps *PostService) LoadDraft(c context.Context, sid string) (model.PostDraft, error) {
 	draft, err := ps.pdh.LoadDraft(c, sid)
 	if err != nil {
 		return model.PostDraft{}, err
@@ -116,7 +116,7 @@ func (ps *PostService) LoadDraft(c *gin.Context, sid string) (model.PostDraft, e
 	return draft, nil
 }
 
-func (ps *PostService) FindPostByOwnerID(c *gin.Context, id string) ([]resp.ListPostsResp, error) {
+func (ps *PostService) FindPostByOwnerID(c context.Context, id string) ([]resp.ListPostsResp, error) {
 	posts, err := ps.pdh.FindPostByOwnerID(c, id)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func (ps *PostService) FindPostByOwnerID(c *gin.Context, id string) ([]resp.List
 	return res, nil
 }
 
-func (ps *PostService) ToListResp(c *gin.Context, posts []model.Post) []resp.ListPostsResp {
+func (ps *PostService) ToListResp(c context.Context, posts []model.Post) []resp.ListPostsResp {
 	var res []resp.ListPostsResp
 	for _, post := range posts {
 		res = append(res, ps.toListPostResp(c, post))
@@ -133,7 +133,7 @@ func (ps *PostService) ToListResp(c *gin.Context, posts []model.Post) []resp.Lis
 	return res
 }
 
-func (ps *PostService) toListPostResp(c *gin.Context, post model.Post) resp.ListPostsResp {
+func (ps *PostService) toListPostResp(c context.Context, post model.Post) resp.ListPostsResp {
 	user := ps.ud.FindUserByID(c, post.StudentID)
 	var res resp.ListPostsResp
 	sid := tools.GetSid(c)
@@ -188,7 +188,7 @@ func toDraft(r *req.CreatePostReq, studentId string) *model.PostDraft {
 	}
 }
 
-func (ps *PostService) toCreateResp(c *gin.Context, p any) resp.CreatePostResp {
+func (ps *PostService) toCreateResp(c context.Context, p any) resp.CreatePostResp {
 	switch p.(type) {
 	case *model.Post:
 		post := p.(*model.Post)

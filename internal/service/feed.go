@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
@@ -21,14 +20,14 @@ import (
 )
 
 type FeedServiceHdl interface {
-	GetTotalCnt(ctx *gin.Context, sid string) (resp.BriefFeedResp, error)
-	GetFeedList(ctx *gin.Context, sid string) (resp.FeedResp, error)
-	SubsribeTopics(ctx *gin.Context)
-	GetLikeFeed(ctx *gin.Context, sid string) ([]resp.FeedLikeResp, error)
-	GetCollectFeed(ctx *gin.Context, sid string) ([]resp.FeedCollectResp, error)
-	GetCommentFeed(ctx *gin.Context, sid string) ([]resp.FeedCommentResp, error)
-	GetAtFeed(ctx *gin.Context, sid string) ([]resp.FeedAtResp, error)
-	GetAuditorFeedList(ctx *gin.Context, sid string) ([]resp.FeedInvitationResp, error)
+	GetTotalCnt(ctx context.Context, sid string) (resp.BriefFeedResp, error)
+	GetFeedList(ctx context.Context, sid string) (resp.FeedResp, error)
+	SubsribeTopics(ctx context.Context)
+	GetLikeFeed(ctx context.Context, sid string) ([]resp.FeedLikeResp, error)
+	GetCollectFeed(ctx context.Context, sid string) ([]resp.FeedCollectResp, error)
+	GetCommentFeed(ctx context.Context, sid string) ([]resp.FeedCommentResp, error)
+	GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAtResp, error)
+	GetAuditorFeedList(ctx context.Context, sid string) ([]resp.FeedInvitationResp, error)
 }
 
 type FeedService struct {
@@ -54,15 +53,15 @@ func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *zap.Logg
 	return fs
 }
 
-func (fs *FeedService) ReadFeedDetail(ctx *gin.Context, sid, bid string) error {
+func (fs *FeedService) ReadFeedDetail(ctx context.Context, sid, bid string) error {
 	return fs.fd.ReadFeedDetail(ctx, sid, bid)
 }
 
-func (fs *FeedService) ReadAllFeed(ctx *gin.Context, sid string) error {
+func (fs *FeedService) ReadAllFeed(ctx context.Context, sid string) error {
 	return fs.fd.ReadAllFeed(ctx, sid)
 }
 
-func (fs *FeedService) GetTotalCnt(ctx *gin.Context, sid string) (resp.BriefFeedResp, error) {
+func (fs *FeedService) GetTotalCnt(ctx context.Context, sid string) (resp.BriefFeedResp, error) {
 
 	ints, err := fs.fd.GetTotalCnt(ctx, sid)
 	if err != nil {
@@ -77,7 +76,7 @@ func (fs *FeedService) GetTotalCnt(ctx *gin.Context, sid string) (resp.BriefFeed
 
 }
 
-func (fs *FeedService) GetFeedList(ctx *gin.Context, sid string) (resp.FeedResp, error) {
+func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (resp.FeedResp, error) {
 	l, err1 := fs.GetLikeFeed(ctx, sid)
 	c, err2 := fs.GetCollectFeed(ctx, sid)
 	cm, err3 := fs.GetCommentFeed(ctx, sid)
@@ -182,7 +181,7 @@ func (fs *FeedService) ConsumeFeedStream() {
 	}()
 }
 
-func (fs *FeedService) GetLikeFeed(ctx *gin.Context, sid string) ([]resp.FeedLikeResp, error) {
+func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.FeedLikeResp, error) {
 	likes, err := fs.fd.GetLikeFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Like Feed List Failed", zap.Error(err))
@@ -222,7 +221,7 @@ func (fs *FeedService) GetLikeFeed(ctx *gin.Context, sid string) ([]resp.FeedLik
 	return res, nil
 }
 
-func (fs *FeedService) GetCollectFeed(ctx *gin.Context, sid string) ([]resp.FeedCollectResp, error) {
+func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.FeedCollectResp, error) {
 	collects, err := fs.fd.GetCollectFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Collect Feed List Failed", zap.Error(err))
@@ -260,7 +259,7 @@ func (fs *FeedService) GetCollectFeed(ctx *gin.Context, sid string) ([]resp.Feed
 	return res, nil
 }
 
-func (fs *FeedService) GetCommentFeed(ctx *gin.Context, sid string) ([]resp.FeedCommentResp, error) {
+func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.FeedCommentResp, error) {
 	comments, err := fs.fd.GetCommentFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Comment Feed List Failed", zap.Error(err))
@@ -300,7 +299,7 @@ func (fs *FeedService) GetCommentFeed(ctx *gin.Context, sid string) ([]resp.Feed
 	return res, nil
 }
 
-func (fs *FeedService) GetAtFeed(ctx *gin.Context, sid string) ([]resp.FeedAtResp, error) {
+func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAtResp, error) {
 	ats, err := fs.fd.GetAtFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get At Feed List Failed", zap.Error(err))
@@ -340,7 +339,7 @@ func (fs *FeedService) GetAtFeed(ctx *gin.Context, sid string) ([]resp.FeedAtRes
 	return res, nil
 }
 
-func (fs *FeedService) GetAuditorFeedList(ctx *gin.Context, sid string) (resp.FeedResp, error) {
+func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (resp.FeedResp, error) {
 	invites, err := fs.fd.GetAuditorFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Auditor Feed List Failed", zap.Error(err))
@@ -376,7 +375,7 @@ func (fs *FeedService) GetAuditorFeedList(ctx *gin.Context, sid string) (resp.Fe
 	return resp.FeedResp{Invitations: res}, nil
 }
 
-func (fs *FeedService) resolveRootAndSubject(ctx *gin.Context, f *model.Feed) (string, string) {
+func (fs *FeedService) resolveRootAndSubject(ctx context.Context, f *model.Feed) (string, string) {
 	if f.Object != SubjectComment {
 		return f.RootID, f.Object
 	}
@@ -399,7 +398,7 @@ func (fs *FeedService) resolveRootAndSubject(ctx *gin.Context, f *model.Feed) (s
 	return rootID, subject
 }
 
-func (fs *FeedService) loadFeedPicture(ctx *gin.Context, f *model.Feed, resolvedRootID string) (string, error) {
+func (fs *FeedService) loadFeedPicture(ctx context.Context, f *model.Feed, resolvedRootID string) (string, error) {
 	if f.Object == SubjectComment && resolvedRootID != "" {
 		return fs.fd.GetPictureFromRootID(ctx, resolvedRootID)
 	}
