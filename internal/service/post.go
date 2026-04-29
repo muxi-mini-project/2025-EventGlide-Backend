@@ -21,6 +21,7 @@ type PostServiceHdl interface {
 	CreateDraft(context.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
 	LoadDraft(context.Context, req.DraftReq) (resp.CreatePostResp, error)
 	FindPostByOwnerID(context.Context, string) ([]resp.ListPostsResp, error)
+	FindPostByBid(c context.Context,bid string)(resp.ListPostsResp,error)
 }
 
 type PostService struct {
@@ -123,6 +124,15 @@ func (ps *PostService) FindPostByOwnerID(c context.Context, id string) ([]resp.L
 	}
 	res := ps.ToListResp(c, posts)
 	return res, nil
+}
+
+func (ps *PostService) FindPostByBid(c context.Context,bid string)(resp.ListPostsResp,error){
+	post,err:=ps.pdh.FindPostByBid(c,bid)
+	if err!=nil{
+		return resp.ListPostsResp{},err
+	}
+	res:=ps.toListPostResp(c,post)
+	return res,nil
 }
 
 func (ps *PostService) ToListResp(c context.Context, posts []model.Post) []resp.ListPostsResp {

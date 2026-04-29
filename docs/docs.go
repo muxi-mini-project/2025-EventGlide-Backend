@@ -242,7 +242,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/model.ActivityDraft"
+                                            "$ref": "#/definitions/resp.LoadActivitiesDraftResp"
                                         }
                                     }
                                 }
@@ -369,6 +369,53 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/req.ActSearchReq"
                         }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/resp.Resp"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "/act/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity"
+                ],
+                "summary": "根据id返回活动详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "目标id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -1296,6 +1343,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/post/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Post"
+                ],
+                "summary": "根据id返回帖子详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "目标id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/resp.Resp"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/resp.ListPostsResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/user/avatar": {
             "post": {
                 "description": "not finished",
@@ -1931,56 +2025,6 @@ const docTemplate = `{
                 },
                 "signer": {
                     "description": "报名人 \u003e= 5的 []slice // 通过条件1",
-                    "type": "string"
-                },
-                "startTime": {
-                    "type": "string"
-                },
-                "studentID": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.ActivityDraft": {
-            "type": "object",
-            "properties": {
-                "activeForm": {
-                    "type": "string"
-                },
-                "bid": {
-                    "type": "string"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "endTime": {
-                    "type": "string"
-                },
-                "holderType": {
-                    "type": "string"
-                },
-                "ifRegister": {
-                    "type": "string"
-                },
-                "introduce": {
-                    "type": "string"
-                },
-                "position": {
-                    "type": "string"
-                },
-                "registerMethod": {
-                    "type": "string"
-                },
-                "showImg": {
-                    "type": "string"
-                },
-                "signer": {
                     "type": "string"
                 },
                 "startTime": {
@@ -2881,6 +2925,66 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
+                }
+            }
+        },
+        "resp.LoadActivitiesDraftResp": {
+            "type": "object",
+            "properties": {
+                "introduce": {
+                    "type": "string"
+                },
+                "labelform": {
+                    "type": "object",
+                    "properties": {
+                        "activeForm": {
+                            "type": "string"
+                        },
+                        "endTime": {
+                            "type": "string"
+                        },
+                        "holderType": {
+                            "type": "string"
+                        },
+                        "ifRegister": {
+                            "type": "string"
+                        },
+                        "position": {
+                            "type": "string"
+                        },
+                        "registerMethod": {
+                            "type": "string"
+                        },
+                        "signer": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "name": {
+                                        "type": "string"
+                                    },
+                                    "studentId": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        },
+                        "startTime": {
+                            "type": "string"
+                        },
+                        "type": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "showImg": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
                 }
             }
         },
