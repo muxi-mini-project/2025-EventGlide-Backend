@@ -401,7 +401,7 @@ const docTemplate = `{
                 "tags": [
                     "Activity"
                 ],
-                "summary": "通过用户id查找该用户发布的活动",
+                "summary": "通过学号查找该用户发布的活动",
                 "parameters": [
                     {
                         "type": "string",
@@ -1401,7 +1401,7 @@ const docTemplate = `{
                 "tags": [
                     "Post"
                 ],
-                "summary": "通过用户ID查找该用户发布的帖子",
+                "summary": "通过学号查找该用户发布的帖子",
                 "parameters": [
                     {
                         "type": "string",

@@ -95,27 +95,19 @@ func (c *MultiLevelCache) get(
 ) (any, error) {
 	if value, err := c.readLocal(ctx, key); err == nil {
 		return value, nil
-	} else if !c.isLocalCachedNotFoundError(err) && !c.isCacheMissError(err) {
-		return nil, err
 	}
 
 	if value, err := c.readRemote(ctx, key, ttl, decode); err == nil {
 		return value, nil
-	} else if !c.isRemoteCachedNotFoundError(err) && !c.isCacheMissError(err) {
-		return nil, ErrNotFound
 	}
 
 	res, err, _ := c.sf.Do(key, func() (any, error) {
 		if value, readErr := c.readLocal(ctx, key); readErr == nil {
 			return value, nil
-		} else if !c.isLocalCachedNotFoundError(readErr) && !c.isCacheMissError(readErr) {
-			return nil, readErr
 		}
 
 		if value, readErr := c.readRemote(ctx, key, ttl, decode); readErr == nil {
 			return value, nil
-		} else if !c.isRemoteCachedNotFoundError(readErr) && !c.isCacheMissError(readErr) {
-			return nil, ErrNotFound
 		}
 
 		start := time.Now()

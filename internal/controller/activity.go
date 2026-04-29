@@ -139,7 +139,7 @@ func (ac *ActController) FindActByOwnerID(ctx *gin.Context, claims jwt.Registere
 }
 
 // @Tags Activity
-// @Summary 通过用户id查找该用户发布的活动
+// @Summary 通过学号查找该用户发布的活动
 // @Produce json
 // @Param userId path string true "用户id"
 // @Param Authorization header string true "token"

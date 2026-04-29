@@ -178,7 +178,7 @@ func (ad *ActDao) ListAllActs(c context.Context) ([]model.Activity, error) {
 
 func (ad *ActDao) FindActByBid(c context.Context, bid string) (model.Activity, error) {
 	var act model.Activity
-	err := ad.db.WithContext(c).Where("bid = ?", bid).Find(&act).Error
+	err := ad.db.WithContext(c).Where("bid = ?", bid).First(&act).Error
 	if err != nil {
 		return model.Activity{}, err
 	}

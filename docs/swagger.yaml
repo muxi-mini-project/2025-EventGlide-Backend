@@ -1046,7 +1046,7 @@ paths:
                     $ref: '#/definitions/resp.ListActivitiesResp'
                   type: array
               type: object
-      summary: 通过用户id查找该用户发布的活动
+      summary: 通过学号查找该用户发布的活动
       tags:
       - Activity
   /comment/answer:
@@ -1659,7 +1659,7 @@ paths:
                     $ref: '#/definitions/resp.ListPostsResp'
                   type: array
               type: object
-      summary: 通过用户ID查找该用户发布的帖子
+      summary: 通过学号查找该用户发布的帖子
       tags:
       - Post
   /user/avatar:

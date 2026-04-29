@@ -145,7 +145,7 @@ func (pr *PostController) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registe
 }
 
 // @Tags Post
-// @Summary 通过用户ID查找该用户发布的帖子
+// @Summary 通过学号查找该用户发布的帖子
 // @Produce json
 // @Param userId path string true "用户id"
 // @Param Authorization header string true "token"
