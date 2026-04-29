@@ -20,6 +20,10 @@ type DeletePostReq struct {
 	TargetID string `json:"targetId" validate:"required"`
 }
 
-type FindPostByBidReq struct{
+type FindPostByBidReq struct {
 	Id string `json:"id" validate:"required" form:"id" uri:"id"`
+}
+
+type FindPostByUserIDReq struct {
+	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
 }

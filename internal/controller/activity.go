@@ -139,6 +139,22 @@ func (ac *ActController) FindActByOwnerID(ctx *gin.Context, claims jwt.Registere
 }
 
 // @Tags Activity
+// @Summary 通过用户id查找该用户发布的活动
+// @Produce json
+// @Param userId path string true "用户id"
+// @Param Authorization header string true "token"
+// @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
+// @Router /act/user/{userId} [get]
+func (ac *ActController) FindActByUserID(ctx *gin.Context, req_ req.FindActByUserIDReq) (resp.Resp, error) {
+	res, err := ac.as.FindActByOwnerID(ctx, req_.UserID)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+
+	return ginx.ReturnSuccess(res)
+}
+
+// @Tags Activity
 // @Summary 列出所有活动
 // @Produce json
 // @Param Authorization header string true "token"
@@ -160,9 +176,9 @@ func (ac *ActController) ListAllActs(ctx *gin.Context, claims jwt.RegisteredClai
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/{id} [get]
-func (ac *ActController) FindActByBid(ctx *gin.Context,req_ req.FindActByBidReq)(resp.Resp,error){
-	res,err:=ac.as.FindActByBid(ctx,req_.Id)
-	if err!=nil{
+func (ac *ActController) FindActByBid(ctx *gin.Context, req_ req.FindActByBidReq) (resp.Resp, error) {
+	res, err := ac.as.FindActByBid(ctx, req_.Id)
+	if err != nil {
 		return ginx.ReturnError(err)
 	}
 	return ginx.ReturnSuccess(res)

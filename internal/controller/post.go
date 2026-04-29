@@ -145,15 +145,31 @@ func (pr *PostController) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registe
 }
 
 // @Tags Post
+// @Summary 通过用户ID查找该用户发布的帖子
+// @Produce json
+// @Param userId path string true "用户id"
+// @Param Authorization header string true "token"
+// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Router /post/user/{userId} [get]
+func (pr *PostController) FindPostByUserID(ctx *gin.Context, req_ req.FindPostByUserIDReq) (resp.Resp, error) {
+	posts, err := pr.ps.FindPostByOwnerID(ctx, req_.UserID)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+
+	return ginx.ReturnSuccess(posts)
+}
+
+// @Tags Post
 // @Summary 根据id返回帖子详情
 // @Produce json
 // @Param id path string true "目标id"
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.ListPostsResp}
 // @Router /post/{id} [get]
-func (pr *PostController) FindPostByBid(ctx *gin.Context,req_ req.FindPostByBidReq)(resp.Resp,error){
-	post,err:=pr.ps.FindPostByBid(ctx,req_.Id)
-	if err!=nil{
+func (pr *PostController) FindPostByBid(ctx *gin.Context, req_ req.FindPostByBidReq) (resp.Resp, error) {
+	post, err := pr.ps.FindPostByBid(ctx, req_.Id)
+	if err != nil {
 		return ginx.ReturnError(err)
 	}
 	return ginx.ReturnSuccess(post)
