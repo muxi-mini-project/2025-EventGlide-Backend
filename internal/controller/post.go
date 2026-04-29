@@ -143,3 +143,18 @@ func (pr *PostController) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registe
 
 	return ginx.ReturnSuccess(posts)
 }
+
+// @Tags Post
+// @Summary 根据id返回帖子详情
+// @Produce json
+// @Param id path string true "目标id"
+// @Param Authorization header string true "token"
+// @Success 200 {object} resp.Resp{data=resp.ListPostsResp}
+// @Router /post/{id} [get]
+func (pr *PostController) FindPostByBid(ctx *gin.Context,req_ req.FindPostByBidReq)(resp.Resp,error){
+	post,err:=pr.ps.FindPostByBid(ctx,req_.Id)
+	if err!=nil{
+		return ginx.ReturnError(err)
+	}
+	return ginx.ReturnSuccess(post)
+}

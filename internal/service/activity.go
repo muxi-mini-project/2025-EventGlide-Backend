@@ -181,6 +181,15 @@ func (as *ActivityService) FindActByName(c context.Context, name string) ([]resp
 	return res, nil
 }
 
+func (as *ActivityService) FindActByBid(c context.Context, bid string) (resp.ListActivitiesResp, error) {
+	act, err := as.ad.FindActByBid(c, bid)
+	if err != nil {
+		return resp.ListActivitiesResp{}, err
+	}
+	res := as.toListActResp(c, &act)
+	return res, nil
+}
+
 func (as *ActivityService) FindActByOwnerID(c context.Context, id string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActByOwnerID(c, id)
 	if err != nil {

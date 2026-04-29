@@ -36,5 +36,6 @@ func (pr *PostRouter) RegisterPostRouters() {
 		post.POST("/delete", ginx.WrapRequestWithClaims(pr.pch.DeletePost))
 		post.GET("/load", ginx.WrapWithClaims(pr.pch.LoadDraft))
 		post.GET("/own", ginx.WrapWithClaims(pr.pch.FindPostByOwnerID))
+		post.GET("/:id", ginx.WrapRequest(pr.pch.FindPostByBid))
 	}
 }

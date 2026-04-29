@@ -152,3 +152,18 @@ func (ac *ActController) ListAllActs(ctx *gin.Context, claims jwt.RegisteredClai
 
 	return ginx.ReturnSuccess(res)
 }
+
+// @Tags Activity
+// @Summary 根据id返回活动详情
+// @Produce json
+// @Param id path string true "目标id"
+// @Param Authorization header string true "token"
+// @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
+// @Router /act/{id} [get]
+func (ac *ActController) FindActByBid(ctx *gin.Context,req_ req.FindActByBidReq)(resp.Resp,error){
+	res,err:=ac.as.FindActByBid(ctx,req_.Id)
+	if err!=nil{
+		return ginx.ReturnError(err)
+	}
+	return ginx.ReturnSuccess(res)
+}

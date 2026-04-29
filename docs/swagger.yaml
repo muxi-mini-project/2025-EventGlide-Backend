@@ -43,39 +43,6 @@ definitions:
       type:
         type: string
     type: object
-  model.ActivityDraft:
-    properties:
-      activeForm:
-        type: string
-      bid:
-        type: string
-      createdAt:
-        type: string
-      endTime:
-        type: string
-      holderType:
-        type: string
-      ifRegister:
-        type: string
-      introduce:
-        type: string
-      position:
-        type: string
-      registerMethod:
-        type: string
-      showImg:
-        type: string
-      signer:
-        type: string
-      startTime:
-        type: string
-      studentID:
-        type: string
-      title:
-        type: string
-      type:
-        type: string
-    type: object
   model.Post:
     properties:
       bid:
@@ -659,6 +626,45 @@ definitions:
             type: string
         type: object
     type: object
+  resp.LoadActivitiesDraftResp:
+    properties:
+      introduce:
+        type: string
+      labelform:
+        properties:
+          activeForm:
+            type: string
+          endTime:
+            type: string
+          holderType:
+            type: string
+          ifRegister:
+            type: string
+          position:
+            type: string
+          registerMethod:
+            type: string
+          signer:
+            items:
+              properties:
+                name:
+                  type: string
+                studentId:
+                  type: string
+              type: object
+            type: array
+          startTime:
+            type: string
+          type:
+            type: string
+        type: object
+      showImg:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+    type: object
   resp.LoadPostDraftResp:
     properties:
       bid:
@@ -762,6 +768,34 @@ info:
   description: 校灵通 API 文档
   title: EventGlide API
 paths:
+  /act/{id}:
+    get:
+      parameters:
+      - description: 目标id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/resp.Resp'
+            - properties:
+                data:
+                  $ref: '#/definitions/resp.ListActivitiesResp'
+              type: object
+      summary: 根据id返回活动详情
+      tags:
+      - Activity
   /act/all:
     get:
       parameters:
@@ -897,7 +931,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/model.ActivityDraft'
+                  $ref: '#/definitions/resp.LoadActivitiesDraftResp'
               type: object
       summary: 加载活动草稿
       tags:
@@ -1351,6 +1385,34 @@ paths:
       summary: 作为活动填表人拒绝发表此活动
       tags:
       - Interaction
+  /post/{id}:
+    get:
+      parameters:
+      - description: 目标id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/resp.Resp'
+            - properties:
+                data:
+                  $ref: '#/definitions/resp.ListPostsResp'
+              type: object
+      summary: 根据id返回帖子详情
+      tags:
+      - Post
   /post/all:
     get:
       parameters:
