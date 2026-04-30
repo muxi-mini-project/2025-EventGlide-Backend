@@ -2,13 +2,10 @@ package repo
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
-	"gorm.io/gorm"
 )
 
 type PostRepo struct {
@@ -67,16 +64,17 @@ func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string) ([]model.Po
 }
 
 func (r *PostRepo) FindPostByBid(ctx context.Context, bid string) (model.Post, error) {
-	return cache.GetTyped(r.ch, ctx, r.postByBidKey(bid), 5*time.Minute, func(context.Context) (model.Post, error) {
-		post, err := r.dao.FindPostByBid(ctx, bid)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return model.Post{}, cache.MarkNotFound(err)
-			}
-			return model.Post{}, err
-		}
-		return post, nil
-	})
+	//return cache.GetTyped(r.ch, ctx, r.postByBidKey(bid), 5*time.Minute, func(context.Context) (model.Post, error) {
+	//	post, err := r.dao.FindPostByBid(ctx, bid)
+	//	if err != nil {
+	//		if errors.Is(err, gorm.ErrRecordNotFound) {
+	//			return model.Post{}, cache.MarkNotFound(err)
+	//		}
+	//		return model.Post{}, err
+	//	}
+	//	return post, nil
+	//})
+	return r.dao.FindPostByBid(ctx, bid)
 }
 
 func (r *PostRepo) GetChecking(ctx context.Context, sid string) ([]model.Post, error) {

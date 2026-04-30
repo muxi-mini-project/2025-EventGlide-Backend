@@ -2,14 +2,11 @@ package repo
 
 import (
 	"context"
-	"errors"
-	"time"
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
-	"gorm.io/gorm"
 )
 
 type ActivityRepo struct {
@@ -76,16 +73,17 @@ func (r *ActivityRepo) ListAllActs(ctx context.Context) ([]model.Activity, error
 }
 
 func (r *ActivityRepo) FindActByBid(ctx context.Context, bid string) (model.Activity, error) {
-	return cache.GetTyped(r.ch, ctx, r.actByBidKey(bid), 5*time.Minute, func(context.Context) (model.Activity, error) {
-		act, err := r.dao.FindActByBid(ctx, bid)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return model.Activity{}, cache.MarkNotFound(err)
-			}
-			return model.Activity{}, err
-		}
-		return act, nil
-	})
+	//return cache.GetTyped(r.ch, ctx, r.actByBidKey(bid), 5*time.Minute, func(context.Context) (model.Activity, error) {
+	//	act, err := r.dao.FindActByBid(ctx, bid)
+	//	if err != nil {
+	//		if errors.Is(err, gorm.ErrRecordNotFound) {
+	//			return model.Activity{}, cache.MarkNotFound(err)
+	//		}
+	//		return model.Activity{}, err
+	//	}
+	//	return act, nil
+	//})
+	return r.dao.FindActByBid(ctx, bid)
 }
 
 func (r *ActivityRepo) GetChecking(ctx context.Context, sid string) ([]model.Activity, error) {
