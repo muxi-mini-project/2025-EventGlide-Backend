@@ -2701,6 +2701,9 @@
                 "rootId": {
                     "type": "string"
                 },
+                "rootType": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -2728,6 +2731,12 @@
                     "type": "string"
                 },
                 "publishedAt": {
+                    "type": "string"
+                },
+                "rootId": {
+                    "type": "string"
+                },
+                "rootType": {
                     "type": "string"
                 },
                 "status": {
@@ -2762,6 +2771,9 @@
                 "rootId": {
                     "type": "string"
                 },
+                "rootType": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -2789,6 +2801,12 @@
                     "type": "string"
                 },
                 "publishedAt": {
+                    "type": "string"
+                },
+                "rootId": {
+                    "type": "string"
+                },
+                "rootType": {
                     "type": "string"
                 },
                 "status": {
@@ -2821,6 +2839,9 @@
                     "type": "string"
                 },
                 "rootId": {
+                    "type": "string"
+                },
+                "rootType": {
                     "type": "string"
                 },
                 "status": {

@@ -27,6 +27,7 @@ type FeedLikeResp struct {
 	PublishedAt string `json:"publishedAt"`
 	TargetBid   string `json:"targetBid"`
 	RootID      string `json:"rootId,omitempty"`
+	RootType    string `json:"rootType,omitempty"`
 	Subject     string `json:"subject"`
 	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
@@ -40,6 +41,7 @@ type FeedCommentResp struct {
 	PublishedAt string `json:"publishedAt"`
 	TargetBid   string `json:"targetBid"`
 	RootID      string `json:"rootId,omitempty"`
+	RootType    string `json:"rootType,omitempty"`
 	Subject     string `json:"subject"`
 	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
@@ -53,6 +55,7 @@ type FeedAtResp struct {
 	PublishedAt string `json:"publishedAt"`
 	TargetBid   string `json:"targetBid"`
 	RootID      string `json:"rootId,omitempty"`
+	RootType    string `json:"rootType,omitempty"`
 	Subject     string `json:"subject"`
 	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`
@@ -66,6 +69,8 @@ type FeedCollectResp struct {
 	PublishedAt string `json:"publishedAt"`
 	FirstPic    string `json:"firstPic,omitempty"`
 	TargetBid   string `json:"targetBid"`
+	RootID      string `json:"rootId,omitempty"`
+	RootType    string `json:"rootType,omitempty"`
 	Subject     string `json:"subject"`
 	Status      string `json:"status"`
 }
@@ -77,6 +82,8 @@ type FeedInvitationResp struct {
 	Message     string `json:"message"`
 	PublishedAt string `json:"publishedAt"`
 	TargetBid   string `json:"targetBid"`
+	RootID      string `json:"rootId,omitempty"`
+	RootType    string `json:"rootType,omitempty"`
 	Subject     string `json:"subject"`
 	FirstPic    string `json:"firstPic,omitempty"`
 	Status      string `json:"status"`

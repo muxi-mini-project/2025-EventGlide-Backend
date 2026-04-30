@@ -2710,6 +2710,9 @@ const docTemplate = `{
                 "rootId": {
                     "type": "string"
                 },
+                "rootType": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -2737,6 +2740,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "publishedAt": {
+                    "type": "string"
+                },
+                "rootId": {
+                    "type": "string"
+                },
+                "rootType": {
                     "type": "string"
                 },
                 "status": {
@@ -2771,6 +2780,9 @@ const docTemplate = `{
                 "rootId": {
                     "type": "string"
                 },
+                "rootType": {
+                    "type": "string"
+                },
                 "status": {
                     "type": "string"
                 },
@@ -2798,6 +2810,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "publishedAt": {
+                    "type": "string"
+                },
+                "rootId": {
+                    "type": "string"
+                },
+                "rootType": {
                     "type": "string"
                 },
                 "status": {
@@ -2830,6 +2848,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
+                    "type": "string"
+                },
+                "rootType": {
                     "type": "string"
                 },
                 "status": {

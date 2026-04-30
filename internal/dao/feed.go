@@ -126,27 +126,32 @@ func (fd *FeedDao) GetPictureFromObj(ctx context.Context, targetId, object strin
 }
 
 func (fd *FeedDao) ResolveRootIDByCommentID(ctx context.Context, commentID string) (string, error) {
+	rootID, _, err := fd.ResolveRootMetaByCommentID(ctx, commentID)
+	return rootID, err
+}
+
+func (fd *FeedDao) ResolveRootMetaByCommentID(ctx context.Context, commentID string) (string, string, error) {
 	curID := commentID
 	for i := 0; i < 20; i++ {
 		var cmt model.Comment
 		if err := fd.db.WithContext(ctx).Where("bid = ?", curID).First(&cmt).Error; err != nil {
-			return "", err
+			return "", "", err
 		}
 
 		switch cmt.Subject {
 		case TableNamePost, TableNameActivity:
-			return cmt.ParentID, nil
+			return cmt.ParentID, cmt.Subject, nil
 		case TableNameComment:
 			if cmt.ParentID == "" {
-				return "", errors.New("comment parent id is empty")
+				return "", "", errors.New("comment parent id is empty")
 			}
 			curID = cmt.ParentID
 		default:
-			return "", errors.New("unknown comment subject")
+			return "", "", errors.New("unknown comment subject")
 		}
 	}
 
-	return "", errors.New("comment chain too deep")
+	return "", "", errors.New("comment chain too deep")
 }
 
 func (fd *FeedDao) GetPictureFromRootID(ctx context.Context, rootID string) (string, error) {

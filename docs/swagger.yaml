@@ -418,6 +418,8 @@ definitions:
         type: string
       rootId:
         type: string
+      rootType:
+        type: string
       status:
         type: string
       subject:
@@ -436,6 +438,10 @@ definitions:
       message:
         type: string
       publishedAt:
+        type: string
+      rootId:
+        type: string
+      rootType:
         type: string
       status:
         type: string
@@ -458,6 +464,8 @@ definitions:
         type: string
       rootId:
         type: string
+      rootType:
+        type: string
       status:
         type: string
       subject:
@@ -476,6 +484,10 @@ definitions:
       message:
         type: string
       publishedAt:
+        type: string
+      rootId:
+        type: string
+      rootType:
         type: string
       status:
         type: string
@@ -497,6 +509,8 @@ definitions:
       publishedAt:
         type: string
       rootId:
+        type: string
+      rootType:
         type: string
       status:
         type: string

@@ -159,11 +159,12 @@ func (fs *FeedService) ConsumeFeedStream() {
 				feed.CreatedAt = time.Now()
 				feed.Status = "未读"
 				if feed.Object == SubjectComment {
-					rootID, resolveErr := fs.fd.ResolveRootIDByCommentID(ctx, feed.TargetBid)
+					rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetBid)
 					if resolveErr != nil {
 						fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.String("targetBid", feed.TargetBid))
 					} else {
 						feed.RootID = rootID
+						feed.RootType = rootType
 					}
 				}
 
@@ -197,7 +198,7 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.Feed
 		if sid == user.StudentID {
 			continue // 不显示自己的点赞
 		}
-		resolvedRootID, subject := fs.resolveRootAndSubject(ctx, v)
+		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get like feed Failed", zap.Error(err))
@@ -213,7 +214,8 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.Feed
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetBid:   v.TargetBid,
 			RootID:      resolvedRootID,
-			Subject:     subject,
+			RootType:    resolvedRootType,
+			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
 		})
@@ -251,6 +253,8 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.F
 			Message:     processMsg(v, user.Name),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetBid:   v.TargetBid,
+			RootID:      v.RootID,
+			RootType:    v.RootType,
 			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
@@ -275,7 +279,7 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.F
 		if sid == user.StudentID {
 			continue // 不显示评论自己的评论
 		}
-		resolvedRootID, subject := fs.resolveRootAndSubject(ctx, v)
+		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get comment feed Failed", zap.Error(err))
@@ -291,7 +295,8 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.F
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetBid:   v.TargetBid,
 			RootID:      resolvedRootID,
-			Subject:     subject,
+			RootType:    resolvedRootType,
+			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
 		})
@@ -315,7 +320,7 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAt
 		if sid == user.StudentID {
 			continue // 不显示自己的@ 自己回复
 		}
-		resolvedRootID, subject := fs.resolveRootAndSubject(ctx, v)
+		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get at feed Failed", zap.Error(err))
@@ -331,7 +336,8 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAt
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetBid:   v.TargetBid,
 			RootID:      resolvedRootID,
-			Subject:     subject,
+			RootType:    resolvedRootType,
+			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
 		})
@@ -367,6 +373,8 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (resp
 			}, v.StudentName),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetBid:   v.Bid,
+			RootID:      "",
+			RootType:    "",
 			Subject:     SubjectActivity,
 			Status:      v.Stance,
 			FirstPic:    getFirstPic(pics),
@@ -375,27 +383,23 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (resp
 	return resp.FeedResp{Invitations: res}, nil
 }
 
-func (fs *FeedService) resolveRootAndSubject(ctx context.Context, f *model.Feed) (string, string) {
+func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (string, string) {
 	if f.Object != SubjectComment {
-		return f.RootID, f.Object
+		return "", ""
 	}
 
 	rootID := f.RootID
-	if rootID == "" {
-		resolvedRootID, err := fs.fd.ResolveRootIDByCommentID(ctx, f.TargetBid)
+	rootType := f.RootType
+	if rootID == "" || rootType == "" {
+		resolvedRootID, resolvedRootType, err := fs.fd.ResolveRootMetaByCommentID(ctx, f.TargetBid)
 		if err != nil {
 			fs.l.Warn("Resolve root id for feed subject failed", zap.Error(err), zap.Int64("feedID", f.Id), zap.String("targetBid", f.TargetBid))
-			return "", SubjectComment
+			return "", ""
 		}
 		rootID = resolvedRootID
+		rootType = resolvedRootType
 	}
-
-	subject, err := fs.fd.ResolveRootSubjectByID(ctx, rootID)
-	if err != nil {
-		fs.l.Warn("Resolve root subject for feed failed", zap.Error(err), zap.Int64("feedID", f.Id), zap.String("rootID", rootID))
-		return rootID, SubjectComment
-	}
-	return rootID, subject
+	return rootID, rootType
 }
 
 func (fs *FeedService) loadFeedPicture(ctx context.Context, f *model.Feed, resolvedRootID string) (string, error) {
