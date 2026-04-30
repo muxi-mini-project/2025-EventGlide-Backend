@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -53,6 +54,18 @@ func (cs *CommentService) toComment(r req.CreateCommentReq, studentId string) *m
 
 func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentReq, studentId string) (resp.CommentResp, error) {
 	cmt := cs.toComment(r, studentId)
+	rootID := ""
+	rootType := ""
+	if r.Subject == SubjectComment {
+		rootCommentID, resolvedRootID, resolvedRootType, resolveErr := cs.resolveCommentRootMeta(c, r.ParentID)
+		if resolveErr != nil {
+			cs.l.Error("Error resolve comment root meta failed", zap.Error(resolveErr), zap.String("parentID", r.ParentID))
+			return resp.CommentResp{}, resolveErr
+		}
+		cmt.RootId = rootCommentID
+		rootID = resolvedRootID
+		rootType = resolvedRootType
+	}
 	err := cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
 		zap.String("bid", cmt.Bid),
@@ -65,7 +78,7 @@ func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentRe
 		return resp.CommentResp{}, err
 	}
 
-	ap, err := cs.apg.GetActivityOrPostOrComment(c, r.Subject, r.ParentID)
+	ap, err := cs.apg.GetActivityOrPostOrComment(c, r.ParentID, r.Subject)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
 		return resp.CommentResp{}, err
@@ -77,6 +90,8 @@ func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentRe
 		Object:    r.Subject,
 		Action:    "comment",
 		Receiver:  ap.GetStudentID(),
+		RootID:    rootID,
+		RootType:  rootType,
 	}
 
 	err = cs.mq.Publish(c, "feed_stream", f)
@@ -115,13 +130,14 @@ func (cs *CommentService) DeleteComment(c context.Context, targetId, studentId s
 // 二级评论
 func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentReq, studentId string) (resp.ReplyResp, error) {
 	cmt := cs.toComment(r, studentId)
-	var parentCmt *model.Comment // 根评论
-
-	for parentCmt = cs.cd.FindCmtByID(c, r.ParentID); parentCmt != nil && parentCmt.RootId != ""; parentCmt = cs.cd.FindCmtByID(c, parentCmt.ParentID) {
+	rootCommentID, rootID, rootType, err := cs.resolveCommentRootMeta(c, r.ParentID)
+	if err != nil {
+		cs.l.Error("Error resolve comment root meta failed", zap.Error(err), zap.String("parentID", r.ParentID))
+		return resp.ReplyResp{}, err
 	}
-	cmt.RootId = parentCmt.Bid
+	cmt.RootId = rootCommentID
 
-	err := cs.cd.AnswerComment(c, cmt)
+	err = cs.cd.AnswerComment(c, cmt)
 	if err != nil {
 		cs.l.Error("Error comment answer failed", zap.Error(err))
 		return resp.ReplyResp{}, err
@@ -137,7 +153,7 @@ func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentRe
 		return resp.ReplyResp{}, err
 	}
 
-	ap2, err := cs.apg.GetActivityOrPostOrComment(c, parentCmt.ParentID, parentCmt.Subject)
+	ap2, err := cs.apg.GetActivityOrPostOrComment(c, rootID, rootType)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
 		return resp.ReplyResp{}, err
@@ -154,6 +170,8 @@ func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentRe
 		Object:    "comment",
 		Action:    "at",
 		Receiver:  ap.GetStudentID(),
+		RootID:    rootID,
+		RootType:  rootType,
 	}
 
 	err = cs.mq.Publish(c, "feed_stream", f)
@@ -164,6 +182,37 @@ func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentRe
 	}
 
 	return cs.toReply(c, cmt, studentId), nil
+}
+
+func (cs *CommentService) resolveCommentRootMeta(c context.Context, commentID string) (string, string, string, error) {
+	cur := cs.cd.FindCmtByID(c, commentID)
+	if cur == nil {
+		return "", "", "", errors.New("comment not found")
+	}
+
+	rootCommentID := cur.RootId
+	if rootCommentID == "" {
+		rootCommentID = cur.Bid
+	}
+
+	for i := 0; i < 20; i++ {
+		switch cur.Subject {
+		case SubjectActivity, SubjectPost:
+			return rootCommentID, cur.ParentID, cur.Subject, nil
+		case SubjectComment:
+			if cur.ParentID == "" {
+				return "", "", "", errors.New("comment parent id is empty")
+			}
+			cur = cs.cd.FindCmtByID(c, cur.ParentID)
+			if cur == nil {
+				return "", "", "", errors.New("comment parent not found")
+			}
+		default:
+			return "", "", "", errors.New("unknown comment subject")
+		}
+	}
+
+	return "", "", "", errors.New("comment chain too deep")
 }
 
 func (cs *CommentService) LoadComments(c context.Context, parentid string, studentId string) ([]resp.CommentResp, error) {
