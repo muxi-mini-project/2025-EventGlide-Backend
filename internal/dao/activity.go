@@ -169,7 +169,7 @@ func (ad *ActDao) FindActByOwnerID(c context.Context, s string) ([]model.Activit
 func (ad *ActDao) ListAllActs(c context.Context) ([]model.Activity, error) {
 	var as []model.Activity
 
-	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Order("start_time ASC").Find(&as).Error
 	if err != nil {
 		return nil, err
 	}

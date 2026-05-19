@@ -9,5 +9,4 @@ EG
 docker-compose.yml
 .DS_Store
 /.env
-/config/conf.yaml
 /data/configCache
