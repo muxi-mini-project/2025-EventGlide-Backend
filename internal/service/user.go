@@ -84,27 +84,27 @@ func (us *UserService) CreateUser(ctx context.Context, sid string, school string
 }
 
 func (us *UserService) Login(ctx context.Context, studentId string, password string) (*model.User, string, error) {
-	client, err := us.cSvc.Login(ctx, studentId, password)
-	if err != nil {
-		return nil, "", err
-	}
-	if client == nil {
-		return nil, "", errors.New("登录失败")
-	}
-
-	if !us.udh.CheckUserExist(ctx, studentId) {
-		school, err := us.cSvc.getWhichSchool(client, studentId)
-		if err != nil {
-			school = "数据加载中..."
-		}
-		err = us.CreateUser(ctx, studentId, school)
-		if err != nil {
-			return nil, "", err
-		}
-
-	}
+	//client, err := us.cSvc.Login(ctx, studentId, password)
+	//if err != nil {
+	//	return nil, "", err
+	//}
+	//if client == nil {
+	//	return nil, "", errors.New("登录失败")
+	//}
+	//
+	//if !us.udh.CheckUserExist(ctx, studentId) {
+	//	school, err := us.cSvc.getWhichSchool(client, studentId)
+	//	if err != nil {
+	//		school = "数据加载中..."
+	//	}
+	//	err = us.CreateUser(ctx, studentId, school)
+	//	if err != nil {
+	//		return nil, "", err
+	//	}
+	//
+	//}
 	token := us.jwth.GenToken(ctx, studentId)
-	err = us.jwth.StoreInRedis(ctx, studentId, token)
+	err := us.jwth.StoreInRedis(ctx, studentId, token)
 	if err != nil {
 		return nil, "", err
 	}
