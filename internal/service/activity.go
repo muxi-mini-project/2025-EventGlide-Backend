@@ -217,10 +217,9 @@ func (as *ActivityService) ToListResp(c context.Context, acts []model.Activity) 
 }
 
 func (as *ActivityService) toListActResp(c context.Context, act *model.Activity) resp.ListActivitiesResp {
-
 	var res resp.ListActivitiesResp
-	sid := tools.GetSid(c)
-	searcher := as.ud.FindUserByID(c, sid)
+	// TODO 类型断言error判断
+	searcher := as.ud.FindUserByID(c, c.Value("studentid").(string))
 	if strings.Contains(searcher.CollectAct, act.Bid) {
 		res.IsCollect = "true"
 	} else {
