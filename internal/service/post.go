@@ -146,8 +146,8 @@ func (ps *PostService) ToListResp(c context.Context, posts []model.Post) []resp.
 func (ps *PostService) toListPostResp(c context.Context, post model.Post) resp.ListPostsResp {
 	user := ps.ud.FindUserByID(c, post.StudentID)
 	var res resp.ListPostsResp
-	sid := tools.GetSid(c)
-	searcher := ps.ud.FindUserByID(c, sid)
+	// TODO 类型断言error判断
+	searcher := ps.ud.FindUserByID(c, c.Value("studentid").(string))
 	if strings.Contains(searcher.CollectPost, post.Bid) {
 		res.IsCollect = "true"
 	} else {

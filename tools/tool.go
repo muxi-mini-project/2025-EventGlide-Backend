@@ -1,15 +1,15 @@
 package tools
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	gonanoid "github.com/matoous/go-nanoid/v2"
-	"strings"
-	"time"
 )
 
 const ab = "qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"
@@ -38,17 +38,6 @@ func ReturnMSG(code int, msg string, res interface{}) map[string]interface{} {
 		"msg":  msg,
 		"data": res,
 	}
-}
-
-func GetSid(c context.Context) string {
-	sid, ok := c.Value("studentid").(string)
-	if !ok {
-		return ""
-	}
-	if !ok {
-		return ""
-	}
-	return sid
 }
 
 func ParseTime(t time.Time) string {
