@@ -199,12 +199,12 @@ func (as *ActivityService) FindActByOwnerID(c context.Context, id string) ([]res
 	return res, nil
 }
 
-func (as *ActivityService) ListAllActs(c context.Context, id string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) ListAllActs(c context.Context, studentId string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.ListAllActs(c)
 	if err != nil {
 		return nil, err
 	}
-	res := as.ToListResp(c, acts)
+	res := as.ToListResp(context.WithValue(c, "studentid", studentId), acts)
 	return res, nil
 }
 

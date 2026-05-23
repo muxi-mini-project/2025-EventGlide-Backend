@@ -21,7 +21,7 @@ type PostServiceHdl interface {
 	CreateDraft(context.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
 	LoadDraft(context.Context, req.DraftReq) (resp.CreatePostResp, error)
 	FindPostByOwnerID(context.Context, string) ([]resp.ListPostsResp, error)
-	FindPostByBid(c context.Context,bid string)(resp.ListPostsResp,error)
+	FindPostByBid(c context.Context, bid string) (resp.ListPostsResp, error)
 }
 
 type PostService struct {
@@ -40,12 +40,12 @@ func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, l *zap.Logger, aud Au
 	}
 }
 
-func (ps *PostService) GetAllPost(c context.Context) ([]resp.ListPostsResp, error) {
+func (ps *PostService) GetAllPost(c context.Context, studentId string) ([]resp.ListPostsResp, error) {
 	posts, err := ps.pdh.GetAllPost(c)
 	if err != nil {
 		return nil, err
 	}
-	res := ps.ToListResp(c, posts)
+	res := ps.ToListResp(context.WithValue(c, "studentid", studentId), posts)
 	return res, nil
 }
 
@@ -126,13 +126,13 @@ func (ps *PostService) FindPostByOwnerID(c context.Context, id string) ([]resp.L
 	return res, nil
 }
 
-func (ps *PostService) FindPostByBid(c context.Context,bid string)(resp.ListPostsResp,error){
-	post,err:=ps.pdh.FindPostByBid(c,bid)
-	if err!=nil{
-		return resp.ListPostsResp{},err
+func (ps *PostService) FindPostByBid(c context.Context, bid string) (resp.ListPostsResp, error) {
+	post, err := ps.pdh.FindPostByBid(c, bid)
+	if err != nil {
+		return resp.ListPostsResp{}, err
 	}
-	res:=ps.toListPostResp(c,post)
-	return res,nil
+	res := ps.toListPostResp(c, post)
+	return res, nil
 }
 
 func (ps *PostService) ToListResp(c context.Context, posts []model.Post) []resp.ListPostsResp {
