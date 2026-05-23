@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/model"
@@ -32,12 +33,14 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 	if err != nil {
 		return err
 	}
-	jreq := is.toFeed(r, "like", sid, ap.GetStudentID())
-	err = is.mq.Publish(c, "feed_stream", jreq)
-	if err != nil {
-		is.l.Error("Publish Like Feed Failed", zap.Error(err), zap.Any("feed", jreq))
-	} else {
-		is.l.Info("Publish Like Feed Success", zap.Any("feed", jreq))
+	if sid != ap.GetStudentID() {
+		jreq := is.toFeed(r, "like", sid, ap.GetStudentID())
+		err = is.mq.Publish(c, "feed_stream", jreq)
+		if err != nil {
+			is.l.Error("Publish Like Feed Failed", zap.Error(err), zap.Any("feed", jreq))
+		} else {
+			is.l.Info("Publish Like Feed Success", zap.Any("feed", jreq))
+		}
 	}
 
 	switch r.Subject {
@@ -70,12 +73,14 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 	if err != nil {
 		return err
 	}
-	jreq := is.toFeed(r, "comment", sid, ap.GetStudentID())
-	err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
-	if err != nil {
-		is.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", jreq))
-	} else {
-		is.l.Info("Publish Comment Feed Success", zap.Any("feed", jreq))
+	if sid != ap.GetStudentID() {
+		jreq := is.toFeed(r, "comment", sid, ap.GetStudentID())
+		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
+		if err != nil {
+			is.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", jreq))
+		} else {
+			is.l.Info("Publish Comment Feed Success", zap.Any("feed", jreq))
+		}
 	}
 
 	switch r.Subject {
@@ -95,12 +100,14 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 	if err != nil {
 		return err
 	}
-	jreq := is.toFeed(r, "collect", sid, ap.GetStudentID())
-	err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
-	if err != nil {
-		is.l.Error("Publish Collect Feed Failed", zap.Error(err), zap.Any("feed", jreq))
-	} else {
-		is.l.Info("Publish Collect Feed Success", zap.Any("feed", jreq))
+	if sid != ap.GetStudentID() {
+		jreq := is.toFeed(r, "collect", sid, ap.GetStudentID())
+		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
+		if err != nil {
+			is.l.Error("Publish Collect Feed Failed", zap.Error(err), zap.Any("feed", jreq))
+		} else {
+			is.l.Info("Publish Collect Feed Success", zap.Any("feed", jreq))
+		}
 	}
 
 	switch r.Subject {

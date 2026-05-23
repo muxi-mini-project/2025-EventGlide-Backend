@@ -195,9 +195,6 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.Feed
 			fs.l.Error("Get User Info when get like feed Failed", zap.Error(err))
 			return nil, err
 		}
-		if sid == user.StudentID {
-			continue // 不显示自己的点赞
-		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
 		if err != nil {
@@ -236,9 +233,6 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.F
 			fs.l.Error("Get User Info when get collect feed Failed", zap.Error(err))
 			return nil, err
 		}
-		if sid == user.StudentID {
-			continue // 不显示自己的收藏
-		}
 		pics, err := fs.fd.GetPictureFromObj(ctx, v.TargetBid, v.Object)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get collect feed Failed", zap.Error(err))
@@ -275,9 +269,6 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.F
 		if err != nil {
 			fs.l.Error("Get User Info when get comment feed Failed", zap.Error(err))
 			return nil, err
-		}
-		if sid == user.StudentID {
-			continue // 不显示评论自己的评论
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
@@ -316,9 +307,6 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAt
 		if err != nil {
 			fs.l.Error("Get User Info when get at feed Failed", zap.Error(err))
 			return nil, err
-		}
-		if sid == user.StudentID {
-			continue // 不显示自己的@ 自己回复
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
