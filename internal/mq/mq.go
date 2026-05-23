@@ -67,7 +67,7 @@ func (mq *MQ) ConsumeGroup(ctx context.Context, stream, group, consumer string, 
 	if err != nil && errors.Is(err, context.Canceled) {
 		return nil, err
 	}
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return nil, nil
 	} else if err != nil {
 		return nil, err

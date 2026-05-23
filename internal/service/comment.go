@@ -84,6 +84,11 @@ func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentRe
 		return resp.CommentResp{}, err
 	}
 
+	// TODO 优雅实现
+	if studentId == ap.GetStudentID() {
+		return cs.toResp(c, cmt, studentId), nil
+	}
+
 	f := model.Feed{
 		StudentId: studentId,
 		TargetBid: r.ParentID,
@@ -162,6 +167,10 @@ func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentRe
 	if err = cs.IncreaseCommentNum(c, &ap2); err != nil {
 		cs.l.Error("Error increase comment num failed", zap.Error(err))
 		return resp.ReplyResp{}, err
+	}
+
+	if studentId == ap.GetStudentID() {
+		return cs.toReply(c, cmt, studentId), nil
 	}
 
 	f := model.Feed{

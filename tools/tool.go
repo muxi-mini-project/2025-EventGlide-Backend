@@ -45,9 +45,9 @@ func ParseTime(t time.Time) string {
 }
 
 func StatusMapper(auditStatus string) string {
-	//  0: "未审核",
-	//    1: "通过",
-	//    2: "不通过",
+	// 0: "未审核",
+	// 1: "通过",
+	// 2: "不通过",
 	switch auditStatus {
 	case "未审核":
 		return "pending"
