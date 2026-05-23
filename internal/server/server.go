@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/google/wire"
-	"github.com/raiki02/EG/internal/router"
+	"github.com/raiki02/EG/internal/handler"
 	"go.uber.org/zap"
 )
 
@@ -11,20 +11,20 @@ var Provider = wire.NewSet(
 )
 
 type Server struct {
-	r        *router.Router
+	h        *handler.Handler
 	l        *zap.Logger
 	Shutdown func()
 }
 
-func NewServer(r *router.Router, l *zap.Logger) *Server {
+func NewServer(h *handler.Handler, l *zap.Logger) *Server {
 	return &Server{
-		r: r,
+		h: h,
 		l: l,
 	}
 }
 
 func (s *Server) Run() (err error) {
-	s.r.RegisterRouters()
-	err, s.Shutdown = s.r.Run()
+	s.h.RegisterHandlers()
+	err, s.Shutdown = s.h.Run()
 	return
 }
