@@ -22,8 +22,6 @@ func InitApp() *server.Server {
 		dao.Provider,
 		repo.Provider,
 		handler.Provider,
-		//router.Provider,
-		//controller.Provider,
 		service.Provider,
 		server.Provider,
 	))

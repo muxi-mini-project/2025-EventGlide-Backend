@@ -12,26 +12,25 @@ import (
 )
 
 type ActHandler struct {
-	e  *gin.Engine
 	as *service.ActivityService
 	iu *service.ImgUploader
-	j  *middleware.Jwt
 	l  *zap.Logger
 }
 
 func NewActHandler(e *gin.Engine, as *service.ActivityService, iu *service.ImgUploader, l *zap.Logger, j *middleware.Jwt) *ActHandler {
-	return &ActHandler{
-		e:  e,
+	a := &ActHandler{
 		as: as,
 		iu: iu,
-		j:  j,
 		l:  l.Named("activity/handler"),
 	}
+	a.RegisterActHandlers(e, j.WrapCheckToken())
+
+	return a
 }
 
-func (ah *ActHandler) RegisterActHandlers() {
-	act := ah.e.Group("act")
-	act.Use(ah.j.WrapCheckToken())
+func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.HandlerFunc) {
+	act := e.Group("/act")
+	act.Use(handlerFunc)
 	{
 		act.POST("/create", ginx.WrapRequestWithClaims(ah.NewAct))
 		act.POST("/draft", ginx.WrapRequestWithClaims(ah.NewDraft))

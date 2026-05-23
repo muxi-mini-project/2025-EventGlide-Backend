@@ -12,24 +12,23 @@ import (
 )
 
 type InteractionHandler struct {
-	e  *gin.Engine
 	is *service.InteractionService
-	j  *middleware.Jwt
 	l  *zap.Logger
 }
 
 func NewInteractionHandler(e *gin.Engine, is *service.InteractionService, j *middleware.Jwt, l *zap.Logger) *InteractionHandler {
-	return &InteractionHandler{
-		e:  e,
+	i := &InteractionHandler{
 		is: is,
-		j:  j,
 		l:  l.Named("interaction/handler"),
 	}
+	i.RegisterInteractionHandlers(e, j.WrapCheckToken())
+
+	return i
 }
 
-func (ih *InteractionHandler) RegisterInteractionHandlers() {
-	i := ih.e.Group("interaction")
-	i.Use(ih.j.WrapCheckToken())
+func (ih *InteractionHandler) RegisterInteractionHandlers(e *gin.Engine, handlerFunc gin.HandlerFunc) {
+	i := e.Group("/interaction")
+	i.Use(handlerFunc)
 	{
 		i.POST("/like", ginx.WrapRequestWithClaims(ih.Like))
 		i.POST("/dislike", ginx.WrapRequestWithClaims(ih.Dislike))
