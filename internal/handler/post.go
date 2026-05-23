@@ -49,7 +49,7 @@ func (ph *PostHandler) RegisterPostHandlers() {
 // @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /post/all [get]
 func (ph *PostHandler) GetAllPost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.GetAllPost(ctx) // todo: claims 传入 studentId
+	posts, err := ph.ps.GetAllPost(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
