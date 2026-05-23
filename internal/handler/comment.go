@@ -12,24 +12,23 @@ import (
 )
 
 type CommentHandler struct {
-	e  *gin.Engine
 	cs *service.CommentService
-	j  *middleware.Jwt
 	l  *zap.Logger
 }
 
 func NewCommentHandler(e *gin.Engine, cs *service.CommentService, j *middleware.Jwt, l *zap.Logger) *CommentHandler {
-	return &CommentHandler{
-		e:  e,
+	c := &CommentHandler{
 		cs: cs,
-		j:  j,
 		l:  l.Named("comment/handler"),
 	}
+	c.RegisterCommentHandler(e, j.WrapCheckToken())
+
+	return c
 }
 
-func (ch *CommentHandler) RegisterCommentHandler() {
-	cmt := ch.e.Group("/comment")
-	cmt.Use(ch.j.WrapCheckToken())
+func (ch *CommentHandler) RegisterCommentHandler(e *gin.Engine, handlerFunc gin.HandlerFunc) {
+	cmt := e.Group("/comment")
+	cmt.Use(handlerFunc)
 	{
 		cmt.POST("/create", ginx.WrapRequestWithClaims(ch.CreateComment))
 		cmt.POST("/delete", ginx.WrapRequestWithClaims(ch.DeleteComment))

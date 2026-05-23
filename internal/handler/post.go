@@ -13,24 +13,23 @@ import (
 )
 
 type PostHandler struct {
-	e  *gin.Engine
 	ps *service.PostService
-	j  *middleware.Jwt
 	l  *zap.Logger
 }
 
 func NewPostHandler(e *gin.Engine, ps *service.PostService, j *middleware.Jwt, l *zap.Logger) *PostHandler {
-	return &PostHandler{
-		e:  e,
+	p := &PostHandler{
 		ps: ps,
-		j:  j,
 		l:  l.Named("post/handler"),
 	}
+	p.RegisterPostHandlers(e, j.WrapCheckToken())
+
+	return p
 }
 
-func (ph *PostHandler) RegisterPostHandlers() {
-	post := ph.e.Group("/post")
-	post.Use(ph.j.WrapCheckToken())
+func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.HandlerFunc) {
+	post := e.Group("/post")
+	post.Use(handlerFunc)
 	{
 		post.GET("/all", ginx.WrapWithClaims(ph.GetAllPost))
 		post.POST("/create", ginx.WrapRequestWithClaims(ph.CreatePost))

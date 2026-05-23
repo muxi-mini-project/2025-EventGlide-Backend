@@ -40,12 +40,6 @@ func NewHandler(e *gin.Engine, cors *middleware.Cors, uh *UserHandler, ah *ActHa
 
 func (r *Handler) RegisterHandlers() {
 	r.cors.HandleCors()
-	r.uh.RegisterUserHandlers()
-	r.ah.RegisterActHandlers()
-	r.ph.RegisterPostHandlers()
-	r.ch.RegisterCommentHandler()
-	r.ih.RegisterInteractionHandlers()
-	r.fh.RegisterFeedHandlers()
 	r.RegisterSwagger()
 }
 

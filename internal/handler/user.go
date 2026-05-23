@@ -12,27 +12,26 @@ import (
 )
 
 type UserHandler struct {
-	e  *gin.Engine
 	us *service.UserService
-	j  *middleware.Jwt
 	l  *zap.Logger
 }
 
 func NewUserHandler(e *gin.Engine, us *service.UserService, j *middleware.Jwt, l *zap.Logger) *UserHandler {
-	return &UserHandler{
-		e:  e,
+	u := &UserHandler{
 		us: us,
-		j:  j,
 		l:  l.Named("user/handler"),
 	}
+	u.RegisterUserHandlers(e, j.WrapCheckToken())
+
+	return u
 }
 
-func (uh *UserHandler) RegisterUserHandlers() {
-	user := uh.e.Group("/user")
+func (uh *UserHandler) RegisterUserHandlers(e *gin.Engine, handlerFunc gin.HandlerFunc) {
+	user := e.Group("/user")
 	{
 		user.POST("/login", ginx.WrapRequest(uh.Login))
 
-		user.Use(uh.j.WrapCheckToken())
+		user.Use(handlerFunc)
 		{
 			user.POST("/logout", ginx.Wrap(uh.Logout))
 			user.GET("/token/qiniu", ginx.Wrap(uh.GenQiniuToken))
@@ -72,7 +71,6 @@ func (uh *UserHandler) Login(ctx *gin.Context, req_ req.LoginReq) (resp.Resp, er
 	}
 
 	return ginx.ReturnSuccess(res)
-
 }
 
 // @Tags User

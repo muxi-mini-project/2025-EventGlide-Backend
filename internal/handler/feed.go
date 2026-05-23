@@ -12,24 +12,23 @@ import (
 )
 
 type FeedHandler struct {
-	e  *gin.Engine
 	fs *service.FeedService
-	j  *middleware.Jwt
 	l  *zap.Logger
 }
 
 func NewFeedHandler(e *gin.Engine, fs *service.FeedService, j *middleware.Jwt, l *zap.Logger) *FeedHandler {
-	return &FeedHandler{
-		e:  e,
+	f := &FeedHandler{
 		fs: fs,
-		j:  j,
 		l:  l.Named("feed/handler"),
 	}
+	f.RegisterFeedHandlers(e, j.WrapCheckToken())
+
+	return f
 }
 
-func (fh *FeedHandler) RegisterFeedHandlers() {
-	feed := fh.e.Group("/feed")
-	feed.Use(fh.j.WrapCheckToken())
+func (fh *FeedHandler) RegisterFeedHandlers(e *gin.Engine, handlerFunc gin.HandlerFunc) {
+	feed := e.Group("/feed")
+	feed.Use(handlerFunc)
 	{
 		feed.GET("/total", ginx.WrapWithClaims(fh.GetTotalCnt))
 		feed.GET("/list", ginx.WrapWithClaims(fh.GetFeedList))
