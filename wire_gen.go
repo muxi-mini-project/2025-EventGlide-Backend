@@ -9,13 +9,12 @@ package main
 import (
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/cache"
-	"github.com/raiki02/EG/internal/controller"
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/handler"
 	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
-	"github.com/raiki02/EG/internal/router"
 	"github.com/raiki02/EG/internal/server"
 	"github.com/raiki02/EG/internal/service"
 )
@@ -24,21 +23,22 @@ import (
 
 func InitApp() *server.Server {
 	engine := ioc.InitGinHandler()
+	cors := middleware.NewCors(engine)
 	conf := config.InitConf()
-	client := ioc.InitRedis(conf)
-	cacheCache := cache.NewCache(client)
 	db := ioc.InitDB(conf)
 	logger := ioc.Newlogger()
 	userDao := dao.NewUserDao(db, logger)
+	client := ioc.InitRedis(conf)
+	multiLevelCache := cache.NewCache(client)
+	userRepo := repo.NewUserRepo(userDao, multiLevelCache)
 	actDao := dao.NewActDao(db, logger, conf)
+	activityRepo := repo.NewActivityRepo(actDao, multiLevelCache)
 	postDao := dao.NewPostDao(db, logger, conf)
-	commentDao := dao.NewCommentDao(db, logger)
+	postRepo := repo.NewPostRepo(postDao, multiLevelCache)
 	jwt := middleware.NewJwt(client, conf)
 	ccnuService := service.NewCCNUService()
 	imgUploader := service.NewImgUploader(conf)
-	userRepo := repo.NewUserRepo(userDao, cacheCache)
-	activityRepo := repo.NewActivityRepo(actDao, cacheCache)
-	postRepo := repo.NewPostRepo(postDao, cacheCache)
+	commentDao := dao.NewCommentDao(db, logger)
 	interactionDao := dao.NewInteractionDao(db, commentDao, userDao, actDao, postDao, logger)
 	interactionRepo := repo.NewInteractionRepo(interactionDao, userRepo, activityRepo, postRepo)
 	mqHdl := mq.NewMQ(client)
@@ -47,27 +47,20 @@ func InitApp() *server.Server {
 	activityService := service.NewActivityService(activityRepo, userRepo, logger, interactionRepo, mqHdl, auditorService)
 	postService := service.NewPostService(postRepo, userRepo, logger, auditorService)
 	userService := service.NewUserService(userRepo, activityRepo, postRepo, jwt, ccnuService, imgUploader, activityService, postService, logger, conf)
-	userController := controller.NewUserController(engine, userService, logger)
-	userRouter := router.NewUserRouter(engine, userController, jwt)
-	actController := controller.NewActController(activityService, imgUploader, logger)
-	actRouter := router.NewActRouter(engine, actController, jwt)
-	postController := controller.NewPostController(postService, logger)
-	postRouter := router.NewPostRouter(engine, postController, jwt)
+	userHandler := handler.NewUserHandler(engine, userService, jwt, logger)
+	actHandler := handler.NewActHandler(engine, activityService, imgUploader, logger, jwt)
+	postHandler := handler.NewPostHandler(engine, postService, jwt, logger)
 	actPostCommentGetter := service.NewActPostCommentGetter(activityRepo, postRepo, commentDao)
 	commentService := service.NewCommentService(commentDao, userRepo, interactionRepo, logger, mqHdl, actPostCommentGetter)
-	commentController := controller.NewCommentController(commentService, logger)
-	commentRouter := router.NewCommentRouter(commentController, engine, jwt)
+	commentHandler := handler.NewCommentHandler(engine, commentService, jwt, logger)
 	feedDao := dao.NewFeedDao(db, logger)
 	feedService := service.NewFeedService(feedDao, mqHdl, userRepo, logger)
-	feedController := controller.NewFeedController(feedService, logger)
-	feedRouter := router.NewFeedRouter(feedController, engine, jwt)
+	feedHandler := handler.NewFeedHandler(engine, feedService, jwt, logger)
 	interactionService := service.NewInteractionService(interactionRepo, mqHdl, logger, actPostCommentGetter)
-	interactionController := controller.NewInteractionController(interactionService, logger)
-	interactionRouter := router.NewInteractionRouter(engine, interactionController, jwt)
-	cors := middleware.NewCors(engine)
+	interactionHandler := handler.NewInteractionHandler(engine, interactionService, jwt, logger)
 	callbackAuditorService := service.NewCallbackAuditor(auditorRepository)
-	callbackAuditorController := controller.NewCallbackAuditorController(engine, callbackAuditorService, conf)
-	routerRouter := router.NewRouter(engine, userRouter, actRouter, postRouter, commentRouter, feedRouter, interactionRouter, cors, callbackAuditorController)
-	serverServer := server.NewServer(routerRouter, logger)
+	callbackAuditorHandler := handler.NewCallbackAuditorHandler(engine, callbackAuditorService, conf)
+	handlerHandler := handler.NewHandler(engine, cors, userHandler, actHandler, postHandler, commentHandler, feedHandler, interactionHandler, callbackAuditorHandler)
+	serverServer := server.NewServer(handlerHandler, logger)
 	return serverServer
 }
