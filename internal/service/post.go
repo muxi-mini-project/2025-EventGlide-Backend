@@ -13,15 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ PostServiceHdl = &PostService{}
+
 type PostServiceHdl interface {
-	GetAllPost(context.Context) ([]resp.ListPostsResp, error)
-	CreatePost(context.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
-	FindPostByName(context.Context, string) ([]resp.ListPostsResp, error)
-	DeletePost(context.Context, *model.Post) error
-	CreateDraft(context.Context, *req.CreatePostReq) (resp.CreatePostResp, error)
-	LoadDraft(context.Context, req.DraftReq) (resp.CreatePostResp, error)
+	GetAllPost(context.Context, string) ([]resp.ListPostsResp, error)
+	CreatePost(context.Context, *req.CreatePostReq, string) (resp.CreatePostResp, error)
+	FindPostByName(context.Context, string, string) ([]resp.ListPostsResp, error)
+	DeletePost(context.Context, *req.DeletePostReq, string) error
+	CreateDraft(context.Context, *req.CreatePostReq, string) (resp.CreatePostResp, error)
+	LoadDraft(context.Context, string) (resp.LoadPostDraftResp, error)
 	FindPostByOwnerID(context.Context, string) ([]resp.ListPostsResp, error)
-	FindPostByBid(c context.Context, bid string) (resp.ListPostsResp, error)
+	FindPostByBid(context.Context, string, string) (resp.ListPostsResp, error)
 }
 
 type PostService struct {
@@ -45,7 +47,7 @@ func (ps *PostService) GetAllPost(c context.Context, studentId string) ([]resp.L
 	if err != nil {
 		return nil, err
 	}
-	res := ps.ToListResp(context.WithValue(c, "studentid", studentId), posts)
+	res := ps.ToListResp(c, posts, studentId)
 	return res, nil
 }
 
@@ -81,12 +83,12 @@ func (ps *PostService) CreatePost(c context.Context, r *req.CreatePostReq, stude
 	return ps.toCreateResp(c, post), nil
 }
 
-func (ps *PostService) FindPostByName(c context.Context, name string) ([]resp.ListPostsResp, error) {
+func (ps *PostService) FindPostByName(c context.Context, name string, studentId string) ([]resp.ListPostsResp, error) {
 	posts, err := ps.pdh.FindPostByName(c, name)
 	if err != nil {
 		return nil, err
 	}
-	res := ps.ToListResp(c, posts)
+	res := ps.ToListResp(c, posts, studentId)
 	return res, nil
 }
 func (ps *PostService) DeletePost(c context.Context, post *req.DeletePostReq, studentId string) error {
@@ -109,45 +111,55 @@ func (ps *PostService) CreateDraft(c context.Context, r *req.CreatePostReq, stud
 	return ps.toCreateResp(c, draft), nil
 }
 
-func (ps *PostService) LoadDraft(c context.Context, sid string) (model.PostDraft, error) {
+func (ps *PostService) LoadDraft(c context.Context, sid string) (resp.LoadPostDraftResp, error) {
 	draft, err := ps.pdh.LoadDraft(c, sid)
 	if err != nil {
-		return model.PostDraft{}, err
+		return resp.LoadPostDraftResp{}, err
 	}
-	return draft, nil
-}
 
-func (ps *PostService) FindPostByOwnerID(c context.Context, id string) ([]resp.ListPostsResp, error) {
-	posts, err := ps.pdh.FindPostByOwnerID(c, id)
-	if err != nil {
-		return nil, err
+	res := resp.LoadPostDraftResp{
+		Bid:       draft.Bid,
+		Title:     draft.Title,
+		Introduce: draft.Introduce,
+		ShowImg:   tools.StringToSlice(draft.ShowImg),
+		StudentID: draft.StudentID,
+		CreatedAt: tools.ParseTime(draft.CreatedAt),
 	}
-	res := ps.ToListResp(c, posts)
+
 	return res, nil
 }
 
-func (ps *PostService) FindPostByBid(c context.Context, bid string) (resp.ListPostsResp, error) {
+func (ps *PostService) FindPostByOwnerID(c context.Context, studentId string) ([]resp.ListPostsResp, error) {
+	posts, err := ps.pdh.FindPostByOwnerID(c, studentId)
+	if err != nil {
+		return nil, err
+	}
+	res := ps.ToListResp(c, posts, studentId)
+	return res, nil
+}
+
+func (ps *PostService) FindPostByBid(c context.Context, bid string, studentId string) (resp.ListPostsResp, error) {
 	post, err := ps.pdh.FindPostByBid(c, bid)
 	if err != nil {
 		return resp.ListPostsResp{}, err
 	}
-	res := ps.toListPostResp(c, post)
+	res := ps.toListPostResp(c, post, studentId)
 	return res, nil
 }
 
-func (ps *PostService) ToListResp(c context.Context, posts []model.Post) []resp.ListPostsResp {
+func (ps *PostService) ToListResp(c context.Context, posts []model.Post, studentId string) []resp.ListPostsResp {
 	var res []resp.ListPostsResp
 	for _, post := range posts {
-		res = append(res, ps.toListPostResp(c, post))
+		res = append(res, ps.toListPostResp(c, post, studentId))
 	}
 	return res
 }
 
-func (ps *PostService) toListPostResp(c context.Context, post model.Post) resp.ListPostsResp {
+func (ps *PostService) toListPostResp(c context.Context, post model.Post, studentId string) resp.ListPostsResp {
 	user := ps.ud.FindUserByID(c, post.StudentID)
 	var res resp.ListPostsResp
 	// TODO 类型断言error判断
-	searcher := ps.ud.FindUserByID(c, c.Value("studentid").(string))
+	searcher := ps.ud.FindUserByID(c, studentId)
 	if strings.Contains(searcher.CollectPost, post.Bid) {
 		res.IsCollect = "true"
 	} else {

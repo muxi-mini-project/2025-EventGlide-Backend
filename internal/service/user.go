@@ -149,7 +149,7 @@ func (us *UserService) SearchUserAct(ctx *gin.Context, studentId string, keyword
 	if err != nil {
 		return nil, err
 	}
-	res := us.as.ToListResp(ctx, acts)
+	res := us.as.ToListResp(ctx, acts, studentId)
 	return res, nil
 }
 
@@ -158,7 +158,7 @@ func (us *UserService) SearchUserPost(ctx *gin.Context, studentId string, keywor
 	if err != nil {
 		return nil, err
 	}
-	res := us.ps.ToListResp(ctx, posts)
+	res := us.ps.ToListResp(ctx, posts, studentId)
 	return res, nil
 }
 
@@ -168,13 +168,13 @@ func (us *UserService) GetChecking(ctx *gin.Context, studentId string) (resp.Che
 	if err != nil {
 		return resp.CheckingResp{}, err
 	}
-	res.Acts = us.as.ToListResp(ctx, acts)
+	res.Acts = us.as.ToListResp(ctx, acts, studentId)
 
 	posts, err := us.pdh.GetChecking(ctx, studentId)
 	if err != nil {
 		return resp.CheckingResp{}, err
 	}
-	res.Posts = us.ps.ToListResp(ctx, posts)
+	res.Posts = us.ps.ToListResp(ctx, posts, studentId)
 
 	return res, nil
 }
@@ -215,7 +215,7 @@ func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]res
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.as.toListActResp(ctx, &acts))
+		res = append(res, us.as.toListActResp(ctx, &acts, studentId))
 	}
 	return res, nil
 }
@@ -235,7 +235,7 @@ func (us *UserService) LoadCollectPost(ctx *gin.Context, studentId string) ([]re
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.ps.toListPostResp(ctx, posts))
+		res = append(res, us.ps.toListPostResp(ctx, posts, studentId))
 	}
 	return res, nil
 }
@@ -255,7 +255,7 @@ func (us *UserService) LoadLikePost(ctx *gin.Context, studentId string) ([]resp.
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.ps.toListPostResp(ctx, posts))
+		res = append(res, us.ps.toListPostResp(ctx, posts, studentId))
 	}
 	return res, nil
 }
@@ -275,7 +275,7 @@ func (us *UserService) LoadLikeAct(ctx *gin.Context, studentId string) ([]resp.L
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.as.toListActResp(ctx, &acts))
+		res = append(res, us.as.toListActResp(ctx, &acts, studentId))
 	}
 	return res, nil
 }

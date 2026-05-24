@@ -8,7 +8,6 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
-	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +32,7 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 	{
 		post.GET("/all", ginx.WrapWithClaims(ph.GetAllPost))
 		post.POST("/create", ginx.WrapRequestWithClaims(ph.CreatePost))
-		post.POST("/find", ginx.WrapRequest(ph.FindPostByName))
+		post.POST("/find", ginx.WrapRequestWithClaims(ph.FindPostByName))
 		post.POST("/draft", ginx.WrapRequestWithClaims(ph.CreateDraft))
 		post.POST("/delete", ginx.WrapRequestWithClaims(ph.DeletePost))
 		post.GET("/load", ginx.WrapWithClaims(ph.LoadDraft))
@@ -80,8 +79,8 @@ func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, clai
 // @Param name body req.FindPostReq true "帖子名"
 // @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /post/find [post]
-func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostByName(ctx, req_.Name)
+func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	posts, err := ph.ps.FindPostByName(ctx, req_.Name, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
@@ -135,16 +134,7 @@ func (ph *PostHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) 
 		return ginx.ReturnError(err)
 	}
 
-	res := resp.LoadPostDraftResp{
-		Bid:       draft.Bid,
-		Title:     draft.Title,
-		Introduce: draft.Introduce,
-		ShowImg:   tools.StringToSlice(draft.ShowImg),
-		StudentID: draft.StudentID,
-		CreatedAt: tools.ParseTime(draft.CreatedAt),
-	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(draft)
 }
 
 // @Tags Post
