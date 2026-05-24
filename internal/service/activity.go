@@ -153,49 +153,49 @@ func (as *ActivityService) ToLoadDraftResp(d model.ActivityDraft) resp.LoadActiv
 	return res
 }
 
-func (as *ActivityService) FindActBySearches(c context.Context, req *req.ActSearchReq) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActBySearches(c context.Context, req *req.ActSearchReq, studentId string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActBySearches(c, req)
 	if err != nil {
 		as.l.Error("Failed to search acts", zap.Error(err))
 		return nil, err
 	}
-	res := as.ToListResp(c, acts)
+	res := as.ToListResp(c, acts, studentId)
 	return res, nil
 }
 
-func (as *ActivityService) FindActByDate(c context.Context, date string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActByDate(c context.Context, date string, studentId string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActByDate(c, date)
 	if err != nil {
 		return nil, err
 	}
-	res := as.ToListResp(c, acts)
+	res := as.ToListResp(c, acts, studentId)
 	return res, nil
 }
 
-func (as *ActivityService) FindActByName(c context.Context, name string) ([]resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActByName(c context.Context, name string, studentId string) ([]resp.ListActivitiesResp, error) {
 	acts, err := as.ad.FindActByName(c, name)
 	if err != nil {
 		return nil, err
 	}
-	res := as.ToListResp(c, acts)
+	res := as.ToListResp(c, acts, studentId)
 	return res, nil
 }
 
-func (as *ActivityService) FindActByBid(c context.Context, bid string) (resp.ListActivitiesResp, error) {
+func (as *ActivityService) FindActByBid(c context.Context, bid string, studentId string) (resp.ListActivitiesResp, error) {
 	act, err := as.ad.FindActByBid(c, bid)
 	if err != nil {
 		return resp.ListActivitiesResp{}, err
 	}
-	res := as.toListActResp(c, &act)
+	res := as.toListActResp(c, &act, studentId)
 	return res, nil
 }
 
-func (as *ActivityService) FindActByOwnerID(c context.Context, id string) ([]resp.ListActivitiesResp, error) {
-	acts, err := as.ad.FindActByOwnerID(c, id)
+func (as *ActivityService) FindActByOwnerID(c context.Context, studentId string) ([]resp.ListActivitiesResp, error) {
+	acts, err := as.ad.FindActByOwnerID(c, studentId)
 	if err != nil {
 		return nil, err
 	}
-	res := as.ToListResp(c, acts)
+	res := as.ToListResp(c, acts, studentId)
 	return res, nil
 }
 
@@ -204,22 +204,22 @@ func (as *ActivityService) ListAllActs(c context.Context, studentId string) ([]r
 	if err != nil {
 		return nil, err
 	}
-	res := as.ToListResp(context.WithValue(c, "studentid", studentId), acts)
+	res := as.ToListResp(c, acts, studentId)
 	return res, nil
 }
 
-func (as *ActivityService) ToListResp(c context.Context, acts []model.Activity) []resp.ListActivitiesResp {
+func (as *ActivityService) ToListResp(c context.Context, acts []model.Activity, studentId string) []resp.ListActivitiesResp {
 	var res []resp.ListActivitiesResp
 	for _, act := range acts {
-		res = append(res, as.toListActResp(c, &act))
+		res = append(res, as.toListActResp(c, &act, studentId))
 	}
 	return res
 }
 
-func (as *ActivityService) toListActResp(c context.Context, act *model.Activity) resp.ListActivitiesResp {
+func (as *ActivityService) toListActResp(c context.Context, act *model.Activity, studentId string) resp.ListActivitiesResp {
 	var res resp.ListActivitiesResp
 	// TODO 类型断言error判断
-	searcher := as.ud.FindUserByID(c, c.Value("studentid").(string))
+	searcher := as.ud.FindUserByID(c, studentId)
 	if strings.Contains(searcher.CollectAct, act.Bid) {
 		res.IsCollect = "true"
 	} else {

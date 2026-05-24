@@ -19,15 +19,16 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ FeedServiceHdl = &FeedService{}
+
 type FeedServiceHdl interface {
 	GetTotalCnt(ctx context.Context, sid string) (resp.BriefFeedResp, error)
 	GetFeedList(ctx context.Context, sid string) (resp.FeedResp, error)
-	SubsribeTopics(ctx context.Context)
 	GetLikeFeed(ctx context.Context, sid string) ([]resp.FeedLikeResp, error)
 	GetCollectFeed(ctx context.Context, sid string) ([]resp.FeedCollectResp, error)
 	GetCommentFeed(ctx context.Context, sid string) ([]resp.FeedCommentResp, error)
 	GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAtResp, error)
-	GetAuditorFeedList(ctx context.Context, sid string) ([]resp.FeedInvitationResp, error)
+	GetAuditorFeedList(ctx context.Context, sid string) (resp.FeedResp, error)
 }
 
 type FeedService struct {
