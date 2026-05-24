@@ -5,10 +5,7 @@ type ActSearchReq struct {
 	HolderType []string `json:"holderType,omitempty"`
 	Location   []string `json:"location,omitempty"`
 	IfRegister string   `json:"ifRegister,omitempty"`
-	DetailTime struct {
-		StartTime string `json:"startTime,omitempty"`
-		EndTime   string `json:"endTime,omitempty"`
-	} `json:"detailTime,omitempty"`
+	DetailTime string   `json:"detailTime,omitempty"`
 }
 
 type CreateActReq struct {
@@ -22,14 +19,14 @@ type CreateActReq struct {
 		IfRegister     string `json:"ifRegister" validate:"required,oneof=是 否"`
 		RegisterMethod string `json:"registerMethod"`
 		StartTime      string `json:"startTime" validate:"required,ltcsfield=EndTime"`
-		ActiveForm     string `json:"activeForm" validate:"required"`
+		ActiveForm     string `json:"activeForm" validate:"required,required_unless=HolderType 个人"`
 		EndTime        string `json:"endTime" validate:"required,gtcsfield=StartTime"`
 		Type           string `json:"type" validate:"required"`
 
 		Signer []struct {
 			StudentID string `json:"studentId" validate:"len=10"`
 			Name      string `json:"name"`
-		} `json:"signer" validate:"required_if=HolderType 个人,unique=StudentID,dive"`
+		} `json:"signer" validate:"unique=StudentID,dive"`
 	} `json:"labelform"`
 }
 

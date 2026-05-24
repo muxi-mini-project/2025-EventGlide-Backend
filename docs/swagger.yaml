@@ -71,12 +71,7 @@ definitions:
   req.ActSearchReq:
     properties:
       detailTime:
-        properties:
-          endTime:
-            type: string
-          startTime:
-            type: string
-        type: object
+        type: string
       holderType:
         items:
           type: string
@@ -785,11 +780,6 @@ paths:
   /act/{id}:
     get:
       parameters:
-      - description: 目标id
-        in: path
-        name: id
-        required: true
-        type: string
       - description: token
         in: header
         name: Authorization
@@ -1031,36 +1021,6 @@ paths:
                   $ref: '#/definitions/resp.ListActivitiesResp'
               type: object
       summary: 通过搜索条件查找活动
-      tags:
-      - Activity
-  /act/user/{userId}:
-    get:
-      parameters:
-      - description: 用户id
-        in: path
-        name: userId
-        required: true
-        type: string
-      - description: token
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/resp.Resp'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/resp.ListActivitiesResp'
-                  type: array
-              type: object
-      summary: 通过学号查找该用户发布的活动
       tags:
       - Activity
   /comment/answer:
@@ -1429,34 +1389,6 @@ paths:
       summary: 作为活动填表人拒绝发表此活动
       tags:
       - Interaction
-  /post/{id}:
-    get:
-      parameters:
-      - description: 目标id
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: token
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/resp.Resp'
-            - properties:
-                data:
-                  $ref: '#/definitions/resp.ListPostsResp'
-              type: object
-      summary: 根据id返回帖子详情
-      tags:
-      - Post
   /post/all:
     get:
       parameters:
@@ -1644,36 +1576,6 @@ paths:
                   type: array
               type: object
       summary: 通过用户ID查找帖子
-      tags:
-      - Post
-  /post/user/{userId}:
-    get:
-      parameters:
-      - description: 用户id
-        in: path
-        name: userId
-        required: true
-        type: string
-      - description: token
-        in: header
-        name: Authorization
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            allOf:
-            - $ref: '#/definitions/resp.Resp'
-            - properties:
-                data:
-                  items:
-                    $ref: '#/definitions/resp.ListPostsResp'
-                  type: array
-              type: object
-      summary: 通过学号查找该用户发布的帖子
       tags:
       - Post
   /user/avatar:

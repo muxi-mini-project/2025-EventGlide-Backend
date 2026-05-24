@@ -393,56 +393,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/act/user/{userId}": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Activity"
-                ],
-                "summary": "通过学号查找该用户发布的活动",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "用户id",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/resp.Resp"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
         "/act/{id}": {
             "get": {
                 "produces": [
@@ -453,13 +403,6 @@ const docTemplate = `{
                 ],
                 "summary": "根据id返回活动详情",
                 "parameters": [
-                    {
-                        "type": "string",
-                        "description": "目标id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
                     {
                         "type": "string",
                         "description": "token",
@@ -1393,103 +1336,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/post/user/{userId}": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Post"
-                ],
-                "summary": "通过学号查找该用户发布的帖子",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "用户id",
-                        "name": "userId",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/resp.Resp"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
-        "/post/{id}": {
-            "get": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Post"
-                ],
-                "summary": "根据id返回帖子详情",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "目标id",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "token",
-                        "name": "Authorization",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/resp.Resp"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/resp.ListPostsResp"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-            }
-        },
         "/user/avatar": {
             "post": {
                 "description": "not finished",
@@ -2183,15 +2029,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "detailTime": {
-                    "type": "object",
-                    "properties": {
-                        "endTime": {
-                            "type": "string"
-                        },
-                        "startTime": {
-                            "type": "string"
-                        }
-                    }
+                    "type": "string"
                 },
                 "holderType": {
                     "type": "array",

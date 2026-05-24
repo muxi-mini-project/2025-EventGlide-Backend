@@ -23,16 +23,20 @@ func InitValidation() {
 	validate.RegisterStructValidation(func(sl validator.StructLevel) {
 		req_ := sl.Current().Interface().(req.CreateActReq)
 		if req_.LabelForm.HolderType == HolderTypePersonal {
-			if len(req_.LabelForm.Signer) <= 4 {
-				sl.ReportError(req_.LabelForm.Signer, "Signer", "signer", "min_signer", "5")
+			if len(req_.LabelForm.Signer) <= 2 {
+				sl.ReportError(req_.LabelForm.Signer, "Signer", "signer", "min_signer", "3")
 				return
 			}
-
-			for _, s := range req_.LabelForm.Signer {
-				if len(s.StudentID) != 10 {
-					sl.ReportError(req_.LabelForm.Signer, "StudentID", "studentid", "len", "10")
-					return
-				}
+		} else {
+			if len(req_.LabelForm.Signer) <= 0 {
+				sl.ReportError(req_.LabelForm.Signer, "Signer", "signer", "min_signer", "1")
+				return
+			}
+		}
+		for _, s := range req_.LabelForm.Signer {
+			if len(s.StudentID) != 10 {
+				sl.ReportError(req_.LabelForm.Signer, "StudentID", "studentid", "len", "10")
+				return
 			}
 		}
 	}, req.CreateActReq{})

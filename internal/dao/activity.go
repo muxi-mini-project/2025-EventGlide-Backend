@@ -146,8 +146,8 @@ func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]m
 	if a.IfRegister != "" {
 		q = q.Where("if_register = ?", a.IfRegister)
 	}
-	if a.DetailTime.StartTime != "" && a.DetailTime.EndTime != "" {
-		q = q.Where("start_time >= ? AND end_time <= ?", a.DetailTime.StartTime, a.DetailTime.EndTime)
+	if a.DetailTime != "" {
+		q = q.Where("start_time <= ? AND end_time >= ?", a.DetailTime, a.DetailTime)
 	}
 
 	err := q.Scopes(ad.SetEffect()).Find(&as).Error
