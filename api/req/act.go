@@ -23,10 +23,7 @@ type CreateActReq struct {
 		EndTime        string `json:"endTime" validate:"required,gtcsfield=StartTime"`
 		Type           string `json:"type" validate:"required"`
 
-		Signer []struct {
-			StudentID string `json:"studentId" validate:"len=10"`
-			Name      string `json:"name"`
-		} `json:"signer" validate:"unique=StudentID,dive"`
+		Signer []Signer `json:"signer" validate:"required_if=HolderType 个人,unique=StudentID,dive"`
 	} `json:"labelform"`
 }
 
@@ -45,10 +42,7 @@ type CreateActDraftReq struct {
 		EndTime        string `json:"endTime"`
 		Type           string `json:"type"`
 
-		Signer []struct {
-			StudentID string `json:"studentId" validate:"len=10"`
-			Name      string `json:"name"`
-		} `json:"signer"`
+		Signer []Signer `json:"signer"`
 	} `json:"labelform"`
 }
 
@@ -66,4 +60,9 @@ type FindActByBidReq struct {
 
 type FindActByUserIDReq struct {
 	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
+}
+
+type Signer struct {
+	StudentID string `json:"studentId" validate:"len=10"`
+	Name      string `json:"name"`
 }

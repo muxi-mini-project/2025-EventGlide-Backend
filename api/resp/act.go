@@ -10,11 +10,8 @@ type CreateActivityResp struct {
 	IfRegister string   `json:"ifRegister"`
 	IsChecking string   `json:"isChecking"`
 	ActiveForm string   `json:"activeForm"`
-	Signer     []struct {
-		StudentID string `json:"studentId"`
-		Name      string `json:"name"`
-	} `json:"signer"`
-	UserInfo struct {
+	Signer     []Signer `json:"signer"`
+	UserInfo   struct {
 		StudentID string `json:"studentId"`
 		Avatar    string `json:"avatar"`
 		Username  string `json:"username"`
@@ -68,9 +65,11 @@ type LoadActivitiesDraftResp struct {
 		EndTime        string `json:"endTime"`
 		Type           string `json:"type"`
 
-		Signer []struct {
-			StudentID string `json:"studentId" validate:"len=10"`
-			Name      string `json:"name"`
-		} `json:"signer"`
+		Signer []Signer `json:"signer" validate:"required_if=HolderType 个人,unique=StudentID,dive"`
 	} `json:"labelform"`
+}
+
+type Signer struct {
+	StudentID string `json:"studentId" validate:"len=10"`
+	Name      string `json:"name"`
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
@@ -149,8 +150,8 @@ func (us *UserService) SearchUserAct(ctx *gin.Context, studentId string, keyword
 	if err != nil {
 		return nil, err
 	}
-	res := us.as.ToListResp(ctx, acts, studentId)
-	return res, nil
+	details := us.as.EnrichForSearcher(ctx, acts, studentId)
+	return converter.ToListActivitiesResp(details), nil
 }
 
 func (us *UserService) SearchUserPost(ctx *gin.Context, studentId string, keyword string) ([]resp.ListPostsResp, error) {
@@ -168,7 +169,7 @@ func (us *UserService) GetChecking(ctx *gin.Context, studentId string) (resp.Che
 	if err != nil {
 		return resp.CheckingResp{}, err
 	}
-	res.Acts = us.as.ToListResp(ctx, acts, studentId)
+	res.Acts = converter.ToListActivitiesResp(us.as.EnrichForSearcher(ctx, acts, studentId))
 
 	posts, err := us.pdh.GetChecking(ctx, studentId)
 	if err != nil {
@@ -215,7 +216,7 @@ func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]res
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.as.toListActResp(ctx, &acts, studentId))
+		res = append(res, converter.ToListActivityResp(us.as.EnrichOneForSearcher(ctx, &acts, studentId)))
 	}
 	return res, nil
 }
@@ -275,7 +276,7 @@ func (us *UserService) LoadLikeAct(ctx *gin.Context, studentId string) ([]resp.L
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.as.toListActResp(ctx, &acts, studentId))
+		res = append(res, converter.ToListActivityResp(us.as.EnrichOneForSearcher(ctx, &acts, studentId)))
 	}
 	return res, nil
 }

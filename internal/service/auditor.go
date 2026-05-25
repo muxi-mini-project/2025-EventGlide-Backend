@@ -105,10 +105,7 @@ func (a *auditorService) toUploadReq(aw *req.AuditWrapper, id uint) request.Uplo
 	return res
 }
 
-func extractAuthors(signers []struct {
-	StudentID string `json:"studentId" validate:"len=10"`
-	Name      string `json:"name"`
-}) string {
+func extractAuthors(signers []req.Signer) string {
 	builder := strings.Builder{}
 	for _, s := range signers {
 		builder.WriteString(s.Name + "-")

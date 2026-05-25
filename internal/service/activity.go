@@ -3,14 +3,11 @@ package service
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
-	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
 
@@ -34,25 +31,17 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, l *zap.Logger,
 	}
 }
 
-func (as *ActivityService) NewAct(c context.Context, r *req.CreateActReq, studentId string) (resp.CreateActivityResp, error) {
-	var (
-		form *model.AuditorForm
-		err  error
-	)
-	act := toAct(r, studentId)
-
-	// TODO: 异步增加
-	signers := r.LabelForm.Signer
+func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
 	for _, s := range signers {
-		if s.StudentID == studentId {
-			continue // 这里避免了 填写了自己的学号名字但是还需要自己审批的情况
+		if s.StudentID == studentID {
+			continue
 		}
 		if err := as.id.InsertApprovement(c, s.StudentID, s.Name, act.Bid); err != nil {
 			as.l.Error("Failed to insert approvement", zap.Error(err), zap.String("studentID", s.StudentID), zap.String("actBid", act.Bid))
-			return resp.CreateActivityResp{}, err
+			return err
 		}
 		f := model.Feed{
-			StudentId: studentId,
+			StudentId: studentID,
 			TargetBid: act.Bid,
 			Object:    "activity",
 			Action:    "invitation",
@@ -60,32 +49,26 @@ func (as *ActivityService) NewAct(c context.Context, r *req.CreateActReq, studen
 		}
 		if err := as.mq.Publish(c, "feed_stream", f); err != nil {
 			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("studentID", s.StudentID), zap.String("actBid", act.Bid))
-			return resp.CreateActivityResp{}, err
+			return err
 		}
 	}
 
-	// TODO: 异步
-	form, err = as.aud.CreateAuditorForm(c, act.Bid, act.ActiveForm, SubjectActivity)
+	form, err := as.aud.CreateAuditorForm(c, act.Bid, act.ActiveForm, SubjectActivity)
 	if err != nil {
 		as.l.Error("Failed to create activity form", zap.Error(err))
-		return resp.CreateActivityResp{}, err
-	}
-	aw := &req.AuditWrapper{
-		Subject:   SubjectActivity,
-		StudentId: studentId,
-		CactReq:   r,
+		return err
 	}
 
 	err = as.aud.UploadForm(c, aw, form.Id)
 	if err != nil {
 		as.l.Error("Failed to upload form to auditor", zap.Error(err))
-		return resp.CreateActivityResp{}, err
+		return err
 	}
 
 	err = as.ad.CreateAct(c, act)
 	if err != nil {
 		as.l.Error("Failed to create act", zap.Error(err))
-		return resp.CreateActivityResp{}, err
+		return err
 	}
 	as.l.Info("create activity",
 		zap.String("act", act.Bid),
@@ -94,22 +77,17 @@ func (as *ActivityService) NewAct(c context.Context, r *req.CreateActReq, studen
 		zap.String("formfile", act.ActiveForm),
 		zap.String("signer", act.Signer),
 	)
-	return as.toCreateResp(c, act), nil
-
+	return nil
 }
 
-func (as *ActivityService) NewDraft(c context.Context, r *req.CreateActDraftReq, studentId string) (resp.CreateActivityResp, error) {
-
-	d := toActDraft(r, studentId)
-
-	err := as.ad.CreateDraft(c, d)
+func (as *ActivityService) CreateDraft(c context.Context, draft *model.ActivityDraft) error {
+	err := as.ad.CreateDraft(c, draft)
 	if err != nil {
 		as.l.Error("Failed to create draft", zap.Error(err))
-		return resp.CreateActivityResp{}, err
+		return err
 	}
-	as.l.Info("create draft", zap.String("draft", d.Bid), zap.String("student", d.StudentID))
-
-	return as.toCreateResp(c, d), nil
+	as.l.Info("create draft", zap.String("draft", draft.Bid), zap.String("student", draft.StudentID))
+	return nil
 }
 
 func (as *ActivityService) LoadDraft(c context.Context, sid string) (model.ActivityDraft, error) {
@@ -117,276 +95,73 @@ func (as *ActivityService) LoadDraft(c context.Context, sid string) (model.Activ
 	if err != nil {
 		return model.ActivityDraft{}, err
 	}
-
 	return d, nil
 }
 
-func (as *ActivityService) ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
-	var res resp.LoadActivitiesDraftResp
-
-	res.Title = d.Title
-	res.Introduce = d.Introduce
-	res.ShowImg = tools.StringToSlice(d.ShowImg)
-
-	res.LabelForm.HolderType = d.HolderType
-	res.LabelForm.Position = d.Position
-	res.LabelForm.IfRegister = d.IfRegister
-	res.LabelForm.RegisterMethod = d.RegisterMethod
-	res.LabelForm.StartTime = d.StartTime
-	res.LabelForm.ActiveForm = d.ActiveForm
-	res.LabelForm.EndTime = d.EndTime
-	res.LabelForm.Type = d.Type
-	for _, s := range tools.StringToSlice(d.Signer) {
-		ss := strings.SplitN(s, ":", 2)
-		if len(ss) != 2 {
-			continue
-		}
-		res.LabelForm.Signer = append(res.LabelForm.Signer, struct {
-			StudentID string `json:"studentId" validate:"len=10"`
-			Name      string `json:"name"`
-		}{
-			StudentID: ss[0],
-			Name:      ss[1],
-		})
-	}
-
-	return res
-}
-
-func (as *ActivityService) FindActBySearches(c context.Context, req *req.ActSearchReq, studentId string) ([]resp.ListActivitiesResp, error) {
-	acts, err := as.ad.FindActBySearches(c, req)
+func (as *ActivityService) FindActBySearches(c context.Context, search *req.ActSearchReq) ([]model.Activity, error) {
+	acts, err := as.ad.FindActBySearches(c, search)
 	if err != nil {
 		as.l.Error("Failed to search acts", zap.Error(err))
 		return nil, err
 	}
-	res := as.ToListResp(c, acts, studentId)
-	return res, nil
+	return acts, nil
 }
 
-func (as *ActivityService) FindActByDate(c context.Context, date string, studentId string) ([]resp.ListActivitiesResp, error) {
-	acts, err := as.ad.FindActByDate(c, date)
-	if err != nil {
-		return nil, err
+func (as *ActivityService) FindActByDate(c context.Context, date string) ([]model.Activity, error) {
+	return as.ad.FindActByDate(c, date)
+}
+
+func (as *ActivityService) FindActByName(c context.Context, name string) ([]model.Activity, error) {
+	return as.ad.FindActByName(c, name)
+}
+
+func (as *ActivityService) FindActByBid(c context.Context, bid string) (model.Activity, error) {
+	return as.ad.FindActByBid(c, bid)
+}
+
+func (as *ActivityService) FindActByOwnerID(c context.Context, studentID string) ([]model.Activity, error) {
+	return as.ad.FindActByOwnerID(c, studentID)
+}
+
+func (as *ActivityService) ListAllActs(c context.Context) ([]model.Activity, error) {
+	return as.ad.ListAllActs(c)
+}
+
+func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail {
+	details := make([]model.ActivityDetail, 0, len(acts))
+	for i := range acts {
+		details = append(details, as.enrichOne(c, &acts[i], viewerID))
 	}
-	res := as.ToListResp(c, acts, studentId)
-	return res, nil
+	return details
 }
 
-func (as *ActivityService) FindActByName(c context.Context, name string, studentId string) ([]resp.ListActivitiesResp, error) {
-	acts, err := as.ad.FindActByName(c, name)
-	if err != nil {
-		return nil, err
+func (as *ActivityService) EnrichOneForSearcher(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail {
+	return as.enrichOne(c, act, viewerID)
+}
+
+func (as *ActivityService) AuthorBrief(c context.Context, studentID string) model.UserBrief {
+	user := as.ud.FindUserByID(c, studentID)
+	return model.UserBrief{
+		StudentID: user.StudentID,
+		Name:      user.Name,
+		Avatar:    user.Avatar,
+		School:    user.School,
 	}
-	res := as.ToListResp(c, acts, studentId)
-	return res, nil
 }
 
-func (as *ActivityService) FindActByBid(c context.Context, bid string, studentId string) (resp.ListActivitiesResp, error) {
-	act, err := as.ad.FindActByBid(c, bid)
-	if err != nil {
-		return resp.ListActivitiesResp{}, err
-	}
-	res := as.toListActResp(c, &act, studentId)
-	return res, nil
-}
+func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail {
+	searcher := as.ud.FindUserByID(c, viewerID)
+	author := as.ud.FindUserByID(c, act.StudentID)
 
-func (as *ActivityService) FindActByOwnerID(c context.Context, studentId string) ([]resp.ListActivitiesResp, error) {
-	acts, err := as.ad.FindActByOwnerID(c, studentId)
-	if err != nil {
-		return nil, err
-	}
-	res := as.ToListResp(c, acts, studentId)
-	return res, nil
-}
-
-func (as *ActivityService) ListAllActs(c context.Context, studentId string) ([]resp.ListActivitiesResp, error) {
-	acts, err := as.ad.ListAllActs(c)
-	if err != nil {
-		return nil, err
-	}
-	res := as.ToListResp(c, acts, studentId)
-	return res, nil
-}
-
-func (as *ActivityService) ToListResp(c context.Context, acts []model.Activity, studentId string) []resp.ListActivitiesResp {
-	var res []resp.ListActivitiesResp
-	for _, act := range acts {
-		res = append(res, as.toListActResp(c, &act, studentId))
-	}
-	return res
-}
-
-func (as *ActivityService) toListActResp(c context.Context, act *model.Activity, studentId string) resp.ListActivitiesResp {
-	var res resp.ListActivitiesResp
-	// TODO 类型断言error判断
-	searcher := as.ud.FindUserByID(c, studentId)
-	if strings.Contains(searcher.CollectAct, act.Bid) {
-		res.IsCollect = "true"
-	} else {
-		res.IsCollect = "false"
-	}
-	if strings.Contains(searcher.LikeAct, act.Bid) {
-		res.IsLike = "true"
-	} else {
-		res.IsLike = "false"
-	}
-	user := as.ud.FindUserByID(c, act.StudentID)
-	res.UserInfo.School = user.School
-	res.UserInfo.Username = user.Name
-	res.Bid = act.Bid
-	res.IsChecking = act.IsChecking
-	res.UserInfo.Avatar = user.Avatar
-	res.UserInfo.StudentID = user.StudentID
-	res.DetailTime.StartTime = act.StartTime
-	res.DetailTime.EndTime = act.EndTime
-	res.HolderType = act.HolderType
-	res.Title = act.Title
-	res.Introduce = act.Introduce
-	res.Position = act.Position
-	res.Type = act.Type
-	res.LikeNum = act.LikeNum
-	res.CommentNum = act.CommentNum
-	res.CollectNum = act.CollectNum
-	res.IfRegister = act.IfRegister
-	res.ShowImg = tools.StringToSlice(act.ShowImg)
-
-	return res
-}
-
-func toAct(r *req.CreateActReq, studentId string) *model.Activity {
-	var act model.Activity
-
-	act.Bid = tools.GenUUID()
-	act.CreatedAt = time.Now()
-
-	act.StudentID = studentId
-	act.Title = r.Title
-	act.Introduce = r.Introduce
-	act.ShowImg = tools.SliceToString(r.ShowImg)
-
-	act.Position = r.LabelForm.Position
-	act.HolderType = r.LabelForm.HolderType
-	act.Type = r.LabelForm.Type
-	act.IfRegister = r.LabelForm.IfRegister
-	act.RegisterMethod = r.LabelForm.RegisterMethod
-	act.StartTime = r.LabelForm.StartTime
-	act.EndTime = r.LabelForm.EndTime
-	act.Signer = tools.SliceToString(joinSigners(r.LabelForm.Signer))
-	act.ActiveForm = r.LabelForm.ActiveForm
-
-	return &act
-}
-
-func joinSigners(signers []struct {
-	StudentID string `json:"studentId" validate:"len=10"`
-	Name      string `json:"name"`
-}) []string {
-	var res []string
-	for _, s := range signers {
-		s := s.StudentID + ":" + s.Name
-		res = append(res, s)
-	}
-	return res
-}
-
-func separateSigners(signers []string) []struct {
-	StudentID string `json:"studentId"`
-	Name      string `json:"name"`
-} {
-	var res []struct {
-		StudentID string `json:"studentId"`
-		Name      string `json:"name"`
-	}
-	for _, s := range signers {
-		ss := strings.Split(s, ":")
-		res = append(res, struct {
-			StudentID string `json:"studentId"`
-			Name      string `json:"name"`
-		}{StudentID: ss[0], Name: ss[1]})
-	}
-	return res
-}
-
-func toActDraft(r *req.CreateActDraftReq, studentId string) *model.ActivityDraft {
-	var ad model.ActivityDraft
-	ad.Bid = tools.GenUUID()
-	ad.CreatedAt = time.Now()
-
-	ad.StudentID = studentId
-	ad.Title = r.Title
-	ad.Introduce = r.Introduce
-	ad.ShowImg = tools.SliceToString(r.ShowImg)
-
-	ad.Position = r.LabelForm.Position
-	ad.HolderType = r.LabelForm.HolderType
-	ad.Type = r.LabelForm.Type
-	ad.IfRegister = r.LabelForm.IfRegister
-	ad.RegisterMethod = r.LabelForm.RegisterMethod
-	ad.StartTime = r.LabelForm.StartTime
-	ad.EndTime = r.LabelForm.EndTime
-	ad.Signer = tools.SliceToString(joinSigners(r.LabelForm.Signer))
-	ad.ActiveForm = r.LabelForm.ActiveForm
-
-	return &ad
-}
-
-func (as *ActivityService) toCreateResp(c context.Context, act any) resp.CreateActivityResp {
-	var res resp.CreateActivityResp
-
-	switch act.(type) {
-	case *model.Activity:
-		act := act.(*model.Activity)
-		user := as.ud.FindUserByID(c, act.StudentID)
-		res.Title = act.Title
-		res.Introduce = act.Introduce
-		res.ShowImg = tools.StringToSlice(act.ShowImg)
-		res.Type = act.Type
-		res.Bid = act.Bid
-		res.ActiveForm = act.ActiveForm
-		res.Position = act.Position
-		res.IfRegister = act.IfRegister
-		res.Signer = separateSigners(tools.StringToSlice(act.Signer))
-		res.IsChecking = act.IsChecking
-		res.UserInfo.School = user.School
-		res.UserInfo.Username = user.Name
-		res.UserInfo.Avatar = user.Avatar
-		res.UserInfo.StudentID = user.StudentID
-		return res
-
-	case *model.ActivityDraft:
-		ad := act.(*model.ActivityDraft)
-		user := as.ud.FindUserByID(c, ad.StudentID)
-		res.Title = ad.Title
-		res.Introduce = ad.Introduce
-		res.ShowImg = tools.StringToSlice(ad.ShowImg)
-		res.Type = ad.Type
-		res.Bid = ad.Bid
-		res.Position = ad.Position
-		res.IfRegister = ad.IfRegister
-		res.UserInfo.School = user.School
-		res.UserInfo.Username = user.Name
-		res.UserInfo.Avatar = user.Avatar
-		res.ActiveForm = ad.ActiveForm
-		res.Signer = separateSigners(tools.StringToSlice(ad.Signer))
-		res.UserInfo.StudentID = user.StudentID
-		return res
-
-	case model.ActivityDraft:
-		ad := act.(model.ActivityDraft)
-		user := as.ud.FindUserByID(c, ad.StudentID)
-		res.Title = ad.Title
-		res.Introduce = ad.Introduce
-		res.ShowImg = tools.StringToSlice(ad.ShowImg)
-		res.Type = ad.Type
-		res.Position = ad.Position
-		res.IfRegister = ad.IfRegister
-		res.UserInfo.School = user.School
-		res.UserInfo.Username = user.Name
-		res.UserInfo.Avatar = user.Avatar
-		res.UserInfo.StudentID = user.StudentID
-		res.Signer = separateSigners(tools.StringToSlice(ad.Signer))
-		return res
-	default:
-		return res
+	return model.ActivityDetail{
+		Activity: *act,
+		Author: model.UserBrief{
+			StudentID: author.StudentID,
+			Name:      author.Name,
+			Avatar:    author.Avatar,
+			School:    author.School,
+		},
+		IsLike:    strings.Contains(searcher.LikeAct, act.Bid),
+		IsCollect: strings.Contains(searcher.CollectAct, act.Bid),
 	}
 }

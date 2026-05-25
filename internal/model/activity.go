@@ -44,3 +44,22 @@ type ActivityDraft struct {
 	ActiveForm     string `gorm:"type:varchar(255);column:active_form"`
 	Signer         string `gorm:"type:text;column:signer"`
 }
+
+type Signer struct {
+	StudentID string
+	Name      string
+}
+
+type UserBrief struct {
+	StudentID string
+	Name      string
+	Avatar    string
+	School    string
+}
+
+type ActivityDetail struct {
+	Activity  Activity
+	Author    UserBrief
+	IsLike    bool
+	IsCollect bool
+}
