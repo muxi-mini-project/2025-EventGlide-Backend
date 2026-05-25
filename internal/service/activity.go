@@ -41,7 +41,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 			return err
 		}
 		f := model.Feed{
-			StudentId: studentID,
+			StudentID: studentID,
 			TargetBid: act.Bid,
 			Object:    "activity",
 			Action:    "invitation",

@@ -27,3 +27,10 @@ type PostDraft struct {
 	Introduce string `gorm:"type: text;comment:帖子描述;column:introduce"`
 	ShowImg   string `gorm:"type: text;comment:图片链接;column:show_img"`
 }
+
+type PostDetail struct {
+	Post      Post
+	Author    UserBrief
+	IsLike    bool
+	IsCollect bool
+}

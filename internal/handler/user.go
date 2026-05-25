@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -60,17 +61,7 @@ func (uh *UserHandler) Login(ctx *gin.Context, req_ req.LoginReq) (resp.Resp, er
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	res := resp.LoginResp{
-		Id:       user.Id,
-		Sid:      user.StudentID,
-		Username: user.Name,
-		Avatar:   user.Avatar,
-		College:  user.College,
-		School:   user.School,
-		Token:    token,
-	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToLoginResp(user, token))
 }
 
 // @Tags User
@@ -84,7 +75,6 @@ func (uh *UserHandler) Logout(ctx *gin.Context) (resp.Resp, error) {
 	if err := uh.us.Logout(ctx, token); err != nil {
 		return ginx.ReturnError(err)
 	}
-
 	return ginx.ReturnSuccess(nil)
 }
 
@@ -96,21 +86,11 @@ func (uh *UserHandler) Logout(ctx *gin.Context) (resp.Resp, error) {
 // @Success 200 {object} resp.Resp{data=resp.UserInfoResp}
 // @Router /user/info/{id} [get]
 func (uh *UserHandler) GetUserInfo(ctx *gin.Context, req_ req.GetUserInfoReq) (resp.Resp, error) {
-	res, err := uh.us.GetUserInfo(ctx, req_.Id)
+	user, err := uh.us.GetUserInfo(ctx, req_.Id)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	resp := resp.UserInfoResp{
-		College:  res.College,
-		Id:       res.Id,
-		Sid:      res.StudentID,
-		Username: res.Name,
-		Avatar:   res.Avatar,
-		School:   res.School,
-	}
-
-	return ginx.ReturnSuccess(resp)
+	return ginx.ReturnSuccess(converter.ToUserInfoResp(user))
 }
 
 // @Tags User
@@ -125,7 +105,6 @@ func (uh *UserHandler) UpdateAvatar(ctx *gin.Context, req_ req.UserAvatarReq, cl
 	if err := uh.us.UpdateAvatar(ctx, req_, claims.Subject); err != nil {
 		return ginx.ReturnError(err)
 	}
-
 	return ginx.ReturnSuccess(nil)
 }
 
@@ -140,7 +119,6 @@ func (uh *UserHandler) UpdateUsername(ctx *gin.Context, req_ req.UpdateNameReq, 
 	if err := uh.us.UpdateUsername(ctx, claims.Subject, req_.Name); err != nil {
 		return ginx.ReturnError(err)
 	}
-
 	return ginx.ReturnSuccess(nil)
 }
 
@@ -149,15 +127,14 @@ func (uh *UserHandler) UpdateUsername(ctx *gin.Context, req_ req.UpdateNameReq, 
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param ureq body req.UserSearchReq true "搜索请求"
-// @Success 200 {object} resp.Resp{data=[]model.Activity}
+// @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
 // @Router /user/search/act [post]
 func (uh *UserHandler) SearchUserAct(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	acts, err := uh.us.SearchUserAct(ctx, claims.Subject, req_.Keyword)
+	details, err := uh.us.SearchUserAct(ctx, claims.Subject, req_.Keyword)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(acts)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags User
@@ -165,15 +142,14 @@ func (uh *UserHandler) SearchUserAct(ctx *gin.Context, req_ req.UserSearchReq, c
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param ureq body req.UserSearchReq true "搜索请求"
-// @Success 200 {object} resp.Resp{data=[]model.Post}
+// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /user/search/post [post]
 func (uh *UserHandler) SearchUserPost(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := uh.us.SearchUserPost(ctx, claims.Subject, req_.Keyword)
+	details, err := uh.us.SearchUserPost(ctx, claims.Subject, req_.Keyword)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(posts)
+	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
 // @Tags User
@@ -183,8 +159,8 @@ func (uh *UserHandler) SearchUserPost(ctx *gin.Context, req_ req.UserSearchReq, 
 // @Success 200 {object} resp.Resp{data=resp.ImgBedResp}
 // @Router /user/token/qiniu [get]
 func (uh *UserHandler) GenQiniuToken(ctx *gin.Context) (resp.Resp, error) {
-	res := uh.us.GenQINIUToken(ctx)
-	return ginx.ReturnSuccess(res)
+	token, domain := uh.us.GenQINIUToken(ctx)
+	return ginx.ReturnSuccess(converter.ToImgBedResp(token, domain))
 }
 
 // @Tags User
@@ -195,12 +171,11 @@ func (uh *UserHandler) GenQiniuToken(ctx *gin.Context) (resp.Resp, error) {
 // @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
 // @Router /user/collect/act [post]
 func (uh *UserHandler) LoadCollectAct(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := uh.us.LoadCollectAct(ctx, claims.Subject)
+	details, err := uh.us.LoadCollectAct(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags User
@@ -211,12 +186,11 @@ func (uh *UserHandler) LoadCollectAct(ctx *gin.Context, claims jwt.RegisteredCla
 // @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /user/collect/post [post]
 func (uh *UserHandler) LoadCollectPost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := uh.us.LoadCollectPost(ctx, claims.Subject)
+	details, err := uh.us.LoadCollectPost(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
 // @Tags User
@@ -227,12 +201,11 @@ func (uh *UserHandler) LoadCollectPost(ctx *gin.Context, claims jwt.RegisteredCl
 // @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /user/like/post [post]
 func (uh *UserHandler) LoadLikePost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := uh.us.LoadLikePost(ctx, claims.Subject)
+	details, err := uh.us.LoadLikePost(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
 // @Tags User
@@ -243,12 +216,11 @@ func (uh *UserHandler) LoadLikePost(ctx *gin.Context, claims jwt.RegisteredClaim
 // @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
 // @Router /user/like/act [post]
 func (uh *UserHandler) LoadLikeAct(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := uh.us.LoadLikeAct(ctx, claims.Subject)
+	details, err := uh.us.LoadLikeAct(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags User
@@ -258,10 +230,9 @@ func (uh *UserHandler) LoadLikeAct(ctx *gin.Context, claims jwt.RegisteredClaims
 // @Success 200 {object} resp.Resp{data=resp.CheckingResp}
 // @Router /user/checking [get]
 func (uh *UserHandler) Checking(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := uh.us.GetChecking(ctx, claims.Subject)
+	acts, posts, err := uh.us.GetChecking(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToCheckingResp(acts, posts))
 }

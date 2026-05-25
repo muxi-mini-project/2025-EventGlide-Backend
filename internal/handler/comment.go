@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -45,12 +46,13 @@ func (ch *CommentHandler) RegisterCommentHandler(e *gin.Engine, handlerFunc gin.
 // @Success 200 {object} resp.Resp{data=resp.CommentResp}
 // @Router /comment/create [post]
 func (ch *CommentHandler) CreateComment(ctx *gin.Context, req_ req.CreateCommentReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ch.cs.CreateComment(ctx, req_, claims.Subject)
+	cmt := converter.CommentFromReq(req_, claims.Subject)
+	created, err := ch.cs.CreateComment(ctx, cmt, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	detail := ch.cs.EnrichComment(ctx, created, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToCommentResp(detail))
 }
 
 // @Tags Comment
@@ -61,12 +63,13 @@ func (ch *CommentHandler) CreateComment(ctx *gin.Context, req_ req.CreateComment
 // @Success 200 {object} resp.Resp{data=resp.ReplyResp}
 // @Router /comment/answer [post]
 func (ch *CommentHandler) AnswerComment(ctx *gin.Context, req_ req.CreateCommentReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ch.cs.AnswerComment(ctx, req_, claims.Subject)
+	cmt := converter.CommentFromReq(req_, claims.Subject)
+	created, err := ch.cs.AnswerComment(ctx, cmt, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	detail := ch.cs.EnrichReply(ctx, created, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToReplyResp(detail))
 }
 
 // @Tags Comment
@@ -81,7 +84,6 @@ func (ch *CommentHandler) DeleteComment(ctx *gin.Context, req_ req.DeleteComment
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
 	return ginx.ReturnSuccess(nil)
 }
 
@@ -93,10 +95,10 @@ func (ch *CommentHandler) DeleteComment(ctx *gin.Context, req_ req.DeleteComment
 // @Success 200 {object} resp.Resp{data=[]resp.CommentResp}
 // @Router /comment/load/{id} [get]
 func (ch *CommentHandler) LoadComments(ctx *gin.Context, req_ req.LoadCommentsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ch.cs.LoadComments(ctx, req_.Id, claims.Subject)
+	cmts, err := ch.cs.LoadComments(ctx, req_.Id)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	details := ch.cs.EnrichComments(ctx, cmts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToCommentResps(details))
 }

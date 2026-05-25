@@ -191,7 +191,7 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.Feed
 	}
 	var res []resp.FeedLikeResp
 	for _, v := range likes {
-		user, err := fs.ud.GetUserInfo(ctx, v.StudentId)
+		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get like feed Failed", zap.Error(err))
 			return nil, err
@@ -229,7 +229,7 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.F
 	}
 	var res []resp.FeedCollectResp
 	for _, v := range collects {
-		user, err := fs.ud.GetUserInfo(ctx, v.StudentId)
+		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get collect feed Failed", zap.Error(err))
 			return nil, err
@@ -266,7 +266,7 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.F
 	}
 	var res []resp.FeedCommentResp
 	for _, v := range comments {
-		user, err := fs.ud.GetUserInfo(ctx, v.StudentId)
+		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get comment feed Failed", zap.Error(err))
 			return nil, err
@@ -304,7 +304,7 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAt
 	}
 	var res []resp.FeedAtResp
 	for _, v := range ats {
-		user, err := fs.ud.GetUserInfo(ctx, v.StudentId)
+		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get at feed Failed", zap.Error(err))
 			return nil, err

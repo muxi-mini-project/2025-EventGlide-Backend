@@ -120,7 +120,7 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 	}
 }
 
-func (is *InteractionService) Discollect(c *gin.Context, r *req.InteractionReq, sid string) error {
+func (is *InteractionService) DisCollect(c *gin.Context, r *req.InteractionReq, sid string) error {
 	switch r.Subject {
 	case "activity":
 		return is.id.DiscollectActivity(c, sid, r.TargetID)
@@ -135,7 +135,7 @@ func (is *InteractionService) toFeed(r *req.InteractionReq, action string, sid s
 	f := model.Feed{
 		TargetBid: r.TargetID,
 		Object:    r.Subject,
-		StudentId: sid,
+		StudentID: sid,
 		Action:    action,
 		Receiver:  recv,
 	}

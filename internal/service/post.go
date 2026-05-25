@@ -3,27 +3,27 @@ package service
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
-	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
 
 var _ PostServiceHdl = &PostService{}
 
 type PostServiceHdl interface {
-	GetAllPost(context.Context, string) ([]resp.ListPostsResp, error)
-	CreatePost(context.Context, *req.CreatePostReq, string) (resp.CreatePostResp, error)
-	FindPostByName(context.Context, string, string) ([]resp.ListPostsResp, error)
-	DeletePost(context.Context, *req.DeletePostReq, string) error
-	CreateDraft(context.Context, *req.CreatePostReq, string) (resp.CreatePostResp, error)
-	LoadDraft(context.Context, string) (resp.LoadPostDraftResp, error)
-	FindPostByOwnerID(context.Context, string) ([]resp.ListPostsResp, error)
-	FindPostByBid(context.Context, string, string) (resp.ListPostsResp, error)
+	GetAllPost(context.Context) ([]model.Post, error)
+	CreatePost(context.Context, *model.Post, *req.AuditWrapper) error
+	FindPostByName(context.Context, string) ([]model.Post, error)
+	DeletePost(context.Context, string, string) error
+	CreateDraft(context.Context, *model.PostDraft) error
+	LoadDraft(context.Context, string) (model.PostDraft, error)
+	FindPostByOwnerID(context.Context, string) ([]model.Post, error)
+	FindPostByBid(context.Context, string) (model.Post, error)
+	EnrichForSearcher(context.Context, []model.Post, string) []model.PostDetail
+	EnrichOneForSearcher(context.Context, *model.Post, string) model.PostDetail
+	AuthorBrief(context.Context, string) model.UserBrief
 }
 
 type PostService struct {
@@ -42,208 +42,92 @@ func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, l *zap.Logger, aud Au
 	}
 }
 
-func (ps *PostService) GetAllPost(c context.Context, studentId string) ([]resp.ListPostsResp, error) {
-	posts, err := ps.pdh.GetAllPost(c)
-	if err != nil {
-		return nil, err
-	}
-	res := ps.ToListResp(c, posts, studentId)
-	return res, nil
+func (ps *PostService) GetAllPost(c context.Context) ([]model.Post, error) {
+	return ps.pdh.GetAllPost(c)
 }
 
-func (ps *PostService) CreatePost(c context.Context, r *req.CreatePostReq, studentId string) (resp.CreatePostResp, error) {
-	var (
-		err  error
-		form *model.AuditorForm
-	)
-	post := toPost(r, studentId)
-
-	form, err = ps.aud.CreateAuditorForm(c, post.Bid, "", SubjectPost)
+func (ps *PostService) CreatePost(c context.Context, post *model.Post, aw *req.AuditWrapper) error {
+	form, err := ps.aud.CreateAuditorForm(c, post.Bid, "", SubjectPost)
 	if err != nil {
 		ps.l.Error("Failed to create auditor form", zap.Error(err), zap.String("bid", post.Bid))
-		return resp.CreatePostResp{}, err
+		return err
 	}
 
-	aw := &req.AuditWrapper{
-		Subject:   SubjectPost,
-		StudentId: studentId,
-		CpostReq:  r,
-	}
 	err = ps.aud.UploadForm(c, aw, form.Id)
 	if err != nil {
 		ps.l.Error("Failed to upload form", zap.Error(err), zap.String("bid", post.Bid), zap.Uint("formID", form.Id))
-		return resp.CreatePostResp{}, err
+		return err
 	}
 
 	err = ps.pdh.CreatePost(c, post)
-	if err != nil {
-		return resp.CreatePostResp{}, err
-	}
-
-	return ps.toCreateResp(c, post), nil
-}
-
-func (ps *PostService) FindPostByName(c context.Context, name string, studentId string) ([]resp.ListPostsResp, error) {
-	posts, err := ps.pdh.FindPostByName(c, name)
-	if err != nil {
-		return nil, err
-	}
-	res := ps.ToListResp(c, posts, studentId)
-	return res, nil
-}
-func (ps *PostService) DeletePost(c context.Context, post *req.DeletePostReq, studentId string) error {
-	err := ps.pdh.DeletePost(c, &model.Post{
-		Bid:       post.TargetID,
-		StudentID: studentId,
-	})
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (ps *PostService) CreateDraft(c context.Context, r *req.CreatePostReq, studentId string) (resp.CreatePostResp, error) {
-	draft := toDraft(r, studentId)
-	err := ps.pdh.CreateDraft(c, draft)
-	if err != nil {
-		return resp.CreatePostResp{}, err
-	}
-	return ps.toCreateResp(c, draft), nil
+func (ps *PostService) FindPostByName(c context.Context, name string) ([]model.Post, error) {
+	return ps.pdh.FindPostByName(c, name)
 }
 
-func (ps *PostService) LoadDraft(c context.Context, sid string) (resp.LoadPostDraftResp, error) {
-	draft, err := ps.pdh.LoadDraft(c, sid)
-	if err != nil {
-		return resp.LoadPostDraftResp{}, err
-	}
-
-	res := resp.LoadPostDraftResp{
-		Bid:       draft.Bid,
-		Title:     draft.Title,
-		Introduce: draft.Introduce,
-		ShowImg:   tools.StringToSlice(draft.ShowImg),
-		StudentID: draft.StudentID,
-		CreatedAt: tools.ParseTime(draft.CreatedAt),
-	}
-
-	return res, nil
+func (ps *PostService) DeletePost(c context.Context, bid, studentID string) error {
+	return ps.pdh.DeletePost(c, &model.Post{
+		Bid:       bid,
+		StudentID: studentID,
+	})
 }
 
-func (ps *PostService) FindPostByOwnerID(c context.Context, studentId string) ([]resp.ListPostsResp, error) {
-	posts, err := ps.pdh.FindPostByOwnerID(c, studentId)
-	if err != nil {
-		return nil, err
-	}
-	res := ps.ToListResp(c, posts, studentId)
-	return res, nil
+func (ps *PostService) CreateDraft(c context.Context, draft *model.PostDraft) error {
+	return ps.pdh.CreateDraft(c, draft)
 }
 
-func (ps *PostService) FindPostByBid(c context.Context, bid string, studentId string) (resp.ListPostsResp, error) {
-	post, err := ps.pdh.FindPostByBid(c, bid)
-	if err != nil {
-		return resp.ListPostsResp{}, err
-	}
-	res := ps.toListPostResp(c, post, studentId)
-	return res, nil
+func (ps *PostService) LoadDraft(c context.Context, sid string) (model.PostDraft, error) {
+	return ps.pdh.LoadDraft(c, sid)
 }
 
-func (ps *PostService) ToListResp(c context.Context, posts []model.Post, studentId string) []resp.ListPostsResp {
-	var res []resp.ListPostsResp
-	for _, post := range posts {
-		res = append(res, ps.toListPostResp(c, post, studentId))
-	}
-	return res
+func (ps *PostService) FindPostByOwnerID(c context.Context, studentID string) ([]model.Post, error) {
+	return ps.pdh.FindPostByOwnerID(c, studentID)
 }
 
-func (ps *PostService) toListPostResp(c context.Context, post model.Post, studentId string) resp.ListPostsResp {
-	user := ps.ud.FindUserByID(c, post.StudentID)
-	var res resp.ListPostsResp
-	// TODO 类型断言error判断
-	searcher := ps.ud.FindUserByID(c, studentId)
-	if strings.Contains(searcher.CollectPost, post.Bid) {
-		res.IsCollect = "true"
-	} else {
-		res.IsCollect = "false"
-	}
-	if strings.Contains(searcher.LikePost, post.Bid) {
-		res.IsLike = "true"
-	} else {
-		res.IsLike = "false"
-	}
-	res.UserInfo.School = user.School
-	res.UserInfo.Username = user.Name
-	res.UserInfo.Avatar = user.Avatar
-	res.UserInfo.StudentID = user.StudentID
-	res.Bid = post.Bid
-	res.PublishTime = tools.ParseTime(post.CreatedAt)
-
-	res.Title = post.Title
-	res.Introduce = post.Introduce
-	res.IsChecking = post.IsChecking
-	res.ShowImg = tools.StringToSlice(post.ShowImg)
-	res.LikeNum = post.LikeNum
-	res.CommentNum = post.CommentNum
-	res.CollectNum = post.CollectNum
-	return res
+func (ps *PostService) FindPostByBid(c context.Context, bid string) (model.Post, error) {
+	return ps.pdh.FindPostByBid(c, bid)
 }
 
-func toPost(r *req.CreatePostReq, studentId string) *model.Post {
-	return &model.Post{
-		Bid:       tools.GenUUID(),
-		CreatedAt: time.Now(),
+func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, viewerID string) []model.PostDetail {
+	details := make([]model.PostDetail, 0, len(posts))
+	for i := range posts {
+		details = append(details, ps.enrichOne(c, &posts[i], viewerID))
+	}
+	return details
+}
 
-		StudentID: studentId,
-		Title:     r.Title,
-		Introduce: r.Introduce,
-		ShowImg:   tools.SliceToString(r.ShowImg),
+func (ps *PostService) EnrichOneForSearcher(c context.Context, post *model.Post, viewerID string) model.PostDetail {
+	return ps.enrichOne(c, post, viewerID)
+}
+
+func (ps *PostService) AuthorBrief(c context.Context, studentID string) model.UserBrief {
+	user := ps.ud.FindUserByID(c, studentID)
+	return model.UserBrief{
+		StudentID: user.StudentID,
+		Name:      user.Name,
+		Avatar:    user.Avatar,
+		School:    user.School,
 	}
 }
 
-func toDraft(r *req.CreatePostReq, studentId string) *model.PostDraft {
-	return &model.PostDraft{
-		Bid:       tools.GenUUID(),
-		CreatedAt: time.Now(),
-		StudentID: studentId,
-		Title:     r.Title,
-		Introduce: r.Introduce,
-		ShowImg:   tools.SliceToString(r.ShowImg),
-	}
-}
+func (ps *PostService) enrichOne(c context.Context, post *model.Post, viewerID string) model.PostDetail {
+	searcher := ps.ud.FindUserByID(c, viewerID)
+	author := ps.ud.FindUserByID(c, post.StudentID)
 
-func (ps *PostService) toCreateResp(c context.Context, p any) resp.CreatePostResp {
-	switch p.(type) {
-	case *model.Post:
-		post := p.(*model.Post)
-		var res resp.CreatePostResp
-		user := ps.ud.FindUserByID(c, post.StudentID)
-		res.UserInfo.School = user.School
-		res.UserInfo.Username = user.Name
-		res.UserInfo.Avatar = user.Avatar
-		res.StudentID = user.StudentID
-		res.UserInfo.StudentID = user.StudentID
-		res.Title = post.Title
-		res.Bid = post.Bid
-		res.IsChecking = post.IsChecking
-		res.Introduce = post.Introduce
-		res.ShowImg = tools.StringToSlice(post.ShowImg)
-		res.PublishTime = tools.ParseTime(post.CreatedAt)
-		return res
-	case *model.PostDraft:
-		draft := p.(*model.PostDraft)
-		var res resp.CreatePostResp
-		user := ps.ud.FindUserByID(c, draft.StudentID)
-		res.UserInfo.School = user.School
-		res.UserInfo.Username = user.Name
-		res.UserInfo.Avatar = user.Avatar
-		res.UserInfo.StudentID = user.StudentID
-		res.Title = draft.Title
-		res.Introduce = draft.Introduce
-		res.ShowImg = tools.StringToSlice(draft.ShowImg)
-		res.PublishTime = tools.ParseTime(draft.CreatedAt)
-		res.Bid = draft.Bid
-		return res
-
-	default:
-		return resp.CreatePostResp{}
+	return model.PostDetail{
+		Post: *post,
+		Author: model.UserBrief{
+			StudentID: author.StudentID,
+			Name:      author.Name,
+			Avatar:    author.Avatar,
+			School:    author.School,
+		},
+		IsLike:    strings.Contains(searcher.LikePost, post.Bid),
+		IsCollect: strings.Contains(searcher.CollectPost, post.Bid),
 	}
 }
