@@ -11,26 +11,13 @@ type CreateActivityResp struct {
 	IsChecking string   `json:"isChecking"`
 	ActiveForm string   `json:"activeForm"`
 	Signer     []Signer `json:"signer"`
-	UserInfo   struct {
-		StudentID string `json:"studentId"`
-		Avatar    string `json:"avatar"`
-		Username  string `json:"username"`
-		School    string `json:"school"`
-	} `json:"userInfo"`
+	UserInfo   UserInfo `json:"userInfo"`
 }
 
 type ListActivitiesResp struct {
-	UserInfo struct {
-		StudentID string `json:"studentId"`
-		Avatar    string `json:"avatar"`
-		Username  string `json:"username"`
-		School    string `json:"school"`
-	} `json:"userInfo"`
+	UserInfo UserInfo `json:"userInfo"`
 
-	DetailTime struct {
-		StartTime string `json:"startTime"`
-		EndTime   string `json:"endTime"`
-	} `json:"detailTime"`
+	DetailTime DetailTime `json:"detailTime"`
 
 	Title      string   `json:"title"`
 	Bid        string   `json:"bid"`
@@ -55,21 +42,28 @@ type LoadActivitiesDraftResp struct {
 	Introduce string   `json:"introduce"`
 	ShowImg   []string `json:"showImg"`
 
-	LabelForm struct {
-		HolderType     string `json:"holderType"`
-		Position       string `json:"position"`
-		IfRegister     string `json:"ifRegister"`
-		RegisterMethod string `json:"registerMethod"`
-		StartTime      string `json:"startTime"`
-		ActiveForm     string `json:"activeForm"`
-		EndTime        string `json:"endTime"`
-		Type           string `json:"type"`
-
-		Signer []Signer `json:"signer" validate:"required_if=HolderType 个人,unique=StudentID,dive"`
-	} `json:"labelform"`
+	LabelForm LabelForm `json:"labelform"`
 }
 
 type Signer struct {
 	StudentID string `json:"studentId" validate:"len=10"`
 	Name      string `json:"name"`
+}
+
+type DetailTime struct {
+	StartTime string `json:"startTime"`
+	EndTime   string `json:"endTime"`
+}
+
+type LabelForm struct {
+	HolderType     string `json:"holderType"`
+	Position       string `json:"position"`
+	IfRegister     string `json:"ifRegister"`
+	RegisterMethod string `json:"registerMethod"`
+	StartTime      string `json:"startTime"`
+	ActiveForm     string `json:"activeForm"`
+	EndTime        string `json:"endTime"`
+	Type           string `json:"type"`
+
+	Signer []Signer `json:"signer" validate:"required_if=HolderType 个人,unique=StudentID,dive"`
 }

@@ -14,3 +14,93 @@ type Feed struct {
 	Action    string    `gorm:"column:action; type:varchar(30); not null; comment:行为; uniqueIndex:idx_feed_business_unique"`
 	Status    string    `gorm:"column:status; type:varchar(20); not null; comment:状态; default:'未读'"`
 }
+
+type BriefFeedDetail struct {
+	LikeAndCollect int
+	CommentAndAt   int
+	Total          int
+}
+
+type FeedDetail struct {
+	Likes       []FeedLikeDetail
+	Ats         []FeedAtDetail
+	Comments    []FeedCommentDetail
+	Collects    []FeedCollectDetail
+	Invitations []FeedInvitationDetail
+}
+
+type UserInfo struct {
+	StudentID string
+	Avatar    string
+	Username  string
+}
+
+type FeedLikeDetail struct {
+	Userinfo UserInfo
+
+	Id          int64
+	Message     string
+	PublishedAt string
+	TargetBid   string
+	RootID      string
+	RootType    string
+	Subject     string
+	FirstPic    string
+	Status      string
+}
+
+type FeedCommentDetail struct {
+	Userinfo UserInfo
+
+	Id          int64
+	Message     string
+	PublishedAt string
+	TargetBid   string
+	RootID      string
+	RootType    string
+	Subject     string
+	FirstPic    string
+	Status      string
+}
+
+type FeedAtDetail struct {
+	Userinfo UserInfo
+
+	Id          int64
+	Message     string
+	PublishedAt string
+	TargetBid   string
+	RootID      string
+	RootType    string
+	Subject     string
+	FirstPic    string
+	Status      string
+}
+
+type FeedCollectDetail struct {
+	Userinfo UserInfo
+
+	Id          int64
+	Message     string
+	PublishedAt string
+	FirstPic    string
+	TargetBid   string
+	RootID      string
+	RootType    string
+	Subject     string
+	Status      string
+}
+
+type FeedInvitationDetail struct {
+	Userinfo UserInfo
+
+	Id          int64
+	Message     string
+	PublishedAt string
+	TargetBid   string
+	RootID      string
+	RootType    string
+	Subject     string
+	FirstPic    string
+	Status      string
+}

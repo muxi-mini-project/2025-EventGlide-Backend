@@ -14,13 +14,14 @@ type FeedResp struct {
 	Invitations []FeedInvitationResp `json:"invitations,omitempty"`
 }
 
-type UserInfo struct {
+type FeedUserInfo struct {
 	StudentID string `json:"studentId"`
 	Avatar    string `json:"avatar"`
 	Username  string `json:"username"`
 }
+
 type FeedLikeResp struct {
-	Userinfo UserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"userInfo"`
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
@@ -34,7 +35,7 @@ type FeedLikeResp struct {
 }
 
 type FeedCommentResp struct {
-	Userinfo UserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"userInfo"`
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
@@ -48,7 +49,7 @@ type FeedCommentResp struct {
 }
 
 type FeedAtResp struct {
-	Userinfo UserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"userInfo"`
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
@@ -62,7 +63,7 @@ type FeedAtResp struct {
 }
 
 type FeedCollectResp struct {
-	Userinfo UserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"userInfo"`
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`
@@ -76,7 +77,7 @@ type FeedCollectResp struct {
 }
 
 type FeedInvitationResp struct {
-	Userinfo UserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"userInfo"`
 
 	Id          int64  `json:"id"`
 	Message     string `json:"message"`

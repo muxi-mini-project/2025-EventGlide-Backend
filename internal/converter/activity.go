@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
+	"github.com/muxi-Infra/auditor-Backend/sdk/v2/dto"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
@@ -217,4 +219,51 @@ func SignersToResp(signers []model.Signer) []resp.Signer {
 		out[i] = resp.Signer{StudentID: s.StudentID, Name: s.Name}
 	}
 	return out
+}
+
+func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id uint, hookURL string) request.UploadReq {
+	now := time.Now().Unix()
+	res := request.UploadReq{
+		HookUrl:    &hookURL,
+		Id:         &id,
+		Tags:       &[]string{"校灵通"},
+		PublicTime: &now,
+	}
+
+	switch aw.Subject {
+	case model.SubjectActivity:
+		author := extractAuthors(aw.CactReq.LabelForm.Signer)
+		res.Author = &author
+		*res.Tags = append(*res.Tags, aw.CactReq.LabelForm.Type, "活动")
+
+		ctt := dto.NewContents(
+			dto.WithTopicText(aw.CactReq.Title, aw.CactReq.Introduce),
+			dto.WithTopicPictures(aw.CactReq.ShowImg),
+		)
+		res.Content = ctt
+
+		if tools.IfRegisterMapper(aw.CactReq.LabelForm.IfRegister) {
+			*res.Tags = append(*res.Tags, "含报名表需要审核")
+			res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, aw.CactReq.LabelForm.ActiveForm)
+		}
+	case model.SubjectPost:
+		res.Author = &aw.StudentId
+		*res.Tags = append(*res.Tags, "帖子")
+
+		ctt := dto.NewContents(
+			dto.WithTopicText(aw.CpostReq.Title, aw.CpostReq.Introduce),
+			dto.WithTopicPictures(aw.CpostReq.ShowImg),
+		)
+		res.Content = ctt
+	}
+
+	return res
+}
+
+func extractAuthors(signers []req.Signer) string {
+	builder := strings.Builder{}
+	for _, s := range signers {
+		builder.WriteString(s.Name + "-")
+	}
+	return builder.String()
 }

@@ -18,3 +18,10 @@ type UserInfoResp struct {
 	Avatar   string `json:"avatar"`
 	School   string `json:"school"`
 }
+
+type UserInfo struct {
+	StudentID string `json:"studentId"`
+	Avatar    string `json:"avatar"`
+	Username  string `json:"username"`
+	School    string `json:"school"`
+}

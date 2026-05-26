@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
@@ -22,13 +21,13 @@ import (
 var _ FeedServiceHdl = &FeedService{}
 
 type FeedServiceHdl interface {
-	GetTotalCnt(ctx context.Context, sid string) (resp.BriefFeedResp, error)
-	GetFeedList(ctx context.Context, sid string) (resp.FeedResp, error)
-	GetLikeFeed(ctx context.Context, sid string) ([]resp.FeedLikeResp, error)
-	GetCollectFeed(ctx context.Context, sid string) ([]resp.FeedCollectResp, error)
-	GetCommentFeed(ctx context.Context, sid string) ([]resp.FeedCommentResp, error)
-	GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAtResp, error)
-	GetAuditorFeedList(ctx context.Context, sid string) (resp.FeedResp, error)
+	GetTotalCnt(ctx context.Context, sid string) (model.BriefFeedDetail, error)
+	GetFeedList(ctx context.Context, sid string) (model.FeedDetail, error)
+	GetLikeFeed(ctx context.Context, sid string) ([]model.FeedLikeDetail, error)
+	GetCollectFeed(ctx context.Context, sid string) ([]model.FeedCollectDetail, error)
+	GetCommentFeed(ctx context.Context, sid string) ([]model.FeedCommentDetail, error)
+	GetAtFeed(ctx context.Context, sid string) ([]model.FeedAtDetail, error)
+	GetAuditorFeedList(ctx context.Context, sid string) (model.FeedDetail, error)
 }
 
 type FeedService struct {
@@ -62,14 +61,14 @@ func (fs *FeedService) ReadAllFeed(ctx context.Context, sid string) error {
 	return fs.fd.ReadAllFeed(ctx, sid)
 }
 
-func (fs *FeedService) GetTotalCnt(ctx context.Context, sid string) (resp.BriefFeedResp, error) {
+func (fs *FeedService) GetTotalCnt(ctx context.Context, sid string) (model.BriefFeedDetail, error) {
 
 	ints, err := fs.fd.GetTotalCnt(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get All Events Failed", zap.Error(err))
-		return resp.BriefFeedResp{}, err
+		return model.BriefFeedDetail{}, err
 	}
-	return resp.BriefFeedResp{
+	return model.BriefFeedDetail{
 		LikeAndCollect: ints[0],
 		CommentAndAt:   ints[1],
 		Total:          ints[2],
@@ -77,16 +76,16 @@ func (fs *FeedService) GetTotalCnt(ctx context.Context, sid string) (resp.BriefF
 
 }
 
-func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (resp.FeedResp, error) {
+func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (model.FeedDetail, error) {
 	l, err1 := fs.GetLikeFeed(ctx, sid)
 	c, err2 := fs.GetCollectFeed(ctx, sid)
 	cm, err3 := fs.GetCommentFeed(ctx, sid)
 	a, err4 := fs.GetAtFeed(ctx, sid)
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		fs.l.Error("Get Feed List Failed", zap.Error(err1), zap.Error(err2), zap.Error(err3), zap.Error(err4))
-		return resp.FeedResp{}, errors.New("get feed list error")
+		return model.FeedDetail{}, errors.New("get feed list error")
 	}
-	return resp.FeedResp{
+	return model.FeedDetail{
 		Likes:    l,
 		Ats:      a,
 		Comments: cm,
@@ -183,13 +182,13 @@ func (fs *FeedService) ConsumeFeedStream() {
 	}()
 }
 
-func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.FeedLikeResp, error) {
+func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.FeedLikeDetail, error) {
 	likes, err := fs.fd.GetLikeFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Like Feed List Failed", zap.Error(err))
 		return nil, err
 	}
-	var res []resp.FeedLikeResp
+	var res []model.FeedLikeDetail
 	for _, v := range likes {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
@@ -201,8 +200,8 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.Feed
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get like feed Failed", zap.Error(err))
 		}
-		res = append(res, resp.FeedLikeResp{
-			Userinfo: resp.UserInfo{
+		res = append(res, model.FeedLikeDetail{
+			Userinfo: model.UserInfo{
 				StudentID: user.StudentID,
 				Avatar:    user.Avatar,
 				Username:  user.Name,
@@ -221,13 +220,13 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]resp.Feed
 	return res, nil
 }
 
-func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.FeedCollectResp, error) {
+func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.FeedCollectDetail, error) {
 	collects, err := fs.fd.GetCollectFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Collect Feed List Failed", zap.Error(err))
 		return nil, err
 	}
-	var res []resp.FeedCollectResp
+	var res []model.FeedCollectDetail
 	for _, v := range collects {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
@@ -238,8 +237,8 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.F
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get collect feed Failed", zap.Error(err))
 		}
-		res = append(res, resp.FeedCollectResp{
-			Userinfo: resp.UserInfo{
+		res = append(res, model.FeedCollectDetail{
+			Userinfo: model.UserInfo{
 				StudentID: user.StudentID,
 				Avatar:    user.Avatar,
 				Username:  user.Name,
@@ -258,13 +257,13 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]resp.F
 	return res, nil
 }
 
-func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.FeedCommentResp, error) {
+func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.FeedCommentDetail, error) {
 	comments, err := fs.fd.GetCommentFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Comment Feed List Failed", zap.Error(err))
 		return nil, err
 	}
-	var res []resp.FeedCommentResp
+	var res []model.FeedCommentDetail
 	for _, v := range comments {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
@@ -276,8 +275,8 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.F
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get comment feed Failed", zap.Error(err))
 		}
-		res = append(res, resp.FeedCommentResp{
-			Userinfo: resp.UserInfo{
+		res = append(res, model.FeedCommentDetail{
+			Userinfo: model.UserInfo{
 				StudentID: user.StudentID,
 				Avatar:    user.Avatar,
 				Username:  user.Name,
@@ -296,13 +295,13 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]resp.F
 	return res, nil
 }
 
-func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAtResp, error) {
+func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedAtDetail, error) {
 	ats, err := fs.fd.GetAtFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get At Feed List Failed", zap.Error(err))
 		return nil, err
 	}
-	var res []resp.FeedAtResp
+	var res []model.FeedAtDetail
 	for _, v := range ats {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
@@ -314,8 +313,8 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAt
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get at feed Failed", zap.Error(err))
 		}
-		res = append(res, resp.FeedAtResp{
-			Userinfo: resp.UserInfo{
+		res = append(res, model.FeedAtDetail{
+			Userinfo: model.UserInfo{
 				StudentID: user.StudentID,
 				Avatar:    user.Avatar,
 				Username:  user.Name,
@@ -334,25 +333,25 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]resp.FeedAt
 	return res, nil
 }
 
-func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (resp.FeedResp, error) {
+func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (model.FeedDetail, error) {
 	invites, err := fs.fd.GetAuditorFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Auditor Feed List Failed", zap.Error(err))
-		return resp.FeedResp{}, err
+		return model.FeedDetail{}, err
 	}
-	var res []resp.FeedInvitationResp
+	var res []model.FeedInvitationDetail
 	for _, v := range invites {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentId)
 		if err != nil {
 			fs.l.Error("Get User Info when get auditor feed Failed", zap.Error(err))
-			return resp.FeedResp{}, err
+			return model.FeedDetail{}, err
 		}
 		pics, err := fs.fd.GetPictureFromObj(ctx, v.Bid, "activity")
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get auditor feed Failed", zap.Error(err))
 		}
-		res = append(res, resp.FeedInvitationResp{
-			Userinfo: resp.UserInfo{
+		res = append(res, model.FeedInvitationDetail{
+			Userinfo: model.UserInfo{
 				StudentID: user.StudentID,
 				Avatar:    user.Avatar,
 				Username:  user.Name,
@@ -369,7 +368,7 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (resp
 			FirstPic:    getFirstPic(pics),
 		})
 	}
-	return resp.FeedResp{Invitations: res}, nil
+	return model.FeedDetail{Invitations: res}, nil
 }
 
 func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (string, string) {

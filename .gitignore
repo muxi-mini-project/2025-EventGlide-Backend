@@ -10,3 +10,4 @@ docker-compose.yml
 .DS_Store
 /.env
 /data/configCache
+config/data

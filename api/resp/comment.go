@@ -3,11 +3,7 @@ package resp
 type CommentResp struct {
 	Bid string `json:"bid"`
 
-	Creator struct {
-		StudentID string `json:"studentId"`
-		Username  string `json:"username"`
-		Avatar    string `json:"avatar"`
-	} `json:"creator"`
+	Creator Creator `json:"creator"`
 
 	CommentedTime string `json:"commentedTime"`
 	CommentedPos  string `json:"commentedPos"`
@@ -24,11 +20,7 @@ type CommentResp struct {
 type ReplyResp struct {
 	Bid string `json:"bid"`
 
-	ReplyCreator struct {
-		StudentID string `json:"studentId"`
-		Username  string `json:"username"`
-		Avatar    string `json:"avatar"`
-	} `json:"replyCreator"`
+	ReplyCreator ReplyCreator `json:"replyCreator"`
 
 	ReplyContent string `json:"replyContent"`
 	ReplyTime    string `json:"replyTime"`
@@ -41,4 +33,16 @@ type ReplyResp struct {
 	IsLike   string `json:"isLike"`
 	LikeNum  int    `json:"likeNum"`
 	ReplyNum int    `json:"replyNum"`
+}
+
+type Creator struct {
+	StudentID string `json:"studentId"`
+	Username  string `json:"username"`
+	Avatar    string `json:"avatar"`
+}
+
+type ReplyCreator struct {
+	StudentID string `json:"studentId"`
+	Username  string `json:"username"`
+	Avatar    string `json:"avatar"`
 }
