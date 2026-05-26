@@ -38,6 +38,7 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 		post.POST("/delete", ginx.WrapRequestWithClaims(ph.DeletePost))
 		post.GET("/load", ginx.WrapWithClaims(ph.LoadDraft))
 		post.GET("/own", ginx.WrapWithClaims(ph.FindPostByOwnerID))
+		post.GET("/:id", ginx.WrapRequestWithClaims(ph.FindPostByBid))
 	}
 }
 
@@ -154,4 +155,13 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registered
 	}
 	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
+}
+
+func (ph *PostHandler) FindPostByBid(ctx *gin.Context, req_ req.FindPostByBidReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	posts, err := ph.ps.FindPostByBid(ctx, req_.Id)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	details := ph.ps.EnrichOneForSearcher(ctx, &posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListPostResp(details))
 }
