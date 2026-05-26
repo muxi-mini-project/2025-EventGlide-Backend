@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -53,12 +54,17 @@ func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.Handler
 // @Success 200 {object} resp.Resp{data=resp.CreateActivityResp}
 // @Router /act/create [post]
 func (ah *ActHandler) NewAct(ctx *gin.Context, req_ req.CreateActReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.NewAct(ctx, &req_, claims.Subject)
-	if err != nil {
+	act := converter.CreateActFromReq(&req_, claims.Subject)
+	aw := &req.AuditWrapper{
+		Subject:   service.SubjectActivity,
+		StudentId: claims.Subject,
+		CactReq:   &req_,
+	}
+	if err := ah.as.CreateActivity(ctx, act, converter.SignersFromReq(req_.LabelForm.Signer), claims.Subject, aw); err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	detail := ah.as.EnrichOneForSearcher(ctx, act, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToCreateActivityResp(detail))
 }
 
 // @Tags Activity
@@ -71,12 +77,12 @@ func (ah *ActHandler) NewAct(ctx *gin.Context, req_ req.CreateActReq, claims jwt
 // @Success 200 {object} resp.Resp{data=req.CreateActDraftReq}
 // @Router /act/draft [post]
 func (ah *ActHandler) NewDraft(ctx *gin.Context, req_ req.CreateActDraftReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.NewDraft(ctx, &req_, claims.Subject)
-	if err != nil {
+	draft := converter.CreateActDraftFromReq(&req_, claims.Subject)
+	if err := ah.as.CreateDraft(ctx, draft); err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	author := ah.as.AuthorBrief(ctx, draft.StudentID)
+	return ginx.ReturnSuccess(converter.ToCreateActivityRespFromDraft(*draft, author))
 }
 
 // @Tags Activity
@@ -91,8 +97,7 @@ func (ah *ActHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(ah.as.ToLoadDraftResp(draft))
+	return ginx.ReturnSuccess(converter.ToLoadDraftResp(draft))
 }
 
 // @Tags Activity
@@ -103,12 +108,12 @@ func (ah *ActHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (
 // @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
 // @Router /act/name [post]
 func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.FindActByName(ctx, req_.Name, claims.Subject)
+	acts, err := ah.as.FindActByName(ctx, req_.Name)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags Activity
@@ -119,12 +124,12 @@ func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq,
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/search [post]
 func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.FindActBySearches(ctx, &req_, claims.Subject)
+	acts, err := ah.as.FindActBySearches(ctx, &req_)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags Activity
@@ -135,12 +140,12 @@ func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq,
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/date [post]
 func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.FindActByDate(ctx, req_.Date, claims.Subject)
+	acts, err := ah.as.FindActByDate(ctx, req_.Date)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags Activity
@@ -150,12 +155,12 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/own [get]
 func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.FindActByOwnerID(ctx, claims.Subject)
+	acts, err := ah.as.FindActByOwnerID(ctx, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags Activity
@@ -165,12 +170,12 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, claims jwt.RegisteredCl
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/all [get]
 func (ah *ActHandler) ListAllActs(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.ListAllActs(ctx, claims.Subject)
+	acts, err := ah.as.ListAllActs(ctx)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
 // @Tags Activity
@@ -180,10 +185,10 @@ func (ah *ActHandler) ListAllActs(ctx *gin.Context, claims jwt.RegisteredClaims)
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/{id} [get]
 func (ah *ActHandler) FindActByBid(ctx *gin.Context, req_ req.FindActByBidReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ah.as.FindActByBid(ctx, req_.Id, claims.Subject)
+	act, err := ah.as.FindActByBid(ctx, req_.Id)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	detail := ah.as.EnrichOneForSearcher(ctx, &act, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListActivityResp(detail))
 }

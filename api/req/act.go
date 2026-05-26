@@ -13,21 +13,7 @@ type CreateActReq struct {
 	Introduce string   `json:"introduce" validate:"required"`
 	ShowImg   []string `json:"showImg"`
 
-	LabelForm struct {
-		HolderType     string `json:"holderType" validate:"required"`
-		Position       string `json:"position" validate:"required"`
-		IfRegister     string `json:"ifRegister" validate:"required,oneof=是 否"`
-		RegisterMethod string `json:"registerMethod"`
-		StartTime      string `json:"startTime" validate:"required,ltcsfield=EndTime"`
-		ActiveForm     string `json:"activeForm" validate:"required,required_unless=HolderType 个人"`
-		EndTime        string `json:"endTime" validate:"required,gtcsfield=StartTime"`
-		Type           string `json:"type" validate:"required"`
-
-		Signer []struct {
-			StudentID string `json:"studentId" validate:"len=10"`
-			Name      string `json:"name"`
-		} `json:"signer" validate:"unique=StudentID,dive"`
-	} `json:"labelform"`
+	LabelForm CreateActLabel `json:"labelform"`
 }
 
 type CreateActDraftReq struct {
@@ -35,21 +21,7 @@ type CreateActDraftReq struct {
 	Introduce string   `json:"introduce"`
 	ShowImg   []string `json:"showImg"`
 
-	LabelForm struct {
-		HolderType     string `json:"holderType"`
-		Position       string `json:"position"`
-		IfRegister     string `json:"ifRegister"`
-		RegisterMethod string `json:"registerMethod"`
-		StartTime      string `json:"startTime"`
-		ActiveForm     string `json:"activeForm"`
-		EndTime        string `json:"endTime"`
-		Type           string `json:"type"`
-
-		Signer []struct {
-			StudentID string `json:"studentId" validate:"len=10"`
-			Name      string `json:"name"`
-		} `json:"signer"`
-	} `json:"labelform"`
+	LabelForm CreateDraftLabel `json:"labelform"`
 }
 
 type FindActByNameReq struct {
@@ -66,4 +38,35 @@ type FindActByBidReq struct {
 
 type FindActByUserIDReq struct {
 	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
+}
+
+type Signer struct {
+	StudentID string `json:"studentId" validate:"len=10"`
+	Name      string `json:"name"`
+}
+
+type CreateActLabel struct {
+	HolderType     string `json:"holderType" validate:"required"`
+	Position       string `json:"position" validate:"required"`
+	IfRegister     string `json:"ifRegister" validate:"required,oneof=是 否"`
+	RegisterMethod string `json:"registerMethod"`
+	StartTime      string `json:"startTime" validate:"required,ltcsfield=EndTime"`
+	ActiveForm     string `json:"activeForm" validate:"required,required_unless=HolderType 个人"`
+	EndTime        string `json:"endTime" validate:"required,gtcsfield=StartTime"`
+	Type           string `json:"type" validate:"required"`
+
+	Signer []Signer `json:"signer" validate:"unique=StudentID,dive"`
+}
+
+type CreateDraftLabel struct {
+	HolderType     string `json:"holderType"`
+	Position       string `json:"position"`
+	IfRegister     string `json:"ifRegister"`
+	RegisterMethod string `json:"registerMethod"`
+	StartTime      string `json:"startTime"`
+	ActiveForm     string `json:"activeForm"`
+	EndTime        string `json:"endTime"`
+	Type           string `json:"type"`
+
+	Signer []Signer `json:"signer"`
 }

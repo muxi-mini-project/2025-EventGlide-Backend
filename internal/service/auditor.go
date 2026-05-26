@@ -2,17 +2,13 @@ package service
 
 import (
 	"context"
-	"strings"
-	"time"
 
-	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/client"
-	"github.com/muxi-Infra/auditor-Backend/sdk/v2/dto"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
-	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +49,7 @@ func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger, cfg *config.Co
 }
 
 func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id uint) error {
-	uploadReq := a.toUploadReq(aw, id)
+	uploadReq := converter.AuditorUploadReqFromWrapper(aw, id, a.HookUrl)
 	_, err := a.MuxiCli.UploadItem(c, &uploadReq)
 	if err != nil {
 		a.l.Error("Upload to auditor failed", zap.Error(err))
@@ -64,54 +60,4 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 
 func (a *auditorService) CreateAuditorForm(c context.Context, ActId, FormUrl string, sub string) (*model.AuditorForm, error) {
 	return a.AuditorRepo.Insert(c, ActId, FormUrl, sub)
-}
-
-func (a *auditorService) toUploadReq(aw *req.AuditWrapper, id uint) request.UploadReq {
-	now := time.Now().Unix()
-	res := request.UploadReq{
-		HookUrl:    &a.HookUrl,
-		Id:         &id,
-		Tags:       &[]string{"校灵通"},
-		PublicTime: &now,
-	}
-
-	if aw.Subject == SubjectActivity {
-		author := extractAuthors(aw.CactReq.LabelForm.Signer)
-		res.Author = &author
-		*res.Tags = append(*res.Tags, aw.CactReq.LabelForm.Type, "活动")
-
-		ctt := dto.NewContents(
-			dto.WithTopicText(aw.CactReq.Title, aw.CactReq.Introduce),
-			dto.WithTopicPictures(aw.CactReq.ShowImg),
-		)
-		res.Content = ctt
-
-		if tools.IfRegisterMapper(aw.CactReq.LabelForm.IfRegister) {
-			*res.Tags = append(*res.Tags, "含报名表需要审核")
-			res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, aw.CactReq.LabelForm.ActiveForm)
-		}
-
-	} else if aw.Subject == SubjectPost {
-		res.Author = &aw.StudentId
-		*res.Tags = append(*res.Tags, "帖子")
-
-		ctt := dto.NewContents(
-			dto.WithTopicText(aw.CpostReq.Title, aw.CpostReq.Introduce),
-			dto.WithTopicPictures(aw.CpostReq.ShowImg),
-		)
-		res.Content = ctt
-	}
-
-	return res
-}
-
-func extractAuthors(signers []struct {
-	StudentID string `json:"studentId" validate:"len=10"`
-	Name      string `json:"name"`
-}) string {
-	builder := strings.Builder{}
-	for _, s := range signers {
-		builder.WriteString(s.Name + "-")
-	}
-	return builder.String()
 }

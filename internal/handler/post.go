@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -47,12 +48,12 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 // @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /post/all [get]
 func (ph *PostHandler) GetAllPost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.GetAllPost(ctx, claims.Subject)
+	posts, err := ph.ps.GetAllPost(ctx)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(posts)
+	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
 // @Tags Post
@@ -64,12 +65,17 @@ func (ph *PostHandler) GetAllPost(ctx *gin.Context, claims jwt.RegisteredClaims)
 // @Success 200 {object} resp.Resp{}
 // @Router /post/create [post]
 func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ph.ps.CreatePost(ctx, &req_, claims.Subject)
-	if err != nil {
+	post := converter.CreatePostFromReq(&req_, claims.Subject)
+	aw := &req.AuditWrapper{
+		Subject:   service.SubjectPost,
+		StudentId: claims.Subject,
+		CpostReq:  &req_,
+	}
+	if err := ph.ps.CreatePost(ctx, post, aw); err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	detail := ph.ps.EnrichOneForSearcher(ctx, post, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToCreatePostResp(detail))
 }
 
 // @Tags Post
@@ -80,12 +86,12 @@ func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, clai
 // @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
 // @Router /post/find [post]
 func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostByName(ctx, req_.Name, claims.Subject)
+	posts, err := ph.ps.FindPostByName(ctx, req_.Name)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(posts)
+	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
 // @Tags Post
@@ -97,10 +103,9 @@ func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq, cl
 // @Success 200 {object} resp.Resp
 // @Router /post/delete [post]
 func (ph *PostHandler) DeletePost(ctx *gin.Context, req_ req.DeletePostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	if err := ph.ps.DeletePost(ctx, &req_, claims.Subject); err != nil {
+	if err := ph.ps.DeletePost(ctx, req_.TargetID, claims.Subject); err != nil {
 		return ginx.ReturnError(err)
 	}
-
 	return ginx.ReturnSuccess(nil)
 }
 
@@ -113,12 +118,12 @@ func (ph *PostHandler) DeletePost(ctx *gin.Context, req_ req.DeletePostReq, clai
 // @Success 200 {object} resp.Resp{data=req.CreatePostReq}
 // @Router /post/draft [post]
 func (ph *PostHandler) CreateDraft(ctx *gin.Context, req_ req.CreatePostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	res, err := ph.ps.CreateDraft(ctx, &req_, claims.Subject)
-	if err != nil {
+	draft := converter.CreatePostDraftFromReq(&req_, claims.Subject)
+	if err := ph.ps.CreateDraft(ctx, draft); err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(res)
+	author := ph.ps.AuthorBrief(ctx, draft.StudentID)
+	return ginx.ReturnSuccess(converter.ToCreatePostRespFromDraft(*draft, author))
 }
 
 // @Tags Post
@@ -133,8 +138,7 @@ func (ph *PostHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) 
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(draft)
+	return ginx.ReturnSuccess(converter.ToLoadPostDraftResp(draft))
 }
 
 // @Tags Post
@@ -148,6 +152,6 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registered
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-
-	return ginx.ReturnSuccess(posts)
+	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }

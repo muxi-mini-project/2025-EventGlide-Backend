@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"go.uber.org/zap"
@@ -34,7 +34,7 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 		return err
 	}
 	if sid != ap.GetStudentID() {
-		jreq := is.toFeed(r, "like", sid, ap.GetStudentID())
+		jreq := converter.FeedFromInteractionReq(r, "like", sid, ap.GetStudentID())
 		err = is.mq.Publish(c, "feed_stream", jreq)
 		if err != nil {
 			is.l.Error("Publish Like Feed Failed", zap.Error(err), zap.Any("feed", jreq))
@@ -74,7 +74,7 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 		return err
 	}
 	if sid != ap.GetStudentID() {
-		jreq := is.toFeed(r, "comment", sid, ap.GetStudentID())
+		jreq := converter.FeedFromInteractionReq(r, "comment", sid, ap.GetStudentID())
 		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 		if err != nil {
 			is.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", jreq))
@@ -101,7 +101,7 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 		return err
 	}
 	if sid != ap.GetStudentID() {
-		jreq := is.toFeed(r, "collect", sid, ap.GetStudentID())
+		jreq := converter.FeedFromInteractionReq(r, "collect", sid, ap.GetStudentID())
 		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 		if err != nil {
 			is.l.Error("Publish Collect Feed Failed", zap.Error(err), zap.Any("feed", jreq))
@@ -120,7 +120,7 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 	}
 }
 
-func (is *InteractionService) Discollect(c *gin.Context, r *req.InteractionReq, sid string) error {
+func (is *InteractionService) DisCollect(c *gin.Context, r *req.InteractionReq, sid string) error {
 	switch r.Subject {
 	case "activity":
 		return is.id.DiscollectActivity(c, sid, r.TargetID)
@@ -129,17 +129,6 @@ func (is *InteractionService) Discollect(c *gin.Context, r *req.InteractionReq, 
 	default:
 		return errors.New("subject error")
 	}
-}
-
-func (is *InteractionService) toFeed(r *req.InteractionReq, action string, sid string, recv string) model.Feed {
-	f := model.Feed{
-		TargetBid: r.TargetID,
-		Object:    r.Subject,
-		StudentId: sid,
-		Action:    action,
-		Receiver:  recv,
-	}
-	return f
 }
 
 func (is *InteractionService) Approve(c *gin.Context, r *req.InteractionReq, studendId string) error {

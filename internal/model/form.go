@@ -1,9 +1,10 @@
 package model
 
 import (
-	"gorm.io/gorm"
 	"log"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 const (

@@ -4,15 +4,11 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"time"
 
-	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
-	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
 
@@ -40,59 +36,46 @@ func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.Interacti
 	}
 }
 
-func (cs *CommentService) toComment(r req.CreateCommentReq, studentId string) *model.Comment {
-	return &model.Comment{
-		StudentID: studentId,
-		Content:   r.Content,
-		ParentID:  r.ParentID,
-		CreatedAt: time.Now(),
-		Bid:       tools.GenUUID(),
-		Position:  "华中师范大学",
-		Subject:   r.Subject,
-	}
-}
-
-func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentReq, studentId string) (resp.CommentResp, error) {
-	cmt := cs.toComment(r, studentId)
+func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
 	rootID := ""
 	rootType := ""
-	if r.Subject == SubjectComment {
-		rootCommentID, resolvedRootID, resolvedRootType, resolveErr := cs.resolveCommentRootMeta(c, r.ParentID)
+	if cmt.Subject == SubjectComment {
+		rootCommentID, resolvedRootID, resolvedRootType, resolveErr := cs.resolveCommentRootMeta(c, cmt.ParentID)
 		if resolveErr != nil {
-			cs.l.Error("Error resolve comment root meta failed", zap.Error(resolveErr), zap.String("parentID", r.ParentID))
-			return resp.CommentResp{}, resolveErr
+			cs.l.Error("Error resolve comment root meta failed", zap.Error(resolveErr), zap.String("parentID", cmt.ParentID))
+			return nil, resolveErr
 		}
-		cmt.RootId = rootCommentID
+		cmt.RootID = rootCommentID
 		rootID = resolvedRootID
 		rootType = resolvedRootType
 	}
+
 	err := cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
 		zap.String("bid", cmt.Bid),
 		zap.String("studentid", cmt.StudentID),
 		zap.String("parentid", cmt.ParentID),
 	)
-
 	if err != nil {
 		cs.l.Error("Error comment create failed", zap.Error(err))
-		return resp.CommentResp{}, err
+		return nil, err
 	}
 
-	ap, err := cs.apg.GetActivityOrPostOrComment(c, r.ParentID, r.Subject)
+	ap, err := cs.apg.GetActivityOrPostOrComment(c, cmt.ParentID, cmt.Subject)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
-		return resp.CommentResp{}, err
+		return nil, err
 	}
 
 	// TODO 优雅实现
-	if studentId == ap.GetStudentID() {
-		return cs.toResp(c, cmt, studentId), nil
+	if studentID == ap.GetStudentID() {
+		return cmt, nil
 	}
 
 	f := model.Feed{
-		StudentId: studentId,
-		TargetBid: r.ParentID,
-		Object:    r.Subject,
+		StudentID: studentID,
+		TargetBid: cmt.ParentID,
+		Object:    cmt.Subject,
 		Action:    "comment",
 		Receiver:  ap.GetStudentID(),
 		RootID:    rootID,
@@ -106,25 +89,24 @@ func (cs *CommentService) CreateComment(c context.Context, r req.CreateCommentRe
 		cs.l.Info("Publish Comment Feed Success", zap.Any("feed", f))
 	}
 
-	// 评论数+1
-	switch r.Subject {
+	switch cmt.Subject {
 	case "activity":
-		err = cs.id.CommentActivity(c, studentId, r.ParentID)
+		err = cs.id.CommentActivity(c, studentID, cmt.ParentID)
 	case "post":
-		err = cs.id.CommentPost(c, studentId, r.ParentID)
+		err = cs.id.CommentPost(c, studentID, cmt.ParentID)
 	case "comment":
-		err = cs.id.CommentComment(c, studentId, r.ParentID)
+		err = cs.id.CommentComment(c, studentID, cmt.ParentID)
 	}
 	if err != nil {
 		cs.l.Error("Error comment create failed", zap.Error(err))
-		return resp.CommentResp{}, err
+		return nil, err
 	}
 
-	return cs.toResp(c, cmt, studentId), nil
+	return cmt, nil
 }
 
-func (cs *CommentService) DeleteComment(c context.Context, targetId, studentId string) error {
-	err := cs.cd.DeleteComment(c, studentId, targetId)
+func (cs *CommentService) DeleteComment(c context.Context, targetID, studentID string) error {
+	err := cs.cd.DeleteComment(c, studentID, targetID)
 	if err != nil {
 		cs.l.Error("Error comment delete failed", zap.Error(err))
 		return err
@@ -132,50 +114,48 @@ func (cs *CommentService) DeleteComment(c context.Context, targetId, studentId s
 	return nil
 }
 
-// 二级评论
-func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentReq, studentId string) (resp.ReplyResp, error) {
-	cmt := cs.toComment(r, studentId)
-	rootCommentID, rootID, rootType, err := cs.resolveCommentRootMeta(c, r.ParentID)
+func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
+	rootCommentID, rootID, rootType, err := cs.resolveCommentRootMeta(c, cmt.ParentID)
 	if err != nil {
-		cs.l.Error("Error resolve comment root meta failed", zap.Error(err), zap.String("parentID", r.ParentID))
-		return resp.ReplyResp{}, err
+		cs.l.Error("Error resolve comment root meta failed", zap.Error(err), zap.String("parentID", cmt.ParentID))
+		return nil, err
 	}
-	cmt.RootId = rootCommentID
+	cmt.RootID = rootCommentID
 
 	err = cs.cd.AnswerComment(c, cmt)
 	if err != nil {
 		cs.l.Error("Error comment answer failed", zap.Error(err))
-		return resp.ReplyResp{}, err
+		return nil, err
 	}
 	cs.l.Info("AnswerComment",
 		zap.String("bid", cmt.Bid),
 		zap.String("studentid", cmt.StudentID),
 	)
 
-	ap, err := cs.apg.GetActivityOrPostOrComment(c, r.ParentID, r.Subject)
+	ap, err := cs.apg.GetActivityOrPostOrComment(c, cmt.ParentID, cmt.Subject)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
-		return resp.ReplyResp{}, err
+		return nil, err
 	}
 
 	ap2, err := cs.apg.GetActivityOrPostOrComment(c, rootID, rootType)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
-		return resp.ReplyResp{}, err
+		return nil, err
 	}
 
 	if err = cs.IncreaseCommentNum(c, &ap2); err != nil {
 		cs.l.Error("Error increase comment num failed", zap.Error(err))
-		return resp.ReplyResp{}, err
+		return nil, err
 	}
 
-	if studentId == ap.GetStudentID() {
-		return cs.toReply(c, cmt, studentId), nil
+	if studentID == ap.GetStudentID() {
+		return cmt, nil
 	}
 
 	f := model.Feed{
-		StudentId: studentId,
-		TargetBid: r.ParentID,
+		StudentID: studentID,
+		TargetBid: cmt.ParentID,
 		Object:    "comment",
 		Action:    "at",
 		Receiver:  ap.GetStudentID(),
@@ -190,7 +170,7 @@ func (cs *CommentService) AnswerComment(c context.Context, r req.CreateCommentRe
 		cs.l.Info("Publish Comment Feed Success", zap.Any("feed", f))
 	}
 
-	return cs.toReply(c, cmt, studentId), nil
+	return cmt, nil
 }
 
 func (cs *CommentService) resolveCommentRootMeta(c context.Context, commentID string) (string, string, string, error) {
@@ -199,7 +179,7 @@ func (cs *CommentService) resolveCommentRootMeta(c context.Context, commentID st
 		return "", "", "", errors.New("comment not found")
 	}
 
-	rootCommentID := cur.RootId
+	rootCommentID := cur.RootID
 	if rootCommentID == "" {
 		rootCommentID = cur.Bid
 	}
@@ -224,119 +204,109 @@ func (cs *CommentService) resolveCommentRootMeta(c context.Context, commentID st
 	return "", "", "", errors.New("comment chain too deep")
 }
 
-func (cs *CommentService) LoadComments(c context.Context, parentid string, studentId string) ([]resp.CommentResp, error) {
-	// 加载一级评论
-	cmts, err := cs.cd.LoadComments(c, parentid)
+func (cs *CommentService) LoadComments(c context.Context, parentID string) ([]model.Comment, error) {
+	cmts, err := cs.cd.LoadComments(c, parentID)
 	if err != nil {
 		cs.l.Error("Error load comments failed", zap.Error(err))
 		return nil, err
 	}
-	res := cs.toResps(c, cmts, studentId)
-	return res, nil
+	return cmts, nil
 }
 
-func (cs *CommentService) toResp(c context.Context, cmt *model.Comment, studentId string) resp.CommentResp {
-	var res resp.CommentResp                         //返回值
-	user, err := cs.ud.GetUserInfo(c, cmt.StudentID) //该条评论用户信息
-	if err != nil {
-		cs.l.Error("Error get user info when comment to resp", zap.Error(err))
-		return resp.CommentResp{}
+func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment, viewerID string) []model.CommentDetail {
+	details := make([]model.CommentDetail, 0, len(cmts))
+	for i := range cmts {
+		details = append(details, cs.enrichComment(c, &cmts[i], viewerID))
 	}
-	searcher, err := cs.ud.GetUserInfo(c, studentId) //当前用户信息
-	if err != nil {
-		cs.l.Error("Error get user info when comment to resp", zap.Error(err))
-		return resp.CommentResp{}
-	}
-	// 该条评论下的所有评论, 不分级
-	replys, err := cs.cd.LoadAnswers(c, cmt.Bid) //该条评论的回复（存储模型）
-	if err != nil {
-		cs.l.Error("Error load answers when loading replies", zap.Error(err))
-		return resp.CommentResp{}
-	}
-	if strings.Contains(searcher.LikeComment, cmt.Bid) {
-		res.IsLike = "true"
-	} else {
-		res.IsLike = "false"
-	}
-	res.Content = cmt.Content
-	res.CommentedTime = tools.ParseTime(cmt.CreatedAt)
-	res.Bid = cmt.Bid
-	res.ParentID = cmt.ParentID
-	res.RootID = cmt.RootId
-	res.CommentedPos = cmt.Position
-	res.LikeNum = cmt.LikeNum
-	res.ReplyNum = cmt.ReplyNum
-	res.Creator.StudentID = user.StudentID
-	res.Creator.Username = user.Name
-	res.Creator.Avatar = user.Avatar
-	for _, reply := range replys {
-		res.Reply = append(res.Reply, cs.toReply(c, &reply, studentId)) //处理成响应模型，嵌入回复评论一起加载
-	}
-	return res
+	return details
 }
 
-func (cs *CommentService) toResps(c context.Context, cmts []model.Comment, studentId string) []resp.CommentResp {
-	var res []resp.CommentResp
-	for _, cmt := range cmts {
-		res = append(res, cs.toResp(c, &cmt, studentId))
-	}
-	return res
+func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
+	return cs.enrichComment(c, cmt, viewerID)
 }
 
-func (cs *CommentService) toReply(c context.Context, cmt *model.Comment, studentId string) resp.ReplyResp {
-	var res resp.ReplyResp                           //返回值
-	user, err := cs.ud.GetUserInfo(c, cmt.StudentID) //该条回复用户信息
+func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
+	return cs.enrichReply(c, cmt, viewerID)
+}
+
+func (cs *CommentService) enrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
+	user, err := cs.ud.GetUserInfo(c, cmt.StudentID)
 	if err != nil {
-		cs.l.Error("Error get user info when comment to reply", zap.Error(err))
-		return resp.ReplyResp{}
+		cs.l.Error("Error get user info when enriching comment", zap.Error(err))
+		return model.CommentDetail{}
 	}
-	searcher, err := cs.ud.GetUserInfo(c, studentId)
+	searcher, err := cs.ud.GetUserInfo(c, viewerID)
 	if err != nil {
-		cs.l.Error("Error get user info when comment to reply", zap.Error(err))
-		return resp.ReplyResp{}
+		cs.l.Error("Error get user info when enriching comment", zap.Error(err))
+		return model.CommentDetail{}
 	}
-	pid := cmt.ParentID
-	pc := cs.cd.FindCmtByID(c, pid) //父评论
+
+	replies, err := cs.cd.LoadAnswers(c, cmt.Bid)
+	if err != nil {
+		cs.l.Error("Error load answers when enriching comment", zap.Error(err))
+		return model.CommentDetail{}
+	}
+
+	detail := model.CommentDetail{
+		Comment: *cmt,
+		Creator: model.UserBrief{
+			StudentID: user.StudentID,
+			Name:      user.Name,
+			Avatar:    user.Avatar,
+		},
+		IsLike: strings.Contains(searcher.LikeComment, cmt.Bid),
+	}
+	for _, reply := range replies {
+		detail.Replies = append(detail.Replies, cs.enrichReply(c, &reply, viewerID))
+	}
+	return detail
+}
+
+func (cs *CommentService) enrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
+	user, err := cs.ud.GetUserInfo(c, cmt.StudentID)
+	if err != nil {
+		cs.l.Error("Error get user info when enriching reply", zap.Error(err))
+		return model.ReplyDetail{}
+	}
+	searcher, err := cs.ud.GetUserInfo(c, viewerID)
+	if err != nil {
+		cs.l.Error("Error get user info when enriching reply", zap.Error(err))
+		return model.ReplyDetail{}
+	}
+
+	pc := cs.cd.FindCmtByID(c, cmt.ParentID)
 	if pc == nil {
-		cs.l.Error("Error find comment by id", zap.String("pid", pid))
-		return resp.ReplyResp{}
+		cs.l.Error("Error find comment by id", zap.String("pid", cmt.ParentID))
+		return model.ReplyDetail{}
 	}
-	pu, err := cs.ud.GetUserInfo(c, pc.StudentID) //父评论用户信息
+	pu, err := cs.ud.GetUserInfo(c, pc.StudentID)
 	if err != nil {
-		cs.l.Error("Error get user info when comment to reply", zap.Error(err))
-		return resp.ReplyResp{}
+		cs.l.Error("Error get user info when enriching reply", zap.Error(err))
+		return model.ReplyDetail{}
 	}
 
-	if strings.Contains(searcher.LikeComment, cmt.Bid) {
-		res.IsLike = "true"
-	} else {
-		res.IsLike = "false"
+	return model.ReplyDetail{
+		Comment: *cmt,
+		Creator: model.UserBrief{
+			StudentID: user.StudentID,
+			Name:      user.Name,
+			Avatar:    user.Avatar,
+		},
+		ParentUserName: pu.Name,
+		IsLike:         strings.Contains(searcher.LikeComment, cmt.Bid),
 	}
-	res.ParentID = cmt.ParentID
-	res.RootID = cmt.RootId
-	res.ReplyContent = cmt.Content
-	res.ReplyTime = tools.ParseTime(cmt.CreatedAt)
-	res.Bid = cmt.Bid
-	res.ReplyPos = cmt.Position
-	res.LikeNum = cmt.LikeNum
-	res.ReplyNum = cmt.ReplyNum
-	res.ReplyCreator.StudentID = user.StudentID
-	res.ReplyCreator.Username = user.Name
-	res.ReplyCreator.Avatar = user.Avatar
-	res.ParentUserName = pu.Name
-	return res
 }
 
 func (cs *CommentService) IncreaseCommentNum(c context.Context, parent *ActPostCommentWrapper) error {
-	studentId := parent.GetStudentID()
+	studentID := parent.GetStudentID()
 	bid := parent.GetBid()
 	switch {
 	case parent.Activity != nil:
-		return cs.id.CommentActivity(c, studentId, bid)
+		return cs.id.CommentActivity(c, studentID, bid)
 	case parent.Post != nil:
-		return cs.id.CommentPost(c, studentId, bid)
+		return cs.id.CommentPost(c, studentID, bid)
 	case parent.Comment != nil:
-		return cs.id.CommentComment(c, studentId, bid)
+		return cs.id.CommentComment(c, studentID, bid)
 	default:
 		return nil
 	}

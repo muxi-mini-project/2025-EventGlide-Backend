@@ -16,7 +16,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
@@ -144,39 +143,36 @@ func (us *UserService) UpdateUsername(ctx *gin.Context, studentId string, name s
 	return nil
 }
 
-func (us *UserService) SearchUserAct(ctx *gin.Context, studentId string, keyword string) ([]resp.ListActivitiesResp, error) {
+func (us *UserService) SearchUserAct(ctx *gin.Context, studentId string, keyword string) ([]model.ActivityDetail, error) {
 	acts, err := us.adh.FindActByUser(ctx, studentId, keyword)
 	if err != nil {
 		return nil, err
 	}
-	res := us.as.ToListResp(ctx, acts, studentId)
-	return res, nil
+	return us.as.EnrichForSearcher(ctx, acts, studentId), nil
 }
 
-func (us *UserService) SearchUserPost(ctx *gin.Context, studentId string, keyword string) ([]resp.ListPostsResp, error) {
+func (us *UserService) SearchUserPost(ctx *gin.Context, studentId string, keyword string) ([]model.PostDetail, error) {
 	posts, err := us.pdh.FindPostByUser(ctx, studentId, keyword)
 	if err != nil {
 		return nil, err
 	}
-	res := us.ps.ToListResp(ctx, posts, studentId)
-	return res, nil
+	return us.ps.EnrichForSearcher(ctx, posts, studentId), nil
 }
 
-func (us *UserService) GetChecking(ctx *gin.Context, studentId string) (resp.CheckingResp, error) {
-	var res resp.CheckingResp
+func (us *UserService) GetChecking(ctx *gin.Context, studentId string) ([]model.ActivityDetail, []model.PostDetail, error) {
 	acts, err := us.adh.GetChecking(ctx, studentId)
 	if err != nil {
-		return resp.CheckingResp{}, err
+		return nil, nil, err
 	}
-	res.Acts = us.as.ToListResp(ctx, acts, studentId)
+	actDetails := us.as.EnrichForSearcher(ctx, acts, studentId)
 
 	posts, err := us.pdh.GetChecking(ctx, studentId)
 	if err != nil {
-		return resp.CheckingResp{}, err
+		return nil, nil, err
 	}
-	res.Posts = us.ps.ToListResp(ctx, posts, studentId)
+	postDetails := us.ps.EnrichForSearcher(ctx, posts, studentId)
 
-	return res, nil
+	return actDetails, postDetails, nil
 }
 
 //func genRandomAvatar(c *gin.Context) string {
@@ -192,20 +188,16 @@ func (us *UserService) GetChecking(ctx *gin.Context, studentId string) (resp.Che
 //	}
 //}
 
-func (us *UserService) GenQINIUToken(ctx *gin.Context) resp.ImgBedResp {
-	res := resp.ImgBedResp{
-		AccessToken: us.iuh.GenQINIUToken(ctx),
-		DomainName:  us.iuh.ImgUrl,
-	}
-	return res
+func (us *UserService) GenQINIUToken(ctx *gin.Context) (string, string) {
+	return us.iuh.GenQINIUToken(ctx), us.iuh.ImgUrl
 }
 
-func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]resp.ListActivitiesResp, error) {
+func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]model.ActivityDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
 	}
-	var res []resp.ListActivitiesResp
+	var res []model.ActivityDetail
 	ActIDs := tools.StringToSlice(user.CollectAct)
 	for _, id := range ActIDs {
 		if id == "" {
@@ -215,17 +207,17 @@ func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]res
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.as.toListActResp(ctx, &acts, studentId))
+		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
 	}
 	return res, nil
 }
 
-func (us *UserService) LoadCollectPost(ctx *gin.Context, studentId string) ([]resp.ListPostsResp, error) {
+func (us *UserService) LoadCollectPost(ctx *gin.Context, studentId string) ([]model.PostDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
 	}
-	var res []resp.ListPostsResp
+	var res []model.PostDetail
 	PostIDs := tools.StringToSlice(user.CollectPost)
 	for _, id := range PostIDs {
 		if id == "" {
@@ -235,17 +227,17 @@ func (us *UserService) LoadCollectPost(ctx *gin.Context, studentId string) ([]re
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.ps.toListPostResp(ctx, posts, studentId))
+		res = append(res, us.ps.EnrichOneForSearcher(ctx, &posts, studentId))
 	}
 	return res, nil
 }
 
-func (us *UserService) LoadLikePost(ctx *gin.Context, studentId string) ([]resp.ListPostsResp, error) {
+func (us *UserService) LoadLikePost(ctx *gin.Context, studentId string) ([]model.PostDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
 	}
-	var res []resp.ListPostsResp
+	var res []model.PostDetail
 	PostIDs := tools.StringToSlice(user.LikePost)
 	for _, id := range PostIDs {
 		if id == "" {
@@ -255,17 +247,17 @@ func (us *UserService) LoadLikePost(ctx *gin.Context, studentId string) ([]resp.
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.ps.toListPostResp(ctx, posts, studentId))
+		res = append(res, us.ps.EnrichOneForSearcher(ctx, &posts, studentId))
 	}
 	return res, nil
 }
 
-func (us *UserService) LoadLikeAct(ctx *gin.Context, studentId string) ([]resp.ListActivitiesResp, error) {
+func (us *UserService) LoadLikeAct(ctx *gin.Context, studentId string) ([]model.ActivityDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
 	}
-	var res []resp.ListActivitiesResp
+	var res []model.ActivityDetail
 	ActIDs := tools.StringToSlice(user.LikeAct)
 	for _, id := range ActIDs {
 		if id == "" {
@@ -275,7 +267,7 @@ func (us *UserService) LoadLikeAct(ctx *gin.Context, studentId string) ([]resp.L
 		if err != nil {
 			return nil, err
 		}
-		res = append(res, us.as.toListActResp(ctx, &acts, studentId))
+		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
 	}
 	return res, nil
 }

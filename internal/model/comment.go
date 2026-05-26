@@ -11,8 +11,22 @@ type Comment struct {
 	ParentID  string `gorm:"type:varchar(255);comment:父评论ID;column:parent_id"`
 	Position  string `gorm:"not null;type:varchar(255);comment:位置;column:position"`
 	Subject   string `gorm:"not null;comment:评论类型;column:subject"` // activity/post/comment
-	RootId    string `gorm:"type:varchar(255);comment:根评论ID;column:root_id"`
+	RootID    string `gorm:"type:varchar(255);comment:根评论ID;column:root_id"`
 
 	LikeNum  int `gorm:"not null;default:0;comment:点赞数;column:like_num"`
 	ReplyNum int `gorm:"not null;default:0;comment:回复数;column:reply_num"`
+}
+
+type CommentDetail struct {
+	Comment Comment
+	Creator UserBrief
+	IsLike  bool
+	Replies []ReplyDetail
+}
+
+type ReplyDetail struct {
+	Comment        Comment
+	Creator        UserBrief
+	ParentUserName string
+	IsLike         bool
 }

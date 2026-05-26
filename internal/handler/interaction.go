@@ -34,7 +34,7 @@ func (ih *InteractionHandler) RegisterInteractionHandlers(e *gin.Engine, handler
 		i.POST("/dislike", ginx.WrapRequestWithClaims(ih.Dislike))
 
 		i.POST("/collect", ginx.WrapRequestWithClaims(ih.Collect))
-		i.POST("/discollect", ginx.WrapRequestWithClaims(ih.Discollect))
+		i.POST("/discollect", ginx.WrapRequestWithClaims(ih.DisCollect))
 
 		i.POST("/approve", ginx.WrapRequestWithClaims(ih.Approve))
 		i.POST("/reject", ginx.WrapRequestWithClaims(ih.Reject))
@@ -93,8 +93,8 @@ func (ih *InteractionHandler) Collect(ctx *gin.Context, req_ req.InteractionReq,
 // @Param interaction body req.InteractionReq true "互动"
 // @Success 200 {object} resp.Resp
 // @Router /interaction/discollect [post]
-func (ih *InteractionHandler) Discollect(ctx *gin.Context, req_ req.InteractionReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	if err := ih.is.Discollect(ctx, &req_, claims.Subject); err != nil {
+func (ih *InteractionHandler) DisCollect(ctx *gin.Context, req_ req.InteractionReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	if err := ih.is.DisCollect(ctx, &req_, claims.Subject); err != nil {
 		return ginx.ReturnError(err)
 	}
 
