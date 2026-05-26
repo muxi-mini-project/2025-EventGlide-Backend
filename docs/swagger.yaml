@@ -1,73 +1,4 @@
 definitions:
-  model.Activity:
-    properties:
-      activeForm:
-        description: 表单url // 通过条件2
-        type: string
-      bid:
-        type: string
-      collectNum:
-        type: integer
-      commentNum:
-        type: integer
-      createdAt:
-        type: string
-      endTime:
-        type: string
-      holderType:
-        type: string
-      ifRegister:
-        type: string
-      introduce:
-        type: string
-      isChecking:
-        description: pending or pass or reject // 是否显示
-        type: string
-      likeNum:
-        type: integer
-      position:
-        type: string
-      registerMethod:
-        type: string
-      showImg:
-        type: string
-      signer:
-        description: 报名人 >= 5的 []slice // 通过条件1
-        type: string
-      startTime:
-        type: string
-      studentID:
-        type: string
-      title:
-        type: string
-      type:
-        type: string
-    type: object
-  model.Post:
-    properties:
-      bid:
-        type: string
-      collectNum:
-        type: integer
-      commentNum:
-        type: integer
-      createdAt:
-        type: string
-      id:
-        type: integer
-      introduce:
-        type: string
-      isChecking:
-        type: string
-      likeNum:
-        type: integer
-      showImg:
-        type: string
-      studentId:
-        type: string
-      title:
-        type: string
-    type: object
   req.ActSearchReq:
     properties:
       detailTime:
@@ -92,33 +23,7 @@ definitions:
       introduce:
         type: string
       labelform:
-        properties:
-          activeForm:
-            type: string
-          endTime:
-            type: string
-          holderType:
-            type: string
-          ifRegister:
-            type: string
-          position:
-            type: string
-          registerMethod:
-            type: string
-          signer:
-            items:
-              properties:
-                name:
-                  type: string
-                studentId:
-                  type: string
-              type: object
-            type: array
-          startTime:
-            type: string
-          type:
-            type: string
-        type: object
+        $ref: '#/definitions/req.CreateDraftLabel'
       showImg:
         items:
           type: string
@@ -126,50 +31,47 @@ definitions:
       title:
         type: string
     type: object
+  req.CreateActLabel:
+    properties:
+      activeForm:
+        type: string
+      endTime:
+        type: string
+      holderType:
+        type: string
+      ifRegister:
+        enum:
+        - 是
+        - 否
+        type: string
+      position:
+        type: string
+      registerMethod:
+        type: string
+      signer:
+        items:
+          $ref: '#/definitions/req.Signer'
+        type: array
+        uniqueItems: true
+      startTime:
+        type: string
+      type:
+        type: string
+    required:
+    - activeForm
+    - endTime
+    - holderType
+    - ifRegister
+    - position
+    - startTime
+    - type
+    type: object
   req.CreateActReq:
     properties:
       introduce:
         type: string
       labelform:
-        properties:
-          activeForm:
-            type: string
-          endTime:
-            type: string
-          holderType:
-            type: string
-          ifRegister:
-            enum:
-            - 是
-            - 否
-            type: string
-          position:
-            type: string
-          registerMethod:
-            type: string
-          signer:
-            items:
-              properties:
-                name:
-                  type: string
-                studentId:
-                  type: string
-              type: object
-            type: array
-            uniqueItems: true
-          startTime:
-            type: string
-          type:
-            type: string
-        required:
-        - activeForm
-        - endTime
-        - holderType
-        - ifRegister
-        - position
-        - startTime
-        - type
-        type: object
+        $ref: '#/definitions/req.CreateActLabel'
       showImg:
         items:
           type: string
@@ -192,6 +94,29 @@ definitions:
     - content
     - parentId
     - subject
+    type: object
+  req.CreateDraftLabel:
+    properties:
+      activeForm:
+        type: string
+      endTime:
+        type: string
+      holderType:
+        type: string
+      ifRegister:
+        type: string
+      position:
+        type: string
+      registerMethod:
+        type: string
+      signer:
+        items:
+          $ref: '#/definitions/req.Signer'
+        type: array
+      startTime:
+        type: string
+      type:
+        type: string
     type: object
   req.CreatePostDraftReq:
     properties:
@@ -285,6 +210,13 @@ definitions:
       targetId:
         type: string
     type: object
+  req.Signer:
+    properties:
+      name:
+        type: string
+      studentId:
+        type: string
+    type: object
   req.UpdateNameReq:
     properties:
       newName:
@@ -335,14 +267,7 @@ definitions:
       content:
         type: string
       creator:
-        properties:
-          avatar:
-            type: string
-          studentId:
-            type: string
-          username:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.Creator'
       isLike:
         type: string
       likeNum:
@@ -378,28 +303,30 @@ definitions:
         type: array
       signer:
         items:
-          properties:
-            name:
-              type: string
-            studentId:
-              type: string
-          type: object
+          $ref: '#/definitions/resp.Signer'
         type: array
       title:
         type: string
       type:
         type: string
       userInfo:
-        properties:
-          avatar:
-            type: string
-          school:
-            type: string
-          studentId:
-            type: string
-          username:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.UserInfo'
+    type: object
+  resp.Creator:
+    properties:
+      avatar:
+        type: string
+      studentId:
+        type: string
+      username:
+        type: string
+    type: object
+  resp.DetailTime:
+    properties:
+      endTime:
+        type: string
+      startTime:
+        type: string
     type: object
   resp.FeedAtResp:
     properties:
@@ -422,7 +349,7 @@ definitions:
       targetBid:
         type: string
       userInfo:
-        $ref: '#/definitions/resp.UserInfo'
+        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedCollectResp:
     properties:
@@ -445,7 +372,7 @@ definitions:
       targetBid:
         type: string
       userInfo:
-        $ref: '#/definitions/resp.UserInfo'
+        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedCommentResp:
     properties:
@@ -468,7 +395,7 @@ definitions:
       targetBid:
         type: string
       userInfo:
-        $ref: '#/definitions/resp.UserInfo'
+        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedInvitationResp:
     properties:
@@ -491,7 +418,7 @@ definitions:
       targetBid:
         type: string
       userInfo:
-        $ref: '#/definitions/resp.UserInfo'
+        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedLikeResp:
     properties:
@@ -514,7 +441,7 @@ definitions:
       targetBid:
         type: string
       userInfo:
-        $ref: '#/definitions/resp.UserInfo'
+        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedResp:
     properties:
@@ -539,11 +466,44 @@ definitions:
           $ref: '#/definitions/resp.FeedLikeResp'
         type: array
     type: object
+  resp.FeedUserInfo:
+    properties:
+      avatar:
+        type: string
+      studentId:
+        type: string
+      username:
+        type: string
+    type: object
   resp.ImgBedResp:
     properties:
       accessToken:
         type: string
       domainName:
+        type: string
+    type: object
+  resp.LabelForm:
+    properties:
+      activeForm:
+        type: string
+      endTime:
+        type: string
+      holderType:
+        type: string
+      ifRegister:
+        type: string
+      position:
+        type: string
+      registerMethod:
+        type: string
+      signer:
+        items:
+          $ref: '#/definitions/resp.Signer'
+        type: array
+        uniqueItems: true
+      startTime:
+        type: string
+      type:
         type: string
     type: object
   resp.ListActivitiesResp:
@@ -555,12 +515,7 @@ definitions:
       commentNum:
         type: integer
       detailTime:
-        properties:
-          endTime:
-            type: string
-          startTime:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.DetailTime'
       holderType:
         type: string
       ifRegister:
@@ -586,16 +541,7 @@ definitions:
       type:
         type: string
       userInfo:
-        properties:
-          avatar:
-            type: string
-          school:
-            type: string
-          studentId:
-            type: string
-          username:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.UserInfo'
     type: object
   resp.ListPostsResp:
     properties:
@@ -624,49 +570,14 @@ definitions:
       title:
         type: string
       userInfo:
-        properties:
-          avatar:
-            type: string
-          school:
-            type: string
-          studentId:
-            type: string
-          username:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.UserInfo'
     type: object
   resp.LoadActivitiesDraftResp:
     properties:
       introduce:
         type: string
       labelform:
-        properties:
-          activeForm:
-            type: string
-          endTime:
-            type: string
-          holderType:
-            type: string
-          ifRegister:
-            type: string
-          position:
-            type: string
-          registerMethod:
-            type: string
-          signer:
-            items:
-              properties:
-                name:
-                  type: string
-                studentId:
-                  type: string
-              type: object
-            type: array
-          startTime:
-            type: string
-          type:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.LabelForm'
       showImg:
         items:
           type: string
@@ -708,6 +619,15 @@ definitions:
       username:
         type: string
     type: object
+  resp.ReplyCreator:
+    properties:
+      avatar:
+        type: string
+      studentId:
+        type: string
+      username:
+        type: string
+    type: object
   resp.ReplyResp:
     properties:
       bid:
@@ -723,14 +643,7 @@ definitions:
       replyContent:
         type: string
       replyCreator:
-        properties:
-          avatar:
-            type: string
-          studentId:
-            type: string
-          username:
-            type: string
-        type: object
+        $ref: '#/definitions/resp.ReplyCreator'
       replyNum:
         type: integer
       replyPos:
@@ -748,9 +661,18 @@ definitions:
       msg:
         type: string
     type: object
+  resp.Signer:
+    properties:
+      name:
+        type: string
+      studentId:
+        type: string
+    type: object
   resp.UserInfo:
     properties:
       avatar:
+        type: string
+      school:
         type: string
       studentId:
         type: string
@@ -797,7 +719,7 @@ paths:
                 data:
                   $ref: '#/definitions/resp.ListActivitiesResp'
               type: object
-      summary: 根据id返回活动详情
+      summary: 根据bid返回活动详情
       tags:
       - Activity
   /act/all:
@@ -1389,6 +1311,31 @@ paths:
       summary: 作为活动填表人拒绝发表此活动
       tags:
       - Interaction
+  /post/{id}:
+    get:
+      parameters:
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/resp.Resp'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/resp.ListPostsResp'
+                  type: array
+              type: object
+      summary: 通过bid返回帖子详情
+      tags:
+      - Post
   /post/all:
     get:
       parameters:
@@ -1845,7 +1792,7 @@ paths:
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/model.Activity'
+                    $ref: '#/definitions/resp.ListActivitiesResp'
                   type: array
               type: object
       summary: 搜索用户活动
@@ -1876,7 +1823,7 @@ paths:
             - properties:
                 data:
                   items:
-                    $ref: '#/definitions/model.Post'
+                    $ref: '#/definitions/resp.ListPostsResp'
                   type: array
               type: object
       summary: 搜索用户帖子

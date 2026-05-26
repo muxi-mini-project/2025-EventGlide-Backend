@@ -38,6 +38,7 @@ func (ch *CommentHandler) RegisterCommentHandler(e *gin.Engine, handlerFunc gin.
 	}
 }
 
+// CreateComment
 // @Tags Comment
 // @Summary 创建评论
 // @Produce json
@@ -55,6 +56,7 @@ func (ch *CommentHandler) CreateComment(ctx *gin.Context, req_ req.CreateComment
 	return ginx.ReturnSuccess(converter.ToCommentResp(detail))
 }
 
+// AnswerComment
 // @Tags Comment
 // @Summary 回复评论
 // @Produce json
@@ -72,6 +74,7 @@ func (ch *CommentHandler) AnswerComment(ctx *gin.Context, req_ req.CreateComment
 	return ginx.ReturnSuccess(converter.ToReplyResp(detail))
 }
 
+// DeleteComment
 // @Tags Comment
 // @Summary 删除评论
 // @Produce json
@@ -87,6 +90,7 @@ func (ch *CommentHandler) DeleteComment(ctx *gin.Context, req_ req.DeleteComment
 	return ginx.ReturnSuccess(nil)
 }
 
+// LoadComments
 // @Tags Comment
 // @Summary 加载评论
 // @Produce json

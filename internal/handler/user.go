@@ -50,6 +50,7 @@ func (uh *UserHandler) RegisterUserHandlers(e *gin.Engine, handlerFunc gin.Handl
 	}
 }
 
+// Login
 // @Tags User
 // @Summary 登录
 // @Produce json
@@ -64,6 +65,7 @@ func (uh *UserHandler) Login(ctx *gin.Context, req_ req.LoginReq) (resp.Resp, er
 	return ginx.ReturnSuccess(converter.ToLoginResp(user, token))
 }
 
+// Logout
 // @Tags User
 // @Summary 登出
 // @Produce json
@@ -78,6 +80,7 @@ func (uh *UserHandler) Logout(ctx *gin.Context) (resp.Resp, error) {
 	return ginx.ReturnSuccess(nil)
 }
 
+// GetUserInfo
 // @Tags User
 // @Summary 获取用户信息
 // @Produce json
@@ -93,6 +96,7 @@ func (uh *UserHandler) GetUserInfo(ctx *gin.Context, req_ req.GetUserInfoReq) (r
 	return ginx.ReturnSuccess(converter.ToUserInfoResp(user))
 }
 
+// UpdateAvatar
 // @Tags User
 // @Summary 更新头像
 // @Description not finished
@@ -108,6 +112,7 @@ func (uh *UserHandler) UpdateAvatar(ctx *gin.Context, req_ req.UserAvatarReq, cl
 	return ginx.ReturnSuccess(nil)
 }
 
+// UpdateUsername
 // @Tags User
 // @Summary 更新用户名
 // @Produce json
@@ -122,6 +127,7 @@ func (uh *UserHandler) UpdateUsername(ctx *gin.Context, req_ req.UpdateNameReq, 
 	return ginx.ReturnSuccess(nil)
 }
 
+// SearchUserAct
 // @Tags User
 // @Summary 搜索用户活动
 // @Produce json
@@ -137,6 +143,7 @@ func (uh *UserHandler) SearchUserAct(ctx *gin.Context, req_ req.UserSearchReq, c
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// SearchUserPost
 // @Tags User
 // @Summary 搜索用户帖子
 // @Produce json
@@ -152,6 +159,7 @@ func (uh *UserHandler) SearchUserPost(ctx *gin.Context, req_ req.UserSearchReq, 
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
+// GenQiniuToken
 // @Tags User
 // @Summary 获取七牛云token
 // @Produce json
@@ -163,6 +171,7 @@ func (uh *UserHandler) GenQiniuToken(ctx *gin.Context) (resp.Resp, error) {
 	return ginx.ReturnSuccess(converter.ToImgBedResp(token, domain))
 }
 
+// LoadCollectAct
 // @Tags User
 // @Summary 加载活动收藏
 // @Produce json
@@ -178,6 +187,7 @@ func (uh *UserHandler) LoadCollectAct(ctx *gin.Context, claims jwt.RegisteredCla
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// LoadCollectPost
 // @Tags User
 // @Summary 加载帖子收藏
 // @Produce json
@@ -193,6 +203,7 @@ func (uh *UserHandler) LoadCollectPost(ctx *gin.Context, claims jwt.RegisteredCl
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
+// LoadLikePost
 // @Tags User
 // @Summary 加载点赞过的帖子
 // @Produce json
@@ -208,6 +219,7 @@ func (uh *UserHandler) LoadLikePost(ctx *gin.Context, claims jwt.RegisteredClaim
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
+// LoadLikeAct
 // @Tags User
 // @Summary 加载点赞过的活动
 // @Produce json
@@ -223,6 +235,7 @@ func (uh *UserHandler) LoadLikeAct(ctx *gin.Context, claims jwt.RegisteredClaims
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// Checking
 // @Tags User
 // @Summary 获取用户处于审核状态中的活动和帖子
 // @Produce json
