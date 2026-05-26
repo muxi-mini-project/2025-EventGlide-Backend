@@ -42,6 +42,7 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 	}
 }
 
+// GetAllPost
 // @Tags Post
 // @Summary 获取所有帖子
 // @Produce json
@@ -57,6 +58,7 @@ func (ph *PostHandler) GetAllPost(ctx *gin.Context, claims jwt.RegisteredClaims)
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
+// CreatePost
 // @Tags Post
 // @Summary 创建帖子
 // @Produce json
@@ -79,6 +81,7 @@ func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, clai
 	return ginx.ReturnSuccess(converter.ToCreatePostResp(detail))
 }
 
+// FindPostByName
 // @Tags Post
 // @Summary 通过帖子名查找帖子
 // @Produce json
@@ -95,6 +98,7 @@ func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq, cl
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
+// DeletePost
 // @Tags Post
 // @Summary 删除帖子
 // @Produce json
@@ -110,6 +114,7 @@ func (ph *PostHandler) DeletePost(ctx *gin.Context, req_ req.DeletePostReq, clai
 	return ginx.ReturnSuccess(nil)
 }
 
+// CreateDraft
 // @Tags Post
 // @Summary 创建草稿
 // @Produce json
@@ -127,6 +132,7 @@ func (ph *PostHandler) CreateDraft(ctx *gin.Context, req_ req.CreatePostReq, cla
 	return ginx.ReturnSuccess(converter.ToCreatePostRespFromDraft(*draft, author))
 }
 
+// LoadDraft
 // @Tags Post
 // @Summary 加载草稿
 // @Produce json
@@ -142,6 +148,7 @@ func (ph *PostHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) 
 	return ginx.ReturnSuccess(converter.ToLoadPostDraftResp(draft))
 }
 
+// FindPostByOwnerID
 // @Tags Post
 // @Summary 通过用户ID查找帖子
 // @Produce json
@@ -157,6 +164,13 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registered
 	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
 }
 
+// FindPostByBid
+// @Tags Post
+// @Summary 通过bid返回帖子详情
+// @Produce json
+// @Param Authorization header string true "token"
+// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Router /post/{id} [get]
 func (ph *PostHandler) FindPostByBid(ctx *gin.Context, req_ req.FindPostByBidReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	posts, err := ph.ps.FindPostByBid(ctx, req_.Id)
 	if err != nil {

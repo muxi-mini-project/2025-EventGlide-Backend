@@ -401,7 +401,7 @@ const docTemplate = `{
                 "tags": [
                     "Activity"
                 ],
-                "summary": "根据id返回活动详情",
+                "summary": "根据bid返回活动详情",
                 "parameters": [
                     {
                         "type": "string",
@@ -1336,6 +1336,49 @@ const docTemplate = `{
                 }
             }
         },
+        "/post/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Post"
+                ],
+                "summary": "通过bid返回帖子详情",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/resp.Resp"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/resp.ListPostsResp"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/user/avatar": {
             "post": {
                 "description": "not finished",
@@ -1780,7 +1823,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/model.Activity"
+                                                "$ref": "#/definitions/resp.ListActivitiesResp"
                                             }
                                         }
                                     }
@@ -1832,7 +1875,7 @@ const docTemplate = `{
                                         "data": {
                                             "type": "array",
                                             "items": {
-                                                "$ref": "#/definitions/model.Post"
+                                                "$ref": "#/definitions/resp.ListPostsResp"
                                             }
                                         }
                                     }
@@ -1922,109 +1965,6 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "model.Activity": {
-            "type": "object",
-            "properties": {
-                "activeForm": {
-                    "description": "表单url // 通过条件2",
-                    "type": "string"
-                },
-                "bid": {
-                    "type": "string"
-                },
-                "collectNum": {
-                    "type": "integer"
-                },
-                "commentNum": {
-                    "type": "integer"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "endTime": {
-                    "type": "string"
-                },
-                "holderType": {
-                    "type": "string"
-                },
-                "ifRegister": {
-                    "type": "string"
-                },
-                "introduce": {
-                    "type": "string"
-                },
-                "isChecking": {
-                    "description": "pending or pass or reject // 是否显示",
-                    "type": "string"
-                },
-                "likeNum": {
-                    "type": "integer"
-                },
-                "position": {
-                    "type": "string"
-                },
-                "registerMethod": {
-                    "type": "string"
-                },
-                "showImg": {
-                    "type": "string"
-                },
-                "signer": {
-                    "description": "报名人 \u003e= 5的 []slice // 通过条件1",
-                    "type": "string"
-                },
-                "startTime": {
-                    "type": "string"
-                },
-                "studentID": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string"
-                }
-            }
-        },
-        "model.Post": {
-            "type": "object",
-            "properties": {
-                "bid": {
-                    "type": "string"
-                },
-                "collectNum": {
-                    "type": "integer"
-                },
-                "commentNum": {
-                    "type": "integer"
-                },
-                "createdAt": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "introduce": {
-                    "type": "string"
-                },
-                "isChecking": {
-                    "type": "string"
-                },
-                "likeNum": {
-                    "type": "integer"
-                },
-                "showImg": {
-                    "type": "string"
-                },
-                "studentId": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string"
-                }
-            }
-        },
         "req.ActSearchReq": {
             "type": "object",
             "properties": {
@@ -2061,47 +2001,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "labelform": {
-                    "type": "object",
-                    "properties": {
-                        "activeForm": {
-                            "type": "string"
-                        },
-                        "endTime": {
-                            "type": "string"
-                        },
-                        "holderType": {
-                            "type": "string"
-                        },
-                        "ifRegister": {
-                            "type": "string"
-                        },
-                        "position": {
-                            "type": "string"
-                        },
-                        "registerMethod": {
-                            "type": "string"
-                        },
-                        "signer": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "type": "string"
-                                    },
-                                    "studentId": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "startTime": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/req.CreateDraftLabel"
                 },
                 "showImg": {
                     "type": "array",
@@ -2110,6 +2010,55 @@ const docTemplate = `{
                     }
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "req.CreateActLabel": {
+            "type": "object",
+            "required": [
+                "activeForm",
+                "endTime",
+                "holderType",
+                "ifRegister",
+                "position",
+                "startTime",
+                "type"
+            ],
+            "properties": {
+                "activeForm": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "holderType": {
+                    "type": "string"
+                },
+                "ifRegister": {
+                    "type": "string",
+                    "enum": [
+                        "是",
+                        "否"
+                    ]
+                },
+                "position": {
+                    "type": "string"
+                },
+                "registerMethod": {
+                    "type": "string"
+                },
+                "signer": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "$ref": "#/definitions/req.Signer"
+                    }
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -2125,61 +2074,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "labelform": {
-                    "type": "object",
-                    "required": [
-                        "activeForm",
-                        "endTime",
-                        "holderType",
-                        "ifRegister",
-                        "position",
-                        "startTime",
-                        "type"
-                    ],
-                    "properties": {
-                        "activeForm": {
-                            "type": "string"
-                        },
-                        "endTime": {
-                            "type": "string"
-                        },
-                        "holderType": {
-                            "type": "string"
-                        },
-                        "ifRegister": {
-                            "type": "string",
-                            "enum": [
-                                "是",
-                                "否"
-                            ]
-                        },
-                        "position": {
-                            "type": "string"
-                        },
-                        "registerMethod": {
-                            "type": "string"
-                        },
-                        "signer": {
-                            "type": "array",
-                            "uniqueItems": true,
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "type": "string"
-                                    },
-                                    "studentId": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "startTime": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/req.CreateActLabel"
                 },
                 "showImg": {
                     "type": "array",
@@ -2207,6 +2102,41 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "subject": {
+                    "type": "string"
+                }
+            }
+        },
+        "req.CreateDraftLabel": {
+            "type": "object",
+            "properties": {
+                "activeForm": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "holderType": {
+                    "type": "string"
+                },
+                "ifRegister": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "string"
+                },
+                "registerMethod": {
+                    "type": "string"
+                },
+                "signer": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/req.Signer"
+                    }
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -2351,6 +2281,17 @@ const docTemplate = `{
                 }
             }
         },
+        "req.Signer": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                }
+            }
+        },
         "req.UpdateNameReq": {
             "type": "object",
             "required": [
@@ -2428,18 +2369,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "creator": {
-                    "type": "object",
-                    "properties": {
-                        "avatar": {
-                            "type": "string"
-                        },
-                        "studentId": {
-                            "type": "string"
-                        },
-                        "username": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.Creator"
                 },
                 "isLike": {
                     "type": "string"
@@ -2494,15 +2424,7 @@ const docTemplate = `{
                 "signer": {
                     "type": "array",
                     "items": {
-                        "type": "object",
-                        "properties": {
-                            "name": {
-                                "type": "string"
-                            },
-                            "studentId": {
-                                "type": "string"
-                            }
-                        }
+                        "$ref": "#/definitions/resp.Signer"
                     }
                 },
                 "title": {
@@ -2512,21 +2434,32 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "type": "object",
-                    "properties": {
-                        "avatar": {
-                            "type": "string"
-                        },
-                        "school": {
-                            "type": "string"
-                        },
-                        "studentId": {
-                            "type": "string"
-                        },
-                        "username": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.UserInfo"
+                }
+            }
+        },
+        "resp.Creator": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "resp.DetailTime": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string"
+                },
+                "startTime": {
+                    "type": "string"
                 }
             }
         },
@@ -2561,7 +2494,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "$ref": "#/definitions/resp.UserInfo"
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
@@ -2596,7 +2529,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "$ref": "#/definitions/resp.UserInfo"
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
@@ -2631,7 +2564,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "$ref": "#/definitions/resp.UserInfo"
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
@@ -2666,7 +2599,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "$ref": "#/definitions/resp.UserInfo"
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
@@ -2701,7 +2634,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "$ref": "#/definitions/resp.UserInfo"
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
@@ -2740,6 +2673,20 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.FeedUserInfo": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "resp.ImgBedResp": {
             "type": "object",
             "properties": {
@@ -2747,6 +2694,42 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "domainName": {
+                    "type": "string"
+                }
+            }
+        },
+        "resp.LabelForm": {
+            "type": "object",
+            "properties": {
+                "activeForm": {
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string"
+                },
+                "holderType": {
+                    "type": "string"
+                },
+                "ifRegister": {
+                    "type": "string"
+                },
+                "position": {
+                    "type": "string"
+                },
+                "registerMethod": {
+                    "type": "string"
+                },
+                "signer": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                        "$ref": "#/definitions/resp.Signer"
+                    }
+                },
+                "startTime": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }
@@ -2764,15 +2747,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "detailTime": {
-                    "type": "object",
-                    "properties": {
-                        "endTime": {
-                            "type": "string"
-                        },
-                        "startTime": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.DetailTime"
                 },
                 "holderType": {
                     "type": "string"
@@ -2811,21 +2786,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "type": "object",
-                    "properties": {
-                        "avatar": {
-                            "type": "string"
-                        },
-                        "school": {
-                            "type": "string"
-                        },
-                        "studentId": {
-                            "type": "string"
-                        },
-                        "username": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.UserInfo"
                 }
             }
         },
@@ -2869,21 +2830,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "userInfo": {
-                    "type": "object",
-                    "properties": {
-                        "avatar": {
-                            "type": "string"
-                        },
-                        "school": {
-                            "type": "string"
-                        },
-                        "studentId": {
-                            "type": "string"
-                        },
-                        "username": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.UserInfo"
                 }
             }
         },
@@ -2894,47 +2841,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "labelform": {
-                    "type": "object",
-                    "properties": {
-                        "activeForm": {
-                            "type": "string"
-                        },
-                        "endTime": {
-                            "type": "string"
-                        },
-                        "holderType": {
-                            "type": "string"
-                        },
-                        "ifRegister": {
-                            "type": "string"
-                        },
-                        "position": {
-                            "type": "string"
-                        },
-                        "registerMethod": {
-                            "type": "string"
-                        },
-                        "signer": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "type": "string"
-                                    },
-                                    "studentId": {
-                                        "type": "string"
-                                    }
-                                }
-                            }
-                        },
-                        "startTime": {
-                            "type": "string"
-                        },
-                        "type": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.LabelForm"
                 },
                 "showImg": {
                     "type": "array",
@@ -2999,6 +2906,20 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.ReplyCreator": {
+            "type": "object",
+            "properties": {
+                "avatar": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                },
+                "username": {
+                    "type": "string"
+                }
+            }
+        },
         "resp.ReplyResp": {
             "type": "object",
             "properties": {
@@ -3021,18 +2942,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "replyCreator": {
-                    "type": "object",
-                    "properties": {
-                        "avatar": {
-                            "type": "string"
-                        },
-                        "studentId": {
-                            "type": "string"
-                        },
-                        "username": {
-                            "type": "string"
-                        }
-                    }
+                    "$ref": "#/definitions/resp.ReplyCreator"
                 },
                 "replyNum": {
                     "type": "integer"
@@ -3060,10 +2970,24 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.Signer": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                }
+            }
+        },
         "resp.UserInfo": {
             "type": "object",
             "properties": {
                 "avatar": {
+                    "type": "string"
+                },
+                "school": {
                     "type": "string"
                 },
                 "studentId": {

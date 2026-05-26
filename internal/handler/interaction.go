@@ -41,6 +41,7 @@ func (ih *InteractionHandler) RegisterInteractionHandlers(e *gin.Engine, handler
 	}
 }
 
+// Like
 // @Tags Interaction
 // @Summary 点赞
 // @Accept json
@@ -56,6 +57,7 @@ func (ih *InteractionHandler) Like(ctx *gin.Context, req_ req.InteractionReq, cl
 	return ginx.ReturnSuccess(nil)
 }
 
+// Dislike
 // @Tags Interaction
 // @Summary 取消点赞
 // @Accept json
@@ -71,6 +73,7 @@ func (ih *InteractionHandler) Dislike(ctx *gin.Context, req_ req.InteractionReq,
 	return ginx.ReturnSuccess(nil)
 }
 
+// Collect
 // @Tags Interaction
 // @Summary 收藏
 // @Accept json
@@ -86,6 +89,7 @@ func (ih *InteractionHandler) Collect(ctx *gin.Context, req_ req.InteractionReq,
 	return ginx.ReturnSuccess(nil)
 }
 
+// DisCollect
 // @Tags Interaction
 // @Summary 取消收藏
 // @Accept json
@@ -101,6 +105,7 @@ func (ih *InteractionHandler) DisCollect(ctx *gin.Context, req_ req.InteractionR
 	return ginx.ReturnSuccess(nil)
 }
 
+// Approve
 // @Tags Interaction
 // @Summary 作为活动填表人批准发表此活动
 // @Accept json
@@ -116,6 +121,7 @@ func (ih *InteractionHandler) Approve(ctx *gin.Context, req_ req.InteractionReq,
 	return ginx.ReturnSuccess(nil)
 }
 
+// Reject
 // @Tags Interaction
 // @Summary 作为活动填表人拒绝发表此活动
 // @Accept json

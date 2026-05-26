@@ -45,6 +45,7 @@ func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.Handler
 	}
 }
 
+// NewAct
 // @Tags Activity
 // @Summary 创建活动
 // @Produce json
@@ -67,6 +68,7 @@ func (ah *ActHandler) NewAct(ctx *gin.Context, req_ req.CreateActReq, claims jwt
 	return ginx.ReturnSuccess(converter.ToCreateActivityResp(detail))
 }
 
+// NewDraft
 // @Tags Activity
 // @Summary 创建活动草稿
 // @Description not finished
@@ -85,6 +87,7 @@ func (ah *ActHandler) NewDraft(ctx *gin.Context, req_ req.CreateActDraftReq, cla
 	return ginx.ReturnSuccess(converter.ToCreateActivityRespFromDraft(*draft, author))
 }
 
+// LoadDraft
 // @Tags Activity
 // @Summary 加载活动草稿
 // @Produce json
@@ -100,6 +103,7 @@ func (ah *ActHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (
 	return ginx.ReturnSuccess(converter.ToLoadDraftResp(draft))
 }
 
+// FindActByName
 // @Tags Activity
 // @Summary 通过名称查找活动
 // @Produce json
@@ -116,6 +120,7 @@ func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq,
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// FindActBySearches
 // @Tags Activity
 // @Summary 通过搜索条件查找活动
 // @Produce json
@@ -132,6 +137,7 @@ func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq,
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// FindActByDate
 // @Tags Activity
 // @Summary 通过日期查找活动
 // @Produce json
@@ -148,6 +154,7 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// FindActByOwnerID
 // @Tags Activity
 // @Summary 通过创建者id查找活动
 // @Produce json
@@ -163,6 +170,7 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, claims jwt.RegisteredCl
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// ListAllActs
 // @Tags Activity
 // @Summary 列出所有活动
 // @Produce json
@@ -178,8 +186,9 @@ func (ah *ActHandler) ListAllActs(ctx *gin.Context, claims jwt.RegisteredClaims)
 	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
 }
 
+// FindActByBid
 // @Tags Activity
-// @Summary 根据id返回活动详情
+// @Summary 根据bid返回活动详情
 // @Produce json
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}

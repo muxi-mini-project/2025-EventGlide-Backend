@@ -38,6 +38,7 @@ func (fh *FeedHandler) RegisterFeedHandlers(e *gin.Engine, handlerFunc gin.Handl
 	}
 }
 
+// GetTotalCnt
 // @Summary 获取用户的消息总数
 // @Tags feed
 // @Produce json
@@ -53,6 +54,7 @@ func (fh *FeedHandler) GetTotalCnt(ctx *gin.Context, claims jwt.RegisteredClaims
 	return ginx.ReturnSuccess(res)
 }
 
+// GetFeedList
 // @Summary 获取feed列表
 // @Tags feed
 // @Produce json
@@ -68,6 +70,7 @@ func (fh *FeedHandler) GetFeedList(ctx *gin.Context, claims jwt.RegisteredClaims
 	return ginx.ReturnSuccess(res)
 }
 
+// GetAuditorFeedList
 // @Summary 获取审核员feed列表
 // @Tags feed
 // @Produce json
@@ -83,6 +86,7 @@ func (fh *FeedHandler) GetAuditorFeedList(ctx *gin.Context, claims jwt.Registere
 	return ginx.ReturnSuccess(res)
 }
 
+// ReadFeedDetail
 // @Summary 读取feed详情, 标记已读
 // @Tags feed
 // @Produce json
@@ -98,6 +102,7 @@ func (fh *FeedHandler) ReadFeedDetail(ctx *gin.Context, req_ req.ReadFeedDetailR
 	return ginx.ReturnSuccess(nil)
 }
 
+// ReadAllFeed
 // @Summary 读取全部feed, 标记已读
 // @Tags feed
 // @Produce json
