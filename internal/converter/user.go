@@ -17,7 +17,7 @@ func ToLoginResp(user *model.User, token string) resp.LoginResp {
 	}
 }
 
-func ToUserInfoResp(user model.User) resp.UserInfoResp {
+func ToUserInfoResp(user *model.User) resp.UserInfoResp {
 	return resp.UserInfoResp{
 		College:  user.College,
 		Id:       user.Id,

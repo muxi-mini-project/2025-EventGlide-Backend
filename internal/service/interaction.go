@@ -12,6 +12,18 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ InteractionServiceHdl = &InteractionService{}
+
+type InteractionServiceHdl interface {
+	Like(context.Context, *req.InteractionReq, string) error
+	Dislike(c *gin.Context, r *req.InteractionReq, sid string) error
+	Comment(c *gin.Context, r *req.InteractionReq, sid string) error
+	Collect(c *gin.Context, r *req.InteractionReq, sid string) error
+	DisCollect(c *gin.Context, r *req.InteractionReq, sid string) error
+	Approve(c *gin.Context, r *req.InteractionReq, studendId string) error
+	Reject(c *gin.Context, r *req.InteractionReq, studendId string) error
+}
+
 type InteractionService struct {
 	apg ActPostCommentGetter
 	id  *repo.InteractionRepo
