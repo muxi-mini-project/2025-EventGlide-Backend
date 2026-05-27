@@ -14,7 +14,7 @@ EventGlide Backend 是一个基于 Go 构建的校园活动管理系统后端，
 - 文件上传
 - Redis 缓存优化
 
-项目采用分层架构设计，便于维护与扩展。
+项目采用MVC架构设计，便于维护与扩展。
 
 ---
 
@@ -80,7 +80,7 @@ MySQL / Redis
 │   ├── repo
 │   └── service
 ├── pkg
-├── configs
+├── config
 ├── docs
 └── main.go
 ```
@@ -148,21 +148,40 @@ go mod tidy
 修改配置文件：
 
 ```text
-configs/config.yaml
+config/conf-example.yaml
 ```
 
 示例：
 
 ```yaml
 mysql:
-  host: localhost
-  port: 3306
-  user: root
-  password: password
-  dbname: eventglide
+  dsn: username:password@tcp(addr)/dbname?options
+  maxIdleConns: 20 # max-idle-connections
+  maxOpenConns: 10 # max-open-connections
 
 redis:
-  addr: localhost:6379
+  addr: addr
+
+kafka:
+  addr: addr
+
+jwt:
+  key: secret-key-for-jwt
+  ttl: 259200 # time to live
+
+imgbed:
+  accessKey: your-access-key
+  secretKey: your-secret-key
+  bucket: bucket-name
+  imgUrl:   # img-store-url
+
+auditor:
+  auditUrl: http://localhost:8080/api/v1
+  hookUrl: http://localhost:8081
+  apiKeyPath: /api/v1/auditor/getApiKey
+  apiKey: apiKey
+  webhookPath: /api/v1/auditor/webhook
+  effect: slow # slow为先审后发，fast为先发后审
 ```
 
 ---
@@ -170,7 +189,7 @@ redis:
 ### 4. 启动项目
 
 ```bash
-go run main.go
+go run .
 ```
 
 服务默认运行于：
@@ -181,33 +200,8 @@ http://localhost:8080
 
 ---
 
-## API 文档
-
-如果项目启用了 Swagger，可访问：
-
-```text
-http://localhost:8080/swagger/index.html
-```
-
----
-
 ## Docker 部署
 
 ```bash
 docker-compose up -d
 ```
-
----
-
-## TODO
-
-- [ ] WebSocket 实时通知
-- [ ] Elasticsearch 搜索优化
-- [ ] 微服务拆分
-- [ ] 分布式任务调度
-
----
-
-## License
-
-MIT License
