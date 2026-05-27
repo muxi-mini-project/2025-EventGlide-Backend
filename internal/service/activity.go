@@ -11,6 +11,21 @@ import (
 	"go.uber.org/zap"
 )
 
+type ActivityServiceHdl interface {
+	CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error
+	CreateDraft(c context.Context, draft *model.ActivityDraft) error
+	LoadDraft(c context.Context, sid string) (model.ActivityDraft, error)
+	FindActBySearches(c context.Context, search *req.ActSearchReq) ([]model.Activity, error)
+	FindActByDate(c context.Context, date string) ([]model.Activity, error)
+	FindActByName(c context.Context, name string) ([]model.Activity, error)
+	FindActByBid(c context.Context, bid string) (model.Activity, error)
+	FindActByOwnerID(c context.Context, studentID string) ([]model.Activity, error)
+	ListAllActs(c context.Context) ([]model.Activity, error)
+	EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail
+	EnrichOneForSearcher(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail
+	AuthorBrief(c context.Context, studentID string) model.UserBrief
+}
+
 type ActivityService struct {
 	ad  *repo.ActivityRepo
 	ud  *repo.UserRepo

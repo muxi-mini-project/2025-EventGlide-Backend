@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/middleware"
@@ -24,18 +23,23 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ UserServiceHdl = &UserService{}
+
 type UserServiceHdl interface {
-	CreateUser(context.Context, string) error
+	CreateUser(context.Context, string, string) error
 	Login(context.Context, string, string) (*model.User, string, error)
 	Logout(context.Context, string) error
-	GetUserInfo(context.Context, string) (model.User, error)
-	UpdateAvatar(context.Context, req.UserAvatarReq) error
+	GetUserInfo(context.Context, string) (*model.User, error)
+	UpdateAvatar(context.Context, req.UserAvatarReq, string) error
 	UpdateUsername(context.Context, string, string) error
-	SearchUserAct(context.Context, string, string) ([]model.Activity, error)
-	SearchUserPost(context.Context, string, string) ([]model.Post, error)
-	GenQINIUToken(context.Context) string
-	Like(context.Context, string, string) error
-	Comment(context.Context, string, string) error
+	SearchUserAct(context.Context, string, string) ([]model.ActivityDetail, error)
+	SearchUserPost(context.Context, string, string) ([]model.PostDetail, error)
+	GenQINIUToken(context.Context) (string, string)
+	GetChecking(context.Context, string) ([]model.ActivityDetail, []model.PostDetail, error)
+	LoadCollectAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error)
+	LoadCollectPost(ctx context.Context, studentId string) ([]model.PostDetail, error)
+	LoadLikePost(ctx context.Context, studentId string) ([]model.PostDetail, error)
+	LoadLikeAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error)
 }
 
 type UserService struct {
@@ -108,10 +112,13 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", err
 	}
 	user, err := us.udh.GetUserInfo(ctx, studentId)
+	if err != nil {
+		return nil, "", nil
+	}
 	return &user, token, nil
 }
 
-func (us *UserService) Logout(ctx *gin.Context, token string) error {
+func (us *UserService) Logout(ctx context.Context, token string) error {
 	err := us.jwth.ClearToken(ctx, token)
 	if err != nil {
 		return err
@@ -119,15 +126,15 @@ func (us *UserService) Logout(ctx *gin.Context, token string) error {
 	return nil
 }
 
-func (us *UserService) GetUserInfo(ctx *gin.Context, studentId string) (model.User, error) {
+func (us *UserService) GetUserInfo(ctx context.Context, studentId string) (*model.User, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return model.User{}, err
+		return nil, err
 	}
-	return user, nil
+	return &user, nil
 }
 
-func (us *UserService) UpdateAvatar(ctx *gin.Context, req req.UserAvatarReq, sid string) error {
+func (us *UserService) UpdateAvatar(ctx context.Context, req req.UserAvatarReq, sid string) error {
 	err := us.udh.UpdateAvatar(ctx, sid, req.AvatarUrl)
 	if err != nil {
 		return err
@@ -135,7 +142,7 @@ func (us *UserService) UpdateAvatar(ctx *gin.Context, req req.UserAvatarReq, sid
 	return nil
 }
 
-func (us *UserService) UpdateUsername(ctx *gin.Context, studentId string, name string) error {
+func (us *UserService) UpdateUsername(ctx context.Context, studentId string, name string) error {
 	err := us.udh.UpdateUsername(ctx, studentId, name)
 	if err != nil {
 		return err
@@ -143,7 +150,7 @@ func (us *UserService) UpdateUsername(ctx *gin.Context, studentId string, name s
 	return nil
 }
 
-func (us *UserService) SearchUserAct(ctx *gin.Context, studentId string, keyword string) ([]model.ActivityDetail, error) {
+func (us *UserService) SearchUserAct(ctx context.Context, studentId string, keyword string) ([]model.ActivityDetail, error) {
 	acts, err := us.adh.FindActByUser(ctx, studentId, keyword)
 	if err != nil {
 		return nil, err
@@ -151,7 +158,7 @@ func (us *UserService) SearchUserAct(ctx *gin.Context, studentId string, keyword
 	return us.as.EnrichForSearcher(ctx, acts, studentId), nil
 }
 
-func (us *UserService) SearchUserPost(ctx *gin.Context, studentId string, keyword string) ([]model.PostDetail, error) {
+func (us *UserService) SearchUserPost(ctx context.Context, studentId string, keyword string) ([]model.PostDetail, error) {
 	posts, err := us.pdh.FindPostByUser(ctx, studentId, keyword)
 	if err != nil {
 		return nil, err
@@ -159,7 +166,7 @@ func (us *UserService) SearchUserPost(ctx *gin.Context, studentId string, keywor
 	return us.ps.EnrichForSearcher(ctx, posts, studentId), nil
 }
 
-func (us *UserService) GetChecking(ctx *gin.Context, studentId string) ([]model.ActivityDetail, []model.PostDetail, error) {
+func (us *UserService) GetChecking(ctx context.Context, studentId string) ([]model.ActivityDetail, []model.PostDetail, error) {
 	acts, err := us.adh.GetChecking(ctx, studentId)
 	if err != nil {
 		return nil, nil, err
@@ -175,7 +182,7 @@ func (us *UserService) GetChecking(ctx *gin.Context, studentId string) ([]model.
 	return actDetails, postDetails, nil
 }
 
-//func genRandomAvatar(c *gin.Context) string {
+//func genRandomAvatar(c context.Context) string {
 //	avatars := []string{
 //		viper.GetString("imgbed.defaultAvatar1"),
 //		viper.GetString("imgbed.defaultAvatar2"),
@@ -188,11 +195,11 @@ func (us *UserService) GetChecking(ctx *gin.Context, studentId string) ([]model.
 //	}
 //}
 
-func (us *UserService) GenQINIUToken(ctx *gin.Context) (string, string) {
+func (us *UserService) GenQINIUToken(ctx context.Context) (string, string) {
 	return us.iuh.GenQINIUToken(ctx), us.iuh.ImgUrl
 }
 
-func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]model.ActivityDetail, error) {
+func (us *UserService) LoadCollectAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
@@ -212,7 +219,7 @@ func (us *UserService) LoadCollectAct(ctx *gin.Context, studentId string) ([]mod
 	return res, nil
 }
 
-func (us *UserService) LoadCollectPost(ctx *gin.Context, studentId string) ([]model.PostDetail, error) {
+func (us *UserService) LoadCollectPost(ctx context.Context, studentId string) ([]model.PostDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
@@ -232,7 +239,7 @@ func (us *UserService) LoadCollectPost(ctx *gin.Context, studentId string) ([]mo
 	return res, nil
 }
 
-func (us *UserService) LoadLikePost(ctx *gin.Context, studentId string) ([]model.PostDetail, error) {
+func (us *UserService) LoadLikePost(ctx context.Context, studentId string) ([]model.PostDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err
@@ -252,7 +259,7 @@ func (us *UserService) LoadLikePost(ctx *gin.Context, studentId string) ([]model
 	return res, nil
 }
 
-func (us *UserService) LoadLikeAct(ctx *gin.Context, studentId string) ([]model.ActivityDetail, error) {
+func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		return nil, err

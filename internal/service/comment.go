@@ -12,7 +12,16 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ CommentServiceHdl = &CommentService{}
+
 type CommentServiceHdl interface {
+	CreateComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error)
+	DeleteComment(c context.Context, targetID, studentID string) error
+	AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error)
+	LoadComments(c context.Context, parentID string) ([]model.Comment, error)
+	EnrichComments(c context.Context, cmts []model.Comment, viewerID string) []model.CommentDetail
+	EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail
+	EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail
 }
 
 type CommentService struct {

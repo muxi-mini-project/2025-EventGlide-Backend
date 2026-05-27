@@ -21,9 +21,12 @@ import (
 var _ FeedServiceHdl = &FeedService{}
 
 type FeedServiceHdl interface {
+	ReadFeedDetail(ctx context.Context, sid, bid string) error
+	ReadAllFeed(ctx context.Context, sid string) error
 	GetTotalCnt(ctx context.Context, sid string) (model.BriefFeedDetail, error)
 	GetFeedList(ctx context.Context, sid string) (model.FeedDetail, error)
 	GetLikeFeed(ctx context.Context, sid string) ([]model.FeedLikeDetail, error)
+	ConsumeFeedStream()
 	GetCollectFeed(ctx context.Context, sid string) ([]model.FeedCollectDetail, error)
 	GetCommentFeed(ctx context.Context, sid string) ([]model.FeedCommentDetail, error)
 	GetAtFeed(ctx context.Context, sid string) ([]model.FeedAtDetail, error)

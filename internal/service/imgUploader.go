@@ -8,8 +8,10 @@ import (
 	"github.com/raiki02/EG/config"
 )
 
+var _ ImgUploaderHdl = &ImgUploader{}
+
 type ImgUploaderHdl interface {
-	GetQIQIUToken(context.Context) string
+	GenQINIUToken(context.Context) string
 }
 
 type ImgUploader struct {
