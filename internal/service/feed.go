@@ -65,18 +65,16 @@ func (fs *FeedService) ReadAllFeed(ctx context.Context, sid string) error {
 }
 
 func (fs *FeedService) GetTotalCnt(ctx context.Context, sid string) (model.BriefFeedDetail, error) {
-
 	ints, err := fs.fd.GetTotalCnt(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get All Events Failed", zap.Error(err))
 		return model.BriefFeedDetail{}, err
 	}
 	return model.BriefFeedDetail{
-		LikeAndCollect: ints[0],
-		CommentAndAt:   ints[1],
-		Total:          ints[2],
+		LikeAndCollect: ints.LikeAndCollect,
+		CommentAndAt:   ints.CommentAndAt,
+		Total:          ints.Total,
 	}, nil
-
 }
 
 func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (model.FeedDetail, error) {
