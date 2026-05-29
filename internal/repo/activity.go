@@ -7,6 +7,7 @@ import (
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"gorm.io/gorm"
 )
 
 type ActivityRepo struct {
@@ -28,6 +29,37 @@ func (r *ActivityRepo) CreateAct(ctx context.Context, act *model.Activity) error
 		return err
 	}
 	return r.Invalidate(ctx, act.Bid)
+}
+
+func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity, signers []model.Signer, studentID string) error {
+	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(act).Error; err != nil {
+			return err
+		}
+
+		approvements := make([]model.Approvement, 0, len(signers))
+
+		for _, s := range signers {
+			if s.StudentID == studentID {
+				continue
+			}
+
+			approvements = append(approvements, model.Approvement{
+				StudentId:   s.StudentID,
+				StudentName: s.Name,
+				Bid:         act.Bid,
+			},
+			)
+		}
+
+		if len(approvements) > 0 {
+			if err := tx.Create(&approvements).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *ActivityRepo) CreateDraft(ctx context.Context, draft *model.ActivityDraft) error {
