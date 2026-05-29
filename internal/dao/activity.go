@@ -13,11 +13,13 @@ import (
 	"gorm.io/gorm"
 )
 
+var _ ActDaoHdl = &ActDao{}
+
 type ActDaoHdl interface {
 	CreateAct(context.Context, *model.Activity) error
 	CreateDraft(context.Context, *model.ActivityDraft) error
 	DeleteAct(context.Context, model.Activity) error
-	LoadDraft(context.Context, string, string) (*model.ActivityDraft, error)
+	LoadDraft(context.Context, string) (model.ActivityDraft, error)
 	FindActByName(context.Context, string) ([]model.Activity, error)
 	FindActByDate(context.Context, string) ([]model.Activity, error)
 	FindActByOwnerID(context.Context, string) ([]model.Activity, error)

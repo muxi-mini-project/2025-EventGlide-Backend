@@ -54,7 +54,10 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 		return err
 	}
 
-	go as.asyncAfterActivityCreated(act, signers, studentID, aw)
+	go as.retryUploadAuditorForm(act, aw)
+
+	go as.publishFeeds(act, signers, studentID)
+
 	as.l.Info("create activity tx",
 		zap.String("act", act.Bid),
 		zap.String("studentID", studentID),
@@ -152,8 +155,8 @@ func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, vie
 	}
 }
 
-func (as *ActivityService) asyncAfterActivityCreated(act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+func (as *ActivityService) publishFeeds(act *model.Activity, signers []model.Signer, studentID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	for _, s := range signers {
@@ -170,18 +173,39 @@ func (as *ActivityService) asyncAfterActivityCreated(act *model.Activity, signer
 		}
 
 		if err := as.mq.Publish(ctx, "feed_stream", f); err != nil {
-			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("studentID", s.StudentID), zap.String("actBid", act.Bid))
+			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("receiver", s.StudentID), zap.String("actBid", act.Bid))
 		}
 	}
+}
 
+func (as *ActivityService) retryUploadAuditorForm(act *model.Activity, aw *req.AuditWrapper) {
+	const maxRetry = 5
+	for i := 1; i <= maxRetry; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		err := as.uploadAuditorForm(ctx, act, aw)
+		cancel()
+		if err == nil {
+			as.l.Info("Upload auditor form success", zap.String("actBid", act.Bid), zap.Int("retry", i))
+			return
+		}
+
+		as.l.Error("Upload auditor form failed", zap.Error(err), zap.String("actBid", act.Bid), zap.Int("retry", i))
+		time.Sleep(time.Duration(i*i) * time.Second)
+	}
+
+	as.l.Error("Upload auditor form finally failed", zap.String("actBid", act.Bid))
+}
+
+func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Activity, aw *req.AuditWrapper) error {
 	form, err := as.aud.CreateAuditorForm(ctx, act.Bid, act.ActiveForm, SubjectActivity)
 	if err != nil {
-		as.l.Error("Failed to create auditor form", zap.Error(err))
-		return
+		return err
 	}
 
 	err = as.aud.UploadForm(ctx, aw, form.Id)
 	if err != nil {
-		as.l.Error("Failed to upload auditor form", zap.Error(err))
+		return err
 	}
+
+	return nil
 }
