@@ -16,6 +16,12 @@ const (
 	TableNameComment  = "comment"
 )
 
+type FeedTotalCnt struct {
+	LikeAndCollect int
+	CommentAndAt   int
+	Total          int
+}
+
 type FeedDao struct {
 	db *gorm.DB
 	l  *zap.Logger
@@ -34,15 +40,21 @@ func (fd *FeedDao) CreateFeed(ctx context.Context, feed *model.Feed) error {
 	}).Create(feed).Error
 }
 
-func (fd *FeedDao) GetTotalCnt(ctx context.Context, id string) ([]int, error) {
+func (fd *FeedDao) GetTotalCnt(ctx context.Context, id string) (*FeedTotalCnt, error) {
 	var lc, ca int64
 	err1 := fd.db.WithContext(ctx).Model(&model.Feed{}).Where("receiver = ? and action in ? and status = ? and student_id != ?", id, []string{"like", "collect"}, "未读", id).Count(&lc).Error
 	err2 := fd.db.WithContext(ctx).Model(&model.Feed{}).Where("receiver = ? and action in ? and status = ? and student_id != ?", id, []string{"comment", "at"}, "未读", id).Count(&ca).Error
+
 	if err1 != nil || err2 != nil {
 		fd.l.Error("Get Total Cnt Failed", zap.Error(err1), zap.Error(err2))
 		return nil, errors.Join(err1, err2)
 	}
-	return []int{int(lc), int(ca), int(lc + ca)}, nil
+
+	return &FeedTotalCnt{
+		LikeAndCollect: int(lc),
+		CommentAndAt:   int(ca),
+		Total:          int(lc + ca),
+	}, nil
 }
 
 func (fd *FeedDao) GetLikeFeed(ctx context.Context, id string) ([]*model.Feed, error) {
