@@ -25,23 +25,22 @@ type CommentServiceHdl interface {
 }
 
 type CommentService struct {
-	cd  *dao.CommentDao
-	ud  *repo.UserRepo
-	id  *repo.InteractionRepo
-	mq  mq.MQHdl
-	apg ActPostCommentGetter
-	l   *zap.Logger
+	cd *dao.CommentDao
+	ud *repo.UserRepo
+	id *repo.InteractionRepo
+	mq mq.MQHdl
+	sg SubjectGetter
+	l  *zap.Logger
 }
 
-func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, l *zap.Logger, mq mq.MQHdl,
-	apg ActPostCommentGetter) *CommentService {
+func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, l *zap.Logger, mq mq.MQHdl, sg SubjectGetter) *CommentService {
 	return &CommentService{
-		cd:  cd,
-		ud:  ud,
-		id:  id,
-		mq:  mq,
-		apg: apg,
-		l:   l.Named("comment/service"),
+		cd: cd,
+		ud: ud,
+		id: id,
+		mq: mq,
+		sg: sg,
+		l:  l.Named("comment/service"),
 	}
 }
 
@@ -70,14 +69,14 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		return nil, err
 	}
 
-	ap, err := cs.apg.GetActivityOrPostOrComment(c, cmt.ParentID, cmt.Subject)
+	subject, err := cs.sg.GetSubjectInfo(c, cmt.ParentID, cmt.Subject)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
 		return nil, err
 	}
 
 	// TODO 优雅实现
-	if studentID == ap.GetStudentID() {
+	if studentID == subject.StudentID {
 		return cmt, nil
 	}
 
@@ -86,7 +85,7 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		TargetBid: cmt.ParentID,
 		Object:    cmt.Subject,
 		Action:    "comment",
-		Receiver:  ap.GetStudentID(),
+		Receiver:  subject.StudentID,
 		RootID:    rootID,
 		RootType:  rootType,
 	}
@@ -99,11 +98,11 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	}
 
 	switch cmt.Subject {
-	case "activity":
+	case SubjectActivity:
 		err = cs.id.CommentActivity(c, studentID, cmt.ParentID)
-	case "post":
+	case SubjectPost:
 		err = cs.id.CommentPost(c, studentID, cmt.ParentID)
-	case "comment":
+	case SubjectComment:
 		err = cs.id.CommentComment(c, studentID, cmt.ParentID)
 	}
 	if err != nil {
@@ -141,24 +140,24 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		zap.String("studentid", cmt.StudentID),
 	)
 
-	ap, err := cs.apg.GetActivityOrPostOrComment(c, cmt.ParentID, cmt.Subject)
+	parent, err := cs.sg.GetSubjectInfo(c, cmt.ParentID, cmt.Subject)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
 		return nil, err
 	}
 
-	ap2, err := cs.apg.GetActivityOrPostOrComment(c, rootID, rootType)
+	root, err := cs.sg.GetSubjectInfo(c, rootID, rootType)
 	if err != nil {
 		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
 		return nil, err
 	}
 
-	if err = cs.IncreaseCommentNum(c, &ap2); err != nil {
+	if err = cs.IncreaseCommentNum(c, root, studentID); err != nil {
 		cs.l.Error("Error increase comment num failed", zap.Error(err))
 		return nil, err
 	}
 
-	if studentID == ap.GetStudentID() {
+	if studentID == parent.StudentID {
 		return cmt, nil
 	}
 
@@ -167,7 +166,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		TargetBid: cmt.ParentID,
 		Object:    "comment",
 		Action:    "at",
-		Receiver:  ap.GetStudentID(),
+		Receiver:  parent.StudentID,
 		RootID:    rootID,
 		RootType:  rootType,
 	}
@@ -306,17 +305,15 @@ func (cs *CommentService) enrichReply(c context.Context, cmt *model.Comment, vie
 	}
 }
 
-func (cs *CommentService) IncreaseCommentNum(c context.Context, parent *ActPostCommentWrapper) error {
-	studentID := parent.GetStudentID()
-	bid := parent.GetBid()
-	switch {
-	case parent.Activity != nil:
-		return cs.id.CommentActivity(c, studentID, bid)
-	case parent.Post != nil:
-		return cs.id.CommentPost(c, studentID, bid)
-	case parent.Comment != nil:
-		return cs.id.CommentComment(c, studentID, bid)
-	default:
-		return nil
+func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {
+	switch subject.Subject {
+	case SubjectActivity:
+		return cs.id.CommentActivity(ctx, commenterID, subject.Bid)
+	case SubjectPost:
+		return cs.id.CommentPost(ctx, commenterID, subject.Bid)
+	case SubjectComment:
+		return cs.id.CommentComment(ctx, commenterID, subject.Bid)
 	}
+
+	return errors.New("invalid subject")
 }

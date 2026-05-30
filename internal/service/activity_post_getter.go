@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/raiki02/EG/internal/dao"
-	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 )
 
@@ -15,77 +14,68 @@ const (
 	SubjectComment  = "comment"
 )
 
-type ActPostCommentWrapper struct {
-	Activity *model.Activity
-	Post     *model.Post
-	Comment  *model.Comment
+type SubjectInfo struct {
+	Subject   string
+	StudentID string
+	Bid       string
 }
 
-func (apw *ActPostCommentWrapper) GetStudentID() string {
-	if apw.Activity != nil {
-		return apw.Activity.StudentID
-	}
-	if apw.Post != nil {
-		return apw.Post.StudentID
-	}
-	if apw.Comment != nil {
-		return apw.Comment.StudentID
-	}
-	return ""
+type SubjectGetter interface {
+	GetSubjectInfo(ctx context.Context, bid string, sub string) (SubjectInfo, error)
 }
 
-func (apw *ActPostCommentWrapper) GetBid() string {
-	if apw.Activity != nil {
-		return apw.Activity.Bid
-	}
-	if apw.Post != nil {
-		return apw.Post.Bid
-	}
-	if apw.Comment != nil {
-		return apw.Comment.Bid
-	}
-	return ""
-}
-
-type ActPostCommentGetter interface {
-	GetActivityOrPostOrComment(ctx context.Context, bid string, sub string) (ActPostCommentWrapper, error)
-}
-
-type actPostCommentGetter struct {
+type subjectGetter struct {
 	ad *repo.ActivityRepo
 	pd *repo.PostRepo
 	cd *dao.CommentDao
 }
 
-func NewActPostCommentGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentDao) ActPostCommentGetter {
-	return &actPostCommentGetter{
+func NewSubjectGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentDao) SubjectGetter {
+	return &subjectGetter{
 		ad: ad,
-		cd: cd,
 		pd: pd,
+		cd: cd,
 	}
 }
 
-func (apg *actPostCommentGetter) GetActivityOrPostOrComment(ctx context.Context, bid string, sub string) (ActPostCommentWrapper, error) {
-	var wrapper ActPostCommentWrapper
+func (g *subjectGetter) GetSubjectInfo(ctx context.Context, bid string, sub string) (SubjectInfo, error) {
 	switch sub {
 	case SubjectActivity:
-		act, err := apg.ad.FindActByBid(ctx, bid)
+		act, err := g.ad.FindActByBid(ctx, bid)
 		if err != nil {
-			return ActPostCommentWrapper{}, err
+			return SubjectInfo{}, err
 		}
-		wrapper.Activity = &act
+
+		return SubjectInfo{
+			Subject:   SubjectActivity,
+			StudentID: act.StudentID,
+			Bid:       act.Bid,
+		}, nil
+
 	case SubjectPost:
-		post, err := apg.pd.FindPostByBid(ctx, bid)
+		post, err := g.pd.FindPostByBid(ctx, bid)
 		if err != nil {
-			return ActPostCommentWrapper{}, err
+			return SubjectInfo{}, err
 		}
-		wrapper.Post = &post
+
+		return SubjectInfo{
+			Subject:   SubjectPost,
+			StudentID: post.StudentID,
+			Bid:       post.Bid,
+		}, nil
+
 	case SubjectComment:
-		cmt := apg.cd.FindCmtByID(ctx, bid)
-		if cmt == nil { // todo 加一个错误返回
-			return ActPostCommentWrapper{}, errors.New("comment not found")
+		cmt := g.cd.FindCmtByID(ctx, bid)
+		if cmt == nil {
+			return SubjectInfo{}, errors.New("comment not found")
 		}
-		wrapper.Comment = cmt
+
+		return SubjectInfo{
+			Subject:   SubjectComment,
+			StudentID: cmt.StudentID,
+			Bid:       cmt.Bid,
+		}, nil
 	}
-	return wrapper, nil
+
+	return SubjectInfo{}, errors.New("invalid subject")
 }
