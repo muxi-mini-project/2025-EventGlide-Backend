@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/model"
@@ -47,51 +48,24 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, l *zap.Logger,
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
-	for _, s := range signers {
-		if s.StudentID == studentID {
-			continue
-		}
-		if err := as.id.InsertApprovement(c, s.StudentID, s.Name, act.Bid); err != nil {
-			as.l.Error("Failed to insert approvement", zap.Error(err), zap.String("studentID", s.StudentID), zap.String("actBid", act.Bid))
-			return err
-		}
-		f := model.Feed{
-			StudentID: studentID,
-			TargetBid: act.Bid,
-			Object:    "activity",
-			Action:    "invitation",
-			Receiver:  s.StudentID,
-		}
-		if err := as.mq.Publish(c, "feed_stream", f); err != nil {
-			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("studentID", s.StudentID), zap.String("actBid", act.Bid))
-			return err
-		}
-	}
-
-	form, err := as.aud.CreateAuditorForm(c, act.Bid, act.ActiveForm, SubjectActivity)
+	err := as.ad.CreateActivityTx(c, act, signers, studentID)
 	if err != nil {
-		as.l.Error("Failed to create activity form", zap.Error(err))
+		as.l.Error("failed to create activity tx", zap.Error(err))
 		return err
 	}
 
-	err = as.aud.UploadForm(c, aw, form.Id)
-	if err != nil {
-		as.l.Error("Failed to upload form to auditor", zap.Error(err))
-		return err
-	}
+	go as.retryUploadAuditorForm(act, aw)
 
-	err = as.ad.CreateAct(c, act)
-	if err != nil {
-		as.l.Error("Failed to create act", zap.Error(err))
-		return err
-	}
-	as.l.Info("create activity",
+	go as.publishFeeds(act, signers, studentID)
+
+	as.l.Info("create activity tx",
 		zap.String("act", act.Bid),
-		zap.String("student", act.StudentID),
+		zap.String("studentID", studentID),
 		zap.String("host", act.HolderType),
 		zap.String("formfile", act.ActiveForm),
 		zap.String("signer", act.Signer),
 	)
+
 	return nil
 }
 
@@ -179,4 +153,61 @@ func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, vie
 		IsLike:    strings.Contains(searcher.LikeAct, act.Bid),
 		IsCollect: strings.Contains(searcher.CollectAct, act.Bid),
 	}
+}
+
+func (as *ActivityService) publishFeeds(act *model.Activity, signers []model.Signer, studentID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	for _, s := range signers {
+		if s.StudentID == studentID {
+			continue
+		}
+
+		f := model.Feed{
+			StudentID: studentID,
+			TargetBid: act.Bid,
+			Object:    "activity",
+			Action:    "invitation",
+			Receiver:  s.StudentID,
+		}
+
+		if err := as.mq.Publish(ctx, "feed_stream", f); err != nil {
+			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("receiver", s.StudentID), zap.String("actBid", act.Bid))
+		}
+	}
+}
+
+func (as *ActivityService) retryUploadAuditorForm(act *model.Activity, aw *req.AuditWrapper) {
+	const maxRetry = 5
+	for i := 1; i <= maxRetry; i++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		err := as.uploadAuditorForm(ctx, act, aw)
+		cancel()
+		if err == nil {
+			as.l.Info("Upload auditor form success", zap.String("actBid", act.Bid), zap.Int("retry", i))
+			return
+		}
+
+		as.l.Error("Upload auditor form failed", zap.Error(err), zap.String("actBid", act.Bid), zap.Int("retry", i))
+		if i < maxRetry {
+			time.Sleep(time.Duration(i*i) * time.Second)
+		}
+	}
+
+	as.l.Error("Upload auditor form finally failed", zap.String("actBid", act.Bid))
+}
+
+func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Activity, aw *req.AuditWrapper) error {
+	form, err := as.aud.CreateAuditorForm(ctx, act.Bid, act.ActiveForm, SubjectActivity)
+	if err != nil {
+		return err
+	}
+
+	err = as.aud.UploadForm(ctx, aw, form.Id)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
