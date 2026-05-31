@@ -25,28 +25,28 @@ type InteractionServiceHdl interface {
 }
 
 type InteractionService struct {
-	apg ActPostCommentGetter
-	id  *repo.InteractionRepo
-	mq  mq.MQHdl
-	l   *zap.Logger
+	sg SubjectGetter
+	id *repo.InteractionRepo
+	mq mq.MQHdl
+	l  *zap.Logger
 }
 
-func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, l *zap.Logger, apg ActPostCommentGetter) *InteractionService {
+func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, l *zap.Logger, sg SubjectGetter) *InteractionService {
 	return &InteractionService{
-		id:  id,
-		apg: apg,
-		mq:  mq,
-		l:   l.Named("interaction/service"),
+		id: id,
+		sg: sg,
+		mq: mq,
+		l:  l.Named("interaction/service"),
 	}
 }
 
 func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid string) error {
-	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
+	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
 	if err != nil {
 		return err
 	}
-	if sid != ap.GetStudentID() {
-		jreq := converter.FeedFromInteractionReq(r, "like", sid, ap.GetStudentID())
+	if sid != ap.StudentID {
+		jreq := converter.FeedFromInteractionReq(r, "like", sid, ap.StudentID)
 		err = is.mq.Publish(c, "feed_stream", jreq)
 		if err != nil {
 			is.l.Error("Publish Like Feed Failed", zap.Error(err), zap.Any("feed", jreq))
@@ -56,11 +56,11 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 	}
 
 	switch r.Subject {
-	case "activity":
+	case SubjectActivity:
 		return is.id.LikeActivity(c, sid, r.TargetID)
-	case "post":
+	case SubjectPost:
 		return is.id.LikePost(c, sid, r.TargetID)
-	case "comment":
+	case SubjectComment:
 		return is.id.LikeComment(c, sid, r.TargetID)
 	default:
 		return errors.New("subject error")
@@ -69,11 +69,11 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 
 func (is *InteractionService) Dislike(c *gin.Context, r *req.InteractionReq, sid string) error {
 	switch r.Subject {
-	case "activity":
+	case SubjectActivity:
 		return is.id.DislikeActivity(c, sid, r.TargetID)
-	case "post":
+	case SubjectPost:
 		return is.id.DislikePost(c, sid, r.TargetID)
-	case "comment":
+	case SubjectComment:
 		return is.id.DislikeComment(c, sid, r.TargetID)
 	default:
 		return errors.New("subject error")
@@ -81,12 +81,12 @@ func (is *InteractionService) Dislike(c *gin.Context, r *req.InteractionReq, sid
 }
 
 func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid string) error {
-	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
+	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
 	if err != nil {
 		return err
 	}
-	if sid != ap.GetStudentID() {
-		jreq := converter.FeedFromInteractionReq(r, "comment", sid, ap.GetStudentID())
+	if sid != ap.StudentID {
+		jreq := converter.FeedFromInteractionReq(r, SubjectComment, sid, ap.StudentID)
 		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 		if err != nil {
 			is.l.Error("Publish Comment Feed Failed", zap.Error(err), zap.Any("feed", jreq))
@@ -96,11 +96,11 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 	}
 
 	switch r.Subject {
-	case "activity":
+	case SubjectActivity:
 		return is.id.CommentActivity(c, sid, r.TargetID)
-	case "post":
+	case SubjectPost:
 		return is.id.CommentPost(c, sid, r.TargetID)
-	case "comment":
+	case SubjectComment:
 		return is.id.CommentComment(c, sid, r.TargetID)
 	default:
 		return errors.New("subject error")
@@ -108,12 +108,12 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 }
 
 func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid string) error {
-	ap, err := is.apg.GetActivityOrPostOrComment(c, r.TargetID, r.Subject)
+	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
 	if err != nil {
 		return err
 	}
-	if sid != ap.GetStudentID() {
-		jreq := converter.FeedFromInteractionReq(r, "collect", sid, ap.GetStudentID())
+	if sid != ap.StudentID {
+		jreq := converter.FeedFromInteractionReq(r, "collect", sid, ap.StudentID)
 		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 		if err != nil {
 			is.l.Error("Publish Collect Feed Failed", zap.Error(err), zap.Any("feed", jreq))
@@ -123,9 +123,9 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 	}
 
 	switch r.Subject {
-	case "activity":
+	case SubjectActivity:
 		return is.id.CollectActivity(c, sid, r.TargetID)
-	case "post":
+	case SubjectPost:
 		return is.id.CollectPost(c, sid, r.TargetID)
 	default:
 		return errors.New("subject error")
@@ -134,9 +134,9 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 
 func (is *InteractionService) DisCollect(c *gin.Context, r *req.InteractionReq, sid string) error {
 	switch r.Subject {
-	case "activity":
+	case SubjectActivity:
 		return is.id.DiscollectActivity(c, sid, r.TargetID)
-	case "post":
+	case SubjectPost:
 		return is.id.DiscollectPost(c, sid, r.TargetID)
 	default:
 		return errors.New("subject error")
