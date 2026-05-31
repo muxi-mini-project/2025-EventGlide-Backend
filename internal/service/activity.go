@@ -193,6 +193,7 @@ func (as *ActivityService) retryUploadAuditorForm(act *model.Activity, aw *req.A
 		if i < maxRetry {
 			time.Sleep(time.Duration(i*i) * time.Second)
 		}
+	}
 
 	as.l.Error("Upload auditor form finally failed", zap.String("actBid", act.Bid))
 }
