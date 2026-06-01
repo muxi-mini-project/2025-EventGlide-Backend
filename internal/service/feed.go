@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -45,12 +46,12 @@ var feedConsumerLifecycle struct {
 	cancel context.CancelFunc
 }
 
-func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *zap.Logger) *FeedService {
+func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, ls *ioc.LoggerSet) *FeedService {
 	fs := &FeedService{
 		fd: fd,
 		mq: mq,
 		ud: ud,
-		l:  l.Named("feed/service"),
+		l:  ls.Feed.Named("service"),
 	}
 	fs.ConsumeFeedStream()
 	return fs

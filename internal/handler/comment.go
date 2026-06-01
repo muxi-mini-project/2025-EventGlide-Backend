@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -17,10 +18,10 @@ type CommentHandler struct {
 	l  *zap.Logger
 }
 
-func NewCommentHandler(e *gin.Engine, cs *service.CommentService, j *middleware.Jwt, l *zap.Logger) *CommentHandler {
+func NewCommentHandler(e *gin.Engine, cs *service.CommentService, j *middleware.Jwt, ls *ioc.LoggerSet) *CommentHandler {
 	c := &CommentHandler{
 		cs: cs,
-		l:  l.Named("comment/handler"),
+		l:  ls.Comment.Named("handler"),
 	}
 	c.RegisterCommentHandler(e, j.WrapCheckToken())
 

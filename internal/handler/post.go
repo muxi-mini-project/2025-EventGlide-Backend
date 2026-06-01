@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -17,10 +18,10 @@ type PostHandler struct {
 	l  *zap.Logger
 }
 
-func NewPostHandler(e *gin.Engine, ps *service.PostService, j *middleware.Jwt, l *zap.Logger) *PostHandler {
+func NewPostHandler(e *gin.Engine, ps *service.PostService, j *middleware.Jwt, ls *ioc.LoggerSet) *PostHandler {
 	p := &PostHandler{
 		ps: ps,
-		l:  l.Named("post/handler"),
+		l:  ls.Post.Named("handler"),
 	}
 	p.RegisterPostHandlers(e, j.WrapCheckToken())
 

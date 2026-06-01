@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -16,10 +17,10 @@ type InteractionHandler struct {
 	l  *zap.Logger
 }
 
-func NewInteractionHandler(e *gin.Engine, is *service.InteractionService, j *middleware.Jwt, l *zap.Logger) *InteractionHandler {
+func NewInteractionHandler(e *gin.Engine, is *service.InteractionService, j *middleware.Jwt, ls *ioc.LoggerSet) *InteractionHandler {
 	i := &InteractionHandler{
 		is: is,
-		l:  l.Named("interaction/handler"),
+		l:  ls.Interaction.Named("handler"),
 	}
 	i.RegisterInteractionHandlers(e, j.WrapCheckToken())
 

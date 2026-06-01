@@ -7,9 +7,11 @@ import (
 )
 
 var Provider = wire.NewSet(
+	// Logger provider
+	NewLoggerSet,
+	// Other providers
 	InitDB,
 	InitRedis,
-	Newlogger,
 	mq.NewMQ,
 	cache.NewCache,
 	InitGinHandler,

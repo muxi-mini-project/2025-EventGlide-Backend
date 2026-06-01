@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"go.uber.org/zap"
@@ -31,12 +32,12 @@ type InteractionService struct {
 	l  *zap.Logger
 }
 
-func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, l *zap.Logger, sg SubjectGetter) *InteractionService {
+func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, ls *ioc.LoggerSet, sg SubjectGetter) *InteractionService {
 	return &InteractionService{
 		id: id,
 		sg: sg,
 		mq: mq,
-		l:  l.Named("interaction/service"),
+		l:  ls.Interaction.Named("service"),
 	}
 }
 

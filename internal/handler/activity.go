@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -18,11 +19,11 @@ type ActHandler struct {
 	l  *zap.Logger
 }
 
-func NewActHandler(e *gin.Engine, as *service.ActivityService, iu *service.ImgUploader, l *zap.Logger, j *middleware.Jwt) *ActHandler {
+func NewActHandler(e *gin.Engine, as *service.ActivityService, iu *service.ImgUploader, ls *ioc.LoggerSet, j *middleware.Jwt) *ActHandler {
 	a := &ActHandler{
 		as: as,
 		iu: iu,
-		l:  l.Named("activity/handler"),
+		l:  ls.Activity.Named("handler"),
 	}
 	a.RegisterActHandlers(e, j.WrapCheckToken())
 

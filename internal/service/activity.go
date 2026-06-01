@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -36,14 +37,14 @@ type ActivityService struct {
 	l   *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, l *zap.Logger, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, ls *ioc.LoggerSet, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService) *ActivityService {
 	return &ActivityService{
 		ad:  ad,
 		ud:  ud,
 		id:  id,
 		aud: aud,
 		mq:  mq,
-		l:   l.Named("activity/service"),
+		l:   ls.Activity.Named("service"),
 	}
 }
 

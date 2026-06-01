@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -33,14 +34,14 @@ type CommentService struct {
 	l  *zap.Logger
 }
 
-func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, l *zap.Logger, mq mq.MQHdl, sg SubjectGetter) *CommentService {
+func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, ls *ioc.LoggerSet, mq mq.MQHdl, sg SubjectGetter) *CommentService {
 	return &CommentService{
 		cd: cd,
 		ud: ud,
 		id: id,
 		mq: mq,
 		sg: sg,
-		l:  l.Named("comment/service"),
+		l:  ls.Comment.Named("service"),
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -21,10 +22,10 @@ type AuditorRepo struct {
 	l *zap.Logger
 }
 
-func NewAuditorRepo(db *gorm.DB, l *zap.Logger) AuditorRepository {
+func NewAuditorRepo(db *gorm.DB, ls *ioc.LoggerSet) AuditorRepository {
 	return &AuditorRepo{
 		db: db,
-		l:  l,
+		l:  ls.Auditor.Named("repo"),
 	}
 }
 
