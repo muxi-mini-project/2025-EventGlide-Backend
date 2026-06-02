@@ -16,10 +16,10 @@ import (
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/logger"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
@@ -56,7 +56,7 @@ type UserService struct {
 	cfg  *config.Conf
 }
 
-func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, ls *ioc.LoggerSet, cfg *config.Conf) *UserService {
+func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *logger.LoggerSet, cfg *config.Conf) *UserService {
 	return &UserService{
 		udh:  udh,
 		adh:  adh,
@@ -66,7 +66,7 @@ func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRe
 		iuh:  iuh,
 		as:   as,
 		ps:   ps,
-		l:    ls.User.Named("service"),
+		l:    l.User.Named("service"),
 		cfg:  cfg,
 	}
 }

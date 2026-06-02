@@ -5,10 +5,10 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -17,10 +17,10 @@ type FeedHandler struct {
 	l  *zap.Logger
 }
 
-func NewFeedHandler(e *gin.Engine, fs *service.FeedService, j *middleware.Jwt, ls *ioc.LoggerSet) *FeedHandler {
+func NewFeedHandler(e *gin.Engine, fs *service.FeedService, j *middleware.Jwt, l *logger.LoggerSet) *FeedHandler {
 	f := &FeedHandler{
 		fs: fs,
-		l:  ls.Feed.Named("handler"),
+		l:  l.Feed.Named("handler"),
 	}
 	f.RegisterFeedHandlers(e, j.WrapCheckToken())
 

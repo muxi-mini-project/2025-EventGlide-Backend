@@ -6,8 +6,8 @@ import (
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/response"
 	sdk "github.com/muxi-Infra/auditor-Backend/sdk/v2/server/gin"
 	"github.com/raiki02/EG/config"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/service"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -16,10 +16,10 @@ type CallbackAuditorHandler struct {
 	l   *zap.Logger
 }
 
-func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService, cfg *config.Conf, ls *ioc.LoggerSet) *CallbackAuditorHandler {
+func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService, cfg *config.Conf, l *logger.LoggerSet) *CallbackAuditorHandler {
 	c := &CallbackAuditorHandler{
 		svc: svc,
-		l:   ls.Auditor.Named("handler"),
+		l:   l.Auditor.Named("handler"),
 	}
 	s := sdk.NewGinRegistrar(&e.RouterGroup)
 	chain := sdk.NewChain()

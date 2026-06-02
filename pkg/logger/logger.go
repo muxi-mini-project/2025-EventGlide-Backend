@@ -42,26 +42,27 @@ func NewServiceLogger(serviceName, name string) *zap.Logger {
 	return GetLogger(serviceName).Named(name)
 }
 
-// LoggerSet bundles all per-service loggers for wire injection
 type LoggerSet struct {
-	Activity *zap.Logger
-	User     *zap.Logger
-	Post     *zap.Logger
-	Feed     *zap.Logger
-	Comment  *zap.Logger
-	Auditor  *zap.Logger
-	Bff      *zap.Logger
+	Activity    *zap.Logger
+	User        *zap.Logger
+	Post        *zap.Logger
+	Feed        *zap.Logger
+	Comment     *zap.Logger
+	Auditor     *zap.Logger
+	Interaction *zap.Logger
+	Bff         *zap.Logger
 }
 
 func NewLoggerSet() *LoggerSet {
 	return &LoggerSet{
-		Activity: GetLogger("activity"),
-		User:     GetLogger("user"),
-		Post:     GetLogger("post"),
-		Feed:     GetLogger("feed"),
-		Comment:  GetLogger("comment"),
-		Auditor:  GetLogger("auditor"),
-		Bff:      GetLogger("bff"),
+		Activity:    GetLogger("activity"),
+		User:        GetLogger("user"),
+		Post:        GetLogger("post"),
+		Feed:        GetLogger("feed"),
+		Comment:     GetLogger("comment"),
+		Auditor:     GetLogger("auditor"),
+		Interaction: GetLogger("interaction"),
+		Bff:         GetLogger("bff"),
 	}
 }
 

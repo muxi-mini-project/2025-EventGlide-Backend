@@ -6,10 +6,10 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -18,10 +18,10 @@ type CommentHandler struct {
 	l  *zap.Logger
 }
 
-func NewCommentHandler(e *gin.Engine, cs *service.CommentService, j *middleware.Jwt, ls *ioc.LoggerSet) *CommentHandler {
+func NewCommentHandler(e *gin.Engine, cs *service.CommentService, j *middleware.Jwt, l *logger.LoggerSet) *CommentHandler {
 	c := &CommentHandler{
 		cs: cs,
-		l:  ls.Comment.Named("handler"),
+		l:  l.Comment.Named("handler"),
 	}
 	c.RegisterCommentHandler(e, j.WrapCheckToken())
 

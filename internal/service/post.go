@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/raiki02/EG/api/req"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -34,12 +34,12 @@ type PostService struct {
 	l   *zap.Logger
 }
 
-func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, ls *ioc.LoggerSet, aud AuditorService) *PostService {
+func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, aud AuditorService, l *logger.LoggerSet) *PostService {
 	return &PostService{
 		pdh: pdh,
 		ud:  ud,
 		aud: aud,
-		l:   ls.Post.Named("service"),
+		l:   l.Post.Named("service"),
 	}
 }
 

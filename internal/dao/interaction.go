@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -20,14 +20,14 @@ type InteractionDao struct {
 	l  *zap.Logger
 }
 
-func NewInteractionDao(db *gorm.DB, cd *CommentDao, ud *UserDao, ad *ActDao, pd *PostDao, ls *ioc.LoggerSet) *InteractionDao {
+func NewInteractionDao(db *gorm.DB, cd *CommentDao, ud *UserDao, ad *ActDao, pd *PostDao, l *logger.LoggerSet) *InteractionDao {
 	return &InteractionDao{
 		db: db,
 		cd: cd,
 		ud: ud,
 		ad: ad,
 		pd: pd,
-		l:  ls.Interaction.Named("dao"),
+		l:  l.Interaction.Named("dao"),
 	}
 }
 

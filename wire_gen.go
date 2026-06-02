@@ -17,6 +17,7 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/internal/server"
 	"github.com/raiki02/EG/internal/service"
+	"github.com/raiki02/EG/pkg/logger"
 )
 
 // Injectors from wire.go:
@@ -26,14 +27,14 @@ func InitApp() *server.Server {
 	cors := middleware.NewCors(engine)
 	conf := config.InitConf()
 	db := ioc.InitDB(conf)
-	loggerSet := ioc.NewLoggerSet()
+	loggerSet := logger.NewLoggerSet()
 	userDao := dao.NewUserDao(db, loggerSet)
 	client := ioc.InitRedis(conf)
 	multiLevelCache := cache.NewCache(client)
 	userRepo := repo.NewUserRepo(userDao, multiLevelCache)
-	actDao := dao.NewActDao(db, loggerSet, conf)
+	actDao := dao.NewActDao(db, conf, loggerSet)
 	activityRepo := repo.NewActivityRepo(actDao, multiLevelCache)
-	postDao := dao.NewPostDao(db, loggerSet, conf)
+	postDao := dao.NewPostDao(db, conf, loggerSet)
 	postRepo := repo.NewPostRepo(postDao, multiLevelCache)
 	jwt := middleware.NewJwt(client, conf)
 	ccnuService := service.NewCCNUService()
@@ -43,24 +44,24 @@ func InitApp() *server.Server {
 	interactionRepo := repo.NewInteractionRepo(interactionDao, userRepo, activityRepo, postRepo)
 	mqHdl := mq.NewMQ(client)
 	auditorRepository := dao.NewAuditorRepo(db, loggerSet)
-	auditorService := service.NewAuditorService(auditorRepository, loggerSet, conf)
-	activityService := service.NewActivityService(activityRepo, userRepo, loggerSet, interactionRepo, mqHdl, auditorService)
-	postService := service.NewPostService(postRepo, userRepo, loggerSet, auditorService)
+	auditorService := service.NewAuditorService(auditorRepository, conf, loggerSet)
+	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, loggerSet)
+	postService := service.NewPostService(postRepo, userRepo, auditorService, loggerSet)
 	userService := service.NewUserService(userRepo, activityRepo, postRepo, jwt, ccnuService, imgUploader, activityService, postService, loggerSet, conf)
 	userHandler := handler.NewUserHandler(engine, userService, jwt, loggerSet)
-	actHandler := handler.NewActHandler(engine, activityService, imgUploader, loggerSet, jwt)
+	actHandler := handler.NewActHandler(engine, activityService, imgUploader, jwt, loggerSet)
 	postHandler := handler.NewPostHandler(engine, postService, jwt, loggerSet)
 	subjectGetter := service.NewSubjectGetter(activityRepo, postRepo, commentDao)
-	commentService := service.NewCommentService(commentDao, userRepo, interactionRepo, loggerSet, mqHdl, subjectGetter)
+	commentService := service.NewCommentService(commentDao, userRepo, interactionRepo, mqHdl, subjectGetter, loggerSet)
 	commentHandler := handler.NewCommentHandler(engine, commentService, jwt, loggerSet)
 	feedDao := dao.NewFeedDao(db, loggerSet)
 	feedService := service.NewFeedService(feedDao, mqHdl, userRepo, loggerSet)
 	feedHandler := handler.NewFeedHandler(engine, feedService, jwt, loggerSet)
-	interactionService := service.NewInteractionService(interactionRepo, mqHdl, loggerSet, subjectGetter)
+	interactionService := service.NewInteractionService(interactionRepo, mqHdl, subjectGetter, loggerSet)
 	interactionHandler := handler.NewInteractionHandler(engine, interactionService, jwt, loggerSet)
 	callbackAuditorService := service.NewCallbackAuditor(auditorRepository)
 	callbackAuditorHandler := handler.NewCallbackAuditorHandler(engine, callbackAuditorService, conf, loggerSet)
 	handlerHandler := handler.NewHandler(engine, cors, userHandler, actHandler, postHandler, commentHandler, feedHandler, interactionHandler, callbackAuditorHandler)
-	serverServer := server.NewServer(handlerHandler, loggerSet)
+	serverServer := server.NewServer(handlerHandler)
 	return serverServer
 }

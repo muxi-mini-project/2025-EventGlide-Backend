@@ -6,10 +6,10 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -18,10 +18,10 @@ type UserHandler struct {
 	l  *zap.Logger
 }
 
-func NewUserHandler(e *gin.Engine, us *service.UserService, j *middleware.Jwt, ls *ioc.LoggerSet) *UserHandler {
+func NewUserHandler(e *gin.Engine, us *service.UserService, j *middleware.Jwt, l *logger.LoggerSet) *UserHandler {
 	u := &UserHandler{
 		us: us,
-		l:  ls.User.Named("handler"),
+		l:  l.User.Named("handler"),
 	}
 	u.RegisterUserHandlers(e, j.WrapCheckToken())
 

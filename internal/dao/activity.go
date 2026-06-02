@@ -8,8 +8,8 @@ import (
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -35,11 +35,11 @@ type ActDao struct {
 	l      *zap.Logger
 }
 
-func NewActDao(db *gorm.DB, ls *ioc.LoggerSet, cfg *config.Conf) *ActDao {
+func NewActDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *ActDao {
 	return &ActDao{
 		DB:     db,
 		effect: cfg.Auditor.Effect,
-		l:      ls.Activity.Named("dao"),
+		l:      l.Activity.Named("dao"),
 	}
 }
 

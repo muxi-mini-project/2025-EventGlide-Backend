@@ -3,7 +3,7 @@ package server
 import (
 	"github.com/google/wire"
 	"github.com/raiki02/EG/internal/handler"
-	"github.com/raiki02/EG/internal/ioc"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -17,10 +17,10 @@ type Server struct {
 	Shutdown func()
 }
 
-func NewServer(h *handler.Handler, ls *ioc.LoggerSet) *Server {
+func NewServer(h *handler.Handler) *Server {
 	return &Server{
 		h: h,
-		l: ls.Bff,
+		l: logger.GetLogger("bff"),
 	}
 }
 

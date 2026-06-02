@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
-	"github.com/raiki02/EG/internal/ioc"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/logger"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
@@ -46,12 +46,12 @@ var feedConsumerLifecycle struct {
 	cancel context.CancelFunc
 }
 
-func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, ls *ioc.LoggerSet) *FeedService {
+func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *logger.LoggerSet) *FeedService {
 	fs := &FeedService{
 		fd: fd,
 		mq: mq,
 		ud: ud,
-		l:  ls.Feed.Named("service"),
+		l:  l.Feed.Named("service"),
 	}
 	fs.ConsumeFeedStream()
 	return fs
