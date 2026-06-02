@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -17,10 +18,10 @@ type UserHandler struct {
 	l  *zap.Logger
 }
 
-func NewUserHandler(e *gin.Engine, us *service.UserService, j *middleware.Jwt, l *zap.Logger) *UserHandler {
+func NewUserHandler(e *gin.Engine, us *service.UserService, j *middleware.Jwt, l *logger.LoggerSet) *UserHandler {
 	u := &UserHandler{
 		us: us,
-		l:  l.Named("user/handler"),
+		l:  l.User.Named("handler"),
 	}
 	u.RegisterUserHandlers(e, j.WrapCheckToken())
 

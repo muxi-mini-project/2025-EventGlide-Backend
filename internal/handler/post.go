@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -17,10 +18,10 @@ type PostHandler struct {
 	l  *zap.Logger
 }
 
-func NewPostHandler(e *gin.Engine, ps *service.PostService, j *middleware.Jwt, l *zap.Logger) *PostHandler {
+func NewPostHandler(e *gin.Engine, ps *service.PostService, j *middleware.Jwt, l *logger.LoggerSet) *PostHandler {
 	p := &PostHandler{
 		ps: ps,
-		l:  l.Named("post/handler"),
+		l:  l.Post.Named("handler"),
 	}
 	p.RegisterPostHandlers(e, j.WrapCheckToken())
 

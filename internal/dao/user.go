@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -22,10 +23,10 @@ type UserDao struct {
 	l  *zap.Logger
 }
 
-func NewUserDao(db *gorm.DB, l *zap.Logger) *UserDao {
+func NewUserDao(db *gorm.DB, l *logger.LoggerSet) *UserDao {
 	return &UserDao{
 		db: db,
-		l:  l.Named("user/dao"),
+		l:  l.User.Named("dao"),
 	}
 }
 

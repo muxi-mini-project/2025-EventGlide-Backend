@@ -8,6 +8,7 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -16,10 +17,10 @@ type InteractionHandler struct {
 	l  *zap.Logger
 }
 
-func NewInteractionHandler(e *gin.Engine, is *service.InteractionService, j *middleware.Jwt, l *zap.Logger) *InteractionHandler {
+func NewInteractionHandler(e *gin.Engine, is *service.InteractionService, j *middleware.Jwt, l *logger.LoggerSet) *InteractionHandler {
 	i := &InteractionHandler{
 		is: is,
-		l:  l.Named("interaction/handler"),
+		l:  l.Interaction.Named("handler"),
 	}
 	i.RegisterInteractionHandlers(e, j.WrapCheckToken())
 

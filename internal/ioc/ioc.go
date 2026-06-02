@@ -9,7 +9,6 @@ import (
 var Provider = wire.NewSet(
 	InitDB,
 	InitRedis,
-	Newlogger,
 	mq.NewMQ,
 	cache.NewCache,
 	InitGinHandler,

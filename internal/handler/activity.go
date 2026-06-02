@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -18,11 +19,11 @@ type ActHandler struct {
 	l  *zap.Logger
 }
 
-func NewActHandler(e *gin.Engine, as *service.ActivityService, iu *service.ImgUploader, l *zap.Logger, j *middleware.Jwt) *ActHandler {
+func NewActHandler(e *gin.Engine, as *service.ActivityService, iu *service.ImgUploader, j *middleware.Jwt, l *logger.LoggerSet) *ActHandler {
 	a := &ActHandler{
 		as: as,
 		iu: iu,
-		l:  l.Named("activity/handler"),
+		l:  l.Activity.Named("handler"),
 	}
 	a.RegisterActHandlers(e, j.WrapCheckToken())
 

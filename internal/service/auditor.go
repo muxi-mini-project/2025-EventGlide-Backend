@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -28,13 +29,13 @@ type auditorService struct {
 	l *zap.Logger
 }
 
-func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger, cfg *config.Conf) AuditorService {
+func NewAuditorService(repo dao.AuditorRepository, cfg *config.Conf, l *logger.LoggerSet) AuditorService {
 	muxiCli, err := client.NewClient(client.Config{
 		ApiKey: cfg.Auditor.ApiKey,
 		Region: cfg.Auditor.Region,
 	})
 	if err != nil {
-		l.Fatal("Failed to create Muxi Auditor client", zap.Error(err))
+		l.Auditor.Fatal("Failed to create Muxi Auditor client", zap.Error(err))
 		panic(err)
 	}
 
@@ -43,7 +44,7 @@ func NewAuditorService(repo dao.AuditorRepository, l *zap.Logger, cfg *config.Co
 		HookUrl:     cfg.Auditor.HookURL,
 		MuxiCli:     muxiCli,
 		AuditorRepo: repo,
-		l:           l.Named("auditor/service"),
+		l:           l.Auditor.Named("service"),
 	}
 	return c
 }

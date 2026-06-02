@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -36,14 +37,14 @@ type ActivityService struct {
 	l   *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, l *zap.Logger, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, l *logger.LoggerSet) *ActivityService {
 	return &ActivityService{
 		ad:  ad,
 		ud:  ud,
 		id:  id,
 		aud: aud,
 		mq:  mq,
-		l:   l.Named("activity/service"),
+		l:   l.Activity.Named("service"),
 	}
 }
 

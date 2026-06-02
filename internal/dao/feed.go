@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -27,10 +28,10 @@ type FeedDao struct {
 	l  *zap.Logger
 }
 
-func NewFeedDao(db *gorm.DB, l *zap.Logger) *FeedDao {
+func NewFeedDao(db *gorm.DB, l *logger.LoggerSet) *FeedDao {
 	return &FeedDao{
 		db: db,
-		l:  l.Named("feed/dao"),
+		l:  l.Feed.Named("dao"),
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -28,11 +29,11 @@ type PostDao struct {
 	l      *zap.Logger
 }
 
-func NewPostDao(db *gorm.DB, l *zap.Logger, cfg *config.Conf) *PostDao {
+func NewPostDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *PostDao {
 	return &PostDao{
 		db:     db,
 		effect: cfg.Auditor.Effect,
-		l:      l.Named("post/dao"),
+		l:      l.Post.Named("dao"),
 	}
 }
 

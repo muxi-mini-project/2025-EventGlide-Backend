@@ -12,11 +12,15 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/internal/server"
 	"github.com/raiki02/EG/internal/service"
+	"github.com/raiki02/EG/pkg/logger"
 )
 
 func InitApp() *server.Server {
 	panic(wire.Build(
 		config.InitConf,
+
+		logger.Provider,
+
 		ioc.Provider,
 		middleware.Provider,
 		dao.Provider,

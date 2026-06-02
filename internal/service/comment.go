@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
@@ -33,14 +34,14 @@ type CommentService struct {
 	l  *zap.Logger
 }
 
-func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, l *zap.Logger, mq mq.MQHdl, sg SubjectGetter) *CommentService {
+func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, sg SubjectGetter, l *logger.LoggerSet) *CommentService {
 	return &CommentService{
 		cd: cd,
 		ud: ud,
 		id: id,
 		mq: mq,
 		sg: sg,
-		l:  l.Named("comment/service"),
+		l:  l.Comment.Named("service"),
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -21,10 +22,10 @@ type AuditorRepo struct {
 	l *zap.Logger
 }
 
-func NewAuditorRepo(db *gorm.DB, l *zap.Logger) AuditorRepository {
+func NewAuditorRepo(db *gorm.DB, l *logger.LoggerSet) AuditorRepository {
 	return &AuditorRepo{
 		db: db,
-		l:  l,
+		l:  l.Auditor.Named("dao"),
 	}
 }
 

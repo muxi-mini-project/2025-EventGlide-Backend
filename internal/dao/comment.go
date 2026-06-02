@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -21,10 +22,10 @@ type CommentDao struct {
 	l  *zap.Logger
 }
 
-func NewCommentDao(db *gorm.DB, l *zap.Logger) *CommentDao {
+func NewCommentDao(db *gorm.DB, l *logger.LoggerSet) *CommentDao {
 	return &CommentDao{
 		db: db,
-		l:  l.Named("comment/dao"),
+		l:  l.Comment.Named("comment"),
 	}
 }
 
