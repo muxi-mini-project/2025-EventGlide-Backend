@@ -186,6 +186,13 @@ definitions:
     required:
     - name
     type: object
+  req.FindActByOwnerIDReq:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+    type: object
   req.FindPostReq:
     properties:
       name:
@@ -202,6 +209,13 @@ definitions:
     required:
     - subject
     - targetId
+    type: object
+  req.ListAllActsReq:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
     type: object
   req.LoginReq:
     properties:
@@ -247,6 +261,10 @@ definitions:
     properties:
       keyword:
         type: string
+      limit:
+        type: integer
+      page:
+        type: integer
     type: object
   resp.BriefFeedResp:
     properties:
@@ -748,21 +766,21 @@ paths:
       tags:
       - Activity
   /act/all:
-    get:
+    post:
+      consumes:
+      - application/json
       parameters:
       - description: token
         in: header
         name: Authorization
         required: true
         type: string
-      - description: 页码
-        in: query
-        name: page
-        type: integer
-      - description: 每页数量
-        in: query
-        name: limit
-        type: integer
+      - description: 分页请求
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.ListAllActsReq'
       produces:
       - application/json
       responses:
@@ -925,21 +943,21 @@ paths:
       tags:
       - Activity
   /act/own:
-    get:
+    post:
+      consumes:
+      - application/json
       parameters:
       - description: token
         in: header
         name: Authorization
         required: true
         type: string
-      - description: 页码
-        in: query
-        name: page
-        type: integer
-      - description: 每页数量
-        in: query
-        name: limit
-        type: integer
+      - description: 分页请求
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.FindActByOwnerIDReq'
       produces:
       - application/json
       responses:

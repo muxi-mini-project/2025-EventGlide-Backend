@@ -16,7 +16,10 @@ const docTemplate = `{
     "basePath": "{{.BasePath}}",
     "paths": {
         "/act/all": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -33,16 +36,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "limit",
-                        "in": "query"
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.ListAllActsReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -314,7 +314,10 @@ const docTemplate = `{
             }
         },
         "/act/own": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -331,16 +334,13 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "limit",
-                        "in": "query"
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.FindActByOwnerIDReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -2265,6 +2265,17 @@ const docTemplate = `{
                 }
             }
         },
+        "req.FindActByOwnerIDReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                }
+            }
+        },
         "req.FindPostReq": {
             "type": "object",
             "required": [
@@ -2288,6 +2299,17 @@ const docTemplate = `{
                 },
                 "targetId": {
                     "type": "string"
+                }
+            }
+        },
+        "req.ListAllActsReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2358,6 +2380,12 @@ const docTemplate = `{
             "properties": {
                 "keyword": {
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
