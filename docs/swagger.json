@@ -3,7 +3,8 @@
     "info": {
         "description": "校灵通 API 文档",
         "title": "EventGlide API",
-        "contact": {}
+        "contact": {},
+        "version": "1.0"
     },
     "paths": {
         "/act/all": {

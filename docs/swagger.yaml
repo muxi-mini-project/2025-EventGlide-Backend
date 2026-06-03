@@ -741,6 +741,7 @@ info:
   contact: {}
   description: 校灵通 API 文档
   title: EventGlide API
+  version: "1.0"
 paths:
   /act/{id}:
     get:
