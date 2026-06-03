@@ -10,4 +10,6 @@ type LoginReq struct {
 
 type UserSearchReq struct {
 	Keyword string `json:"keyword"`
+	Page    int    `json:"page,omitempty"`
+	Limit   int    `json:"limit,omitempty"`
 }

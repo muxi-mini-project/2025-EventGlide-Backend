@@ -33,7 +33,7 @@ type UserServiceHdl interface {
 	GetUserInfo(context.Context, string) (*model.User, error)
 	UpdateAvatar(context.Context, req.UserAvatarReq, string) error
 	UpdateUsername(context.Context, string, string) error
-	SearchUserAct(context.Context, string, string) ([]model.ActivityDetail, error)
+	SearchUserAct(context.Context, string, string, int, int) ([]model.ActivityDetail, error)
 	SearchUserPost(context.Context, string, string) ([]model.PostDetail, error)
 	GenQINIUToken(context.Context) (string, string)
 	GetChecking(context.Context, string) ([]model.ActivityDetail, []model.PostDetail, error)
@@ -151,12 +151,12 @@ func (us *UserService) UpdateUsername(ctx context.Context, studentId string, nam
 	return nil
 }
 
-func (us *UserService) SearchUserAct(ctx context.Context, studentId string, keyword string) ([]model.ActivityDetail, error) {
-	acts, err := us.adh.FindActByUser(ctx, studentId, keyword)
+func (us *UserService) SearchUserAct(ctx context.Context, studentId string, keyword string, page int, limit int) ([]model.ActivityDetail, error) {
+	acts, err := us.adh.FindActByUser(ctx, studentId, keyword, page, limit)
 	if err != nil {
 		return nil, err
 	}
-	return us.as.EnrichForSearcher(ctx, acts, studentId), nil
+	return us.as.EnrichForSearcher(ctx, acts.Acts, studentId), nil
 }
 
 func (us *UserService) SearchUserPost(ctx context.Context, studentId string, keyword string) ([]model.PostDetail, error) {

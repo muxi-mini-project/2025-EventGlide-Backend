@@ -22,6 +22,18 @@
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -36,7 +48,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -137,7 +149,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -282,10 +294,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -311,6 +320,18 @@
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -325,7 +346,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -374,7 +395,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -1971,11 +1992,17 @@
                 "ifRegister": {
                     "type": "string"
                 },
+                "limit": {
+                    "type": "integer"
+                },
                 "location": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "page": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "array",
@@ -2203,6 +2230,12 @@
                 "date": {
                     "description": "02-01",
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2212,8 +2245,14 @@
                 "name"
             ],
             "properties": {
+                "limit": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2894,6 +2933,26 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "resp.PaginatedListActivitiesResp": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/resp.ListActivitiesResp"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },

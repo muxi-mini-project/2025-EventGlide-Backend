@@ -81,6 +81,15 @@ func ToListActivitiesResp(details []model.ActivityDetail) []resp.ListActivitiesR
 	return res
 }
 
+func ToPaginatedListActivitiesResp(total int64, page, limit int, details []model.ActivityDetail) resp.PaginatedListActivitiesResp {
+	return resp.PaginatedListActivitiesResp{
+		Total:   total,
+		Page:    page,
+		Limit:   limit,
+		Details: ToListActivitiesResp(details),
+	}
+}
+
 func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 	act := d.Activity
 	var res resp.ListActivitiesResp
@@ -229,4 +238,15 @@ func extractAuthors(signers []req.Signer) string {
 		builder.WriteString(s.Name + "-")
 	}
 	return builder.String()
+}
+
+func IndexValid(page, limit int) (int, int) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 {
+		limit = 10
+	}
+
+	return page, limit
 }

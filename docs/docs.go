@@ -31,6 +31,18 @@ const docTemplate = `{
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -45,7 +57,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -146,7 +158,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -291,10 +303,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -320,6 +329,18 @@ const docTemplate = `{
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -334,7 +355,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -383,7 +404,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -1980,11 +2001,17 @@ const docTemplate = `{
                 "ifRegister": {
                     "type": "string"
                 },
+                "limit": {
+                    "type": "integer"
+                },
                 "location": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "page": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "array",
@@ -2212,6 +2239,12 @@ const docTemplate = `{
                 "date": {
                     "description": "02-01",
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2221,8 +2254,14 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "limit": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2903,6 +2942,26 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "resp.PaginatedListActivitiesResp": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/resp.ListActivitiesResp"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
