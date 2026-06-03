@@ -33,6 +33,10 @@ func (r *ActivityRepo) CreateAct(ctx context.Context, act *model.Activity) error
 
 func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity, signers []model.Signer, studentID string) error {
 	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("student_id = ?", studentID).Delete(&model.ActivityDraft{}).Error; err != nil {
+			return err
+		}
+
 		if err := tx.Create(act).Error; err != nil {
 			return err
 		}
