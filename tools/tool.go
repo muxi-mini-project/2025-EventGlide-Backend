@@ -85,7 +85,7 @@ func SignRandJwt(studentId string) (string, error) {
 		&jwt.RegisteredClaims{
 			Subject:   studentId,
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(1 * time.Minute)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(5 * time.Minute)),
 		},
 		GenerateRand4(),
 	}

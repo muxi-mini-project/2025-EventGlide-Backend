@@ -88,34 +88,45 @@ func (us *UserService) CreateUser(ctx context.Context, sid string, school string
 }
 
 func (us *UserService) Login(ctx context.Context, studentId string, password string) (*model.User, string, error) {
-	//client, err := us.cSvc.Login(ctx, studentId, password)
-	//if err != nil {
-	//	return nil, "", err
-	//}
-	//if client == nil {
-	//	return nil, "", errors.New("登录失败")
-	//}
-	//
-	//if !us.udh.CheckUserExist(ctx, studentId) {
-	//	school, err := us.cSvc.getWhichSchool(client, studentId)
-	//	if err != nil {
-	//		school = "数据加载中..."
-	//	}
-	//	err = us.CreateUser(ctx, studentId, school)
-	//	if err != nil {
-	//		return nil, "", err
-	//	}
-	//
-	//}
-	token := us.jwth.GenToken(ctx, studentId)
-	err := us.jwth.StoreInRedis(ctx, studentId, token)
+	client, err := us.cSvc.Login(ctx, studentId, password)
 	if err != nil {
 		return nil, "", err
 	}
+	if client == nil {
+		return nil, "", errors.New("登录失败")
+	}
+
+	if !us.udh.CheckUserExist(ctx, studentId) {
+		college, err := us.cSvc.getWhichSchool(client, studentId)
+		if err != nil {
+			college = ""
+		}
+
+		err = us.CreateUser(ctx, studentId, college)
+		if err != nil {
+			return nil, "", err
+		}
+
+		if college == "" {
+			go us.loadCollegeAsync(client, studentId)
+		}
+	}
+
+	token := us.jwth.GenToken(ctx, studentId)
+	err = us.jwth.StoreInRedis(ctx, studentId, token)
+	if err != nil {
+		return nil, "", err
+	}
+
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, "", nil
+		return nil, "", err
 	}
+
+	if user.College == "" {
+		go us.loadCollegeAsync(client, studentId)
+	}
+
 	return &user, token, nil
 }
 
@@ -477,4 +488,23 @@ func (c *ccnuService) getWhichSchool(client *http.Client, studentId string) (str
 	}
 
 	return r.Data.UserInfo.Department, nil
+}
+
+func (us *UserService) loadCollegeAsync(client *http.Client, studentID string) {
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		college, err := us.cSvc.getWhichSchool(client, studentID)
+
+		if err == nil && college != "" {
+			if err = us.udh.UpdateCollege(ctx, studentID, college); err == nil {
+				us.l.Info("college updated", zap.String("student_id", studentID), zap.String("college", college))
+				return
+			}
+		}
+
+		us.l.Warn("load college failed", zap.String("student_id", studentID), zap.Int("retry", i+1), zap.Error(err))
+
+		time.Sleep(30 * time.Second)
+	}
 }

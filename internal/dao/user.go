@@ -16,6 +16,7 @@ type UserDaoHdl interface {
 	CheckUserExist(context.Context, string) bool
 	GetUserInfo(context.Context, string) (model.User, error)
 	FindUserByID(context.Context, string) model.User
+	UpdateCollege(context.Context, string, string) error
 }
 
 type UserDao struct {
@@ -60,4 +61,8 @@ func (ud *UserDao) FindUserByID(ctx context.Context, student_id string) model.Us
 		return model.User{}
 	}
 	return user
+}
+
+func (ud *UserDao) UpdateCollege(ctx context.Context, studentID string, college string) error {
+	return ud.db.WithContext(ctx).Model(&model.User{}).Where("student_id = ?", studentID).Update("college", college).Error
 }
