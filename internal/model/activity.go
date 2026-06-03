@@ -8,15 +8,15 @@ type Activity struct {
 	IsChecking string    `gorm:"type:enum('pass','pending','reject');default:'pending';column:is_checking"` // pending or pass or reject // 是否显示
 
 	StudentID      string `gorm:"type:varchar(255);column:student_id;not null"`
-	Title          string `gorm:"type:varchar(255);column:title;not null"`
+	Title          string `gorm:"type:varchar(255);column:title;not null;uniqueIndex:idx_activity_unique"`
 	Introduce      string `gorm:"type:text;column:introduce;not null"`
 	ShowImg        string `gorm:"type:text;column:show_img"`
 	HolderType     string `gorm:"type:varchar(255);column:holder_type;not null"`
 	Position       string `gorm:"type:varchar(255);column:position;not null"`
 	IfRegister     string `gorm:"type:enum('是','否');column:if_register;not null"`
 	RegisterMethod string `gorm:"type:varchar(255);column:register_method"`
-	StartTime      string `gorm:"type:datetime;column:start_time;not null"`
-	EndTime        string `gorm:"type:datetime;column:end_time;not null"`
+	StartTime      string `gorm:"type:datetime;column:start_time;not null;uniqueIndex:idx_activity_unique"`
+	EndTime        string `gorm:"type:datetime;column:end_time;not null;uniqueIndex:idx_activity_unique"`
 	Type           string `gorm:"type:varchar(255);column:type;not null"`
 	ActiveForm     string `gorm:"type:varchar(255);column:active_form"` // 表单url // 通过条件2
 	Signer         string `gorm:"type:text;column:signer;not null"`     // 报名人 >= 5的 []slice // 通过条件1
