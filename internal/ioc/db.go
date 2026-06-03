@@ -16,6 +16,7 @@ func InitDB(cfg *config.Conf) *gorm.DB {
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,
 		},
+		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -40,6 +41,7 @@ func migrate(db *gorm.DB) error {
 		&model.User{},
 		&model.Activity{},
 		&model.ActivityDraft{},
+		&model.ActivitySigner{},
 		&model.Comment{},
 		&model.Post{},
 		&model.PostDraft{},

@@ -33,12 +33,27 @@ func (r *ActivityRepo) CreateAct(ctx context.Context, act *model.Activity) error
 
 func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity, signers []model.Signer, studentID string) error {
 	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		act.Signers = nil
 		if err := tx.Where("student_id = ?", studentID).Delete(&model.ActivityDraft{}).Error; err != nil {
 			return err
 		}
 
 		if err := tx.Create(act).Error; err != nil {
 			return err
+		}
+
+		activitySigners := make([]model.ActivitySigner, 0, len(signers))
+		for _, s := range signers {
+			activitySigners = append(activitySigners, model.ActivitySigner{
+				ActivityBid: act.Bid,
+				StudentID:   s.StudentID,
+				Name:        s.Name,
+			})
+		}
+		if len(activitySigners) > 0 {
+			if err := tx.Create(&activitySigners).Error; err != nil {
+				return err
+			}
 		}
 
 		approvements := make([]model.Approvement, 0, len(signers))
@@ -67,7 +82,50 @@ func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity
 }
 
 func (r *ActivityRepo) CreateDraft(ctx context.Context, draft *model.ActivityDraft) error {
-	return r.dao.CreateDraft(ctx, draft)
+	draftSigners := draft.Signers
+	draft.Signers = nil
+	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var oldDrafts []model.ActivityDraft
+		if err := tx.
+			Where("student_id = ?", draft.StudentID).
+			Find(&oldDrafts).Error; err != nil {
+			return err
+		}
+
+		for _, d := range oldDrafts {
+			if err := tx.
+				Where("activity_bid = ?", d.Bid).
+				Delete(&model.ActivitySigner{}).Error; err != nil {
+				return err
+			}
+		}
+
+		if err := tx.
+			Where("student_id = ?", draft.StudentID).
+			Delete(&model.ActivityDraft{}).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Create(draft).Error; err != nil {
+			return err
+		}
+
+		if len(draftSigners) > 0 {
+			signers := make([]model.ActivitySigner, 0, len(draftSigners))
+			for _, s := range draftSigners {
+				signers = append(signers, model.ActivitySigner{
+					ActivityBid: draft.Bid,
+					StudentID:   s.StudentID,
+					Name:        s.Name,
+				})
+			}
+			if err := tx.Create(&signers).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (r *ActivityRepo) DeleteAct(ctx context.Context, act model.Activity) error {
