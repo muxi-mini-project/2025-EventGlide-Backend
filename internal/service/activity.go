@@ -64,7 +64,6 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 		zap.String("studentID", studentID),
 		zap.String("host", act.HolderType),
 		zap.String("formfile", act.ActiveForm),
-		zap.String("signer", act.Signer),
 	)
 
 	return nil

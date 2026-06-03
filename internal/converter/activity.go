@@ -1,7 +1,6 @@
 package converter
 
 import (
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -12,8 +11,6 @@ import (
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/tools"
 )
-
-const legacySignerListSep = ","
 
 func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
 	act := &model.Activity{
@@ -30,8 +27,8 @@ func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
 		RegisterMethod: r.LabelForm.RegisterMethod,
 		StartTime:      r.LabelForm.StartTime,
 		EndTime:        r.LabelForm.EndTime,
-		Signer:         EncodeSigners(SignersFromReq(r.LabelForm.Signer)),
 		ActiveForm:     r.LabelForm.ActiveForm,
+		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer),
 	}
 	return act
 }
@@ -51,8 +48,8 @@ func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.Ac
 		RegisterMethod: r.LabelForm.RegisterMethod,
 		StartTime:      r.LabelForm.StartTime,
 		EndTime:        r.LabelForm.EndTime,
-		Signer:         EncodeSigners(SignersFromReq(r.LabelForm.Signer)),
 		ActiveForm:     r.LabelForm.ActiveForm,
+		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer),
 	}
 }
 
@@ -71,7 +68,7 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 	res.LabelForm.ActiveForm = d.ActiveForm
 	res.LabelForm.EndTime = d.EndTime
 	res.LabelForm.Type = d.Type
-	res.LabelForm.Signer = SignersToResp(DecodeSigners(d.Signer))
+	res.LabelForm.Signer = ActivitySignersToResp(d.Signers)
 
 	return res
 }
@@ -133,7 +130,7 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 	res.ActiveForm = act.ActiveForm
 	res.Position = act.Position
 	res.IfRegister = act.IfRegister
-	res.Signer = SignersToResp(DecodeSigners(act.Signer))
+	res.Signer = ActivitySignersToResp(act.Signers)
 	res.IsChecking = act.IsChecking
 	res.UserInfo.School = d.Author.School
 	res.UserInfo.Username = d.Author.Name
@@ -157,52 +154,10 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 	res.UserInfo.Username = author.Name
 	res.UserInfo.Avatar = author.Avatar
 	res.ActiveForm = d.ActiveForm
-	res.Signer = SignersToResp(DecodeSigners(d.Signer))
+	res.Signer = ActivitySignersToResp(d.Signers)
 	res.UserInfo.StudentID = author.StudentID
 
 	return res
-}
-
-func EncodeSigners(signers []model.Signer) string {
-	if len(signers) == 0 {
-		return ""
-	}
-	b, err := json.Marshal(signers)
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
-func DecodeSigners(raw string) []model.Signer {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	if strings.HasPrefix(raw, "[") {
-		var signers []model.Signer
-		if err := json.Unmarshal([]byte(raw), &signers); err == nil {
-			return signers
-		}
-	}
-	return decodeLegacySigners(raw)
-}
-
-func decodeLegacySigners(raw string) []model.Signer {
-	parts := strings.Split(raw, legacySignerListSep)
-	signers := make([]model.Signer, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		studentID, name, ok := strings.Cut(part, ":")
-		if !ok || studentID == "" {
-			continue
-		}
-		signers = append(signers, model.Signer{StudentID: studentID, Name: name})
-	}
-	return signers
 }
 
 func SignersFromReq(signers []req.Signer) []model.Signer {
@@ -213,7 +168,15 @@ func SignersFromReq(signers []req.Signer) []model.Signer {
 	return out
 }
 
-func SignersToResp(signers []model.Signer) []resp.Signer {
+func SignersFromReqToActivitySigner(signers []req.Signer) []model.ActivitySigner {
+	out := make([]model.ActivitySigner, len(signers))
+	for i, s := range signers {
+		out[i] = model.ActivitySigner{StudentID: s.StudentID, Name: s.Name}
+	}
+	return out
+}
+
+func ActivitySignersToResp(signers []model.ActivitySigner) []resp.Signer {
 	out := make([]resp.Signer, len(signers))
 	for i, s := range signers {
 		out[i] = resp.Signer{StudentID: s.StudentID, Name: s.Name}

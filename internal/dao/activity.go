@@ -60,10 +60,11 @@ func (ad *ActDao) CreateDraft(c context.Context, d *model.ActivityDraft) error {
 
 func (ad *ActDao) LoadDraft(c context.Context, s string) (model.ActivityDraft, error) {
 	var d model.ActivityDraft
-	err := ad.DB.WithContext(c).Where("student_id = ?", s).Find(&d).Error
+
+	err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ?", s).First(&d).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return d, nil
+			return model.ActivityDraft{}, nil
 		}
 		return model.ActivityDraft{}, err
 	}
@@ -74,13 +75,13 @@ func (ad *ActDao) LoadDraft(c context.Context, s string) (model.ActivityDraft, e
 func (ad *ActDao) FindActByUser(c context.Context, s string, keyword string) ([]model.Activity, error) {
 	var as []model.Activity
 	if keyword == "" {
-		err := ad.DB.WithContext(c).Where("student_id = ? ", s).Find(&as).Error
+		err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? ", s).Find(&as).Error
 		if err != nil {
 			return nil, err
 		}
 		return as, nil
 	} else {
-		err := ad.DB.WithContext(c).Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Find(&as).Error
+		err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Find(&as).Error
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +91,7 @@ func (ad *ActDao) FindActByUser(c context.Context, s string, keyword string) ([]
 
 func (ad *ActDao) FindActByName(c context.Context, n string) ([]model.Activity, error) {
 	var as []model.Activity
-	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", n)).Find(&as).Error
+	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("title like ?", fmt.Sprintf("%%%s%%", n)).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +100,7 @@ func (ad *ActDao) FindActByName(c context.Context, n string) ([]model.Activity, 
 
 func (ad *ActDao) FindActByDate(c context.Context, d string) ([]model.Activity, error) {
 	var as []model.Activity
-	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Find(&as).Error
+	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]m
 		q = q.Where("start_time <= ? AND end_time >= ?", a.DetailTime, a.DetailTime)
 	}
 
-	err := q.Scopes(ad.SetEffect()).Find(&as).Error
+	err := q.Scopes(ad.SetEffect()).Preload("Signers").Find(&as).Error
 	if err != nil {
 		ad.l.Error("Failed to find activities by searches", zap.Error(err))
 	}
@@ -163,7 +164,7 @@ func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]m
 
 func (ad *ActDao) FindActByOwnerID(c context.Context, s string) ([]model.Activity, error) {
 	var as []model.Activity
-	err := ad.DB.WithContext(c).Where("student_id = ?", s).Find(&as).Error
+	err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ?", s).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +174,7 @@ func (ad *ActDao) FindActByOwnerID(c context.Context, s string) ([]model.Activit
 func (ad *ActDao) ListAllActs(c context.Context) ([]model.Activity, error) {
 	var as []model.Activity
 
-	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Where("end_time > ?", time.Now()).Order("start_time ASC").Find(&as).Error
+	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("end_time > ?", time.Now()).Order("start_time ASC").Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +183,7 @@ func (ad *ActDao) ListAllActs(c context.Context) ([]model.Activity, error) {
 
 func (ad *ActDao) FindActByBid(c context.Context, bid string) (model.Activity, error) {
 	var act model.Activity
-	err := ad.DB.WithContext(c).Where("bid = ?", bid).First(&act).Error
+	err := ad.DB.WithContext(c).Preload("Signers").Where("bid = ?", bid).First(&act).Error
 	if err != nil {
 		return model.Activity{}, err
 	}
@@ -206,7 +207,7 @@ func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
 
 func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, error) {
 	var acts []model.Activity
-	err := ad.DB.WithContext(c).Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&acts).Error
+	err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&acts).Error
 	if err != nil {
 		ad.l.Error("Failed to get checking activities", zap.Error(err), zap.String("student_id", sid))
 		return nil, err
