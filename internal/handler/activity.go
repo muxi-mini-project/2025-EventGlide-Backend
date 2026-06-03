@@ -40,8 +40,8 @@ func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.Handler
 		act.POST("/name", ginx.WrapRequestWithClaims(ah.FindActByName))
 		act.POST("/date", ginx.WrapRequestWithClaims(ah.FindActByDate))
 		act.POST("/search", ginx.WrapRequestWithClaims(ah.FindActBySearches))
-		act.GET("/own", ginx.WrapWithClaims(ah.FindActByOwnerID))
-		act.GET("/all", ginx.WrapWithClaims(ah.ListAllActs))
+		act.POST("/own", ginx.WrapRequestWithClaims(ah.FindActByOwnerID))
+		act.POST("/all", ginx.WrapRequestWithClaims(ah.ListAllActs))
 		act.GET("/:id", ginx.WrapRequestWithClaims(ah.FindActByBid))
 	}
 }
@@ -110,15 +110,16 @@ func (ah *ActHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param name body req.FindActByNameReq true "活动名称"
-// @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/name [post]
 func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	acts, err := ah.as.FindActByName(ctx, req_.Name)
+	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActByName(ctx, req_.Name, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // FindActBySearches
@@ -127,15 +128,16 @@ func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq,
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param actSearchReq body req.ActSearchReq true "搜索条件"
-// @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/search [post]
 func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	acts, err := ah.as.FindActBySearches(ctx, &req_)
+	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActBySearches(ctx, &req_)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // FindActByDate
@@ -144,47 +146,54 @@ func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq,
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param date body  req.FindActByDateReq true "日期查找"
-// @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/date [post]
 func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	acts, err := ah.as.FindActByDate(ctx, req_.Date)
+	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActByDate(ctx, req_.Date, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // FindActByOwnerID
 // @Tags Activity
 // @Summary 通过创建者id查找活动
 // @Produce json
+// @Accept json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
-// @Router /act/own [get]
-func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	acts, err := ah.as.FindActByOwnerID(ctx, claims.Subject)
+// @Param req body req.FindActByOwnerIDReq true "分页请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
+// @Router /act/own [post]
+func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActByOwnerID(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // ListAllActs
 // @Tags Activity
 // @Summary 列出所有活动
 // @Produce json
+// @Accept json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
-// @Router /act/all [get]
-func (ah *ActHandler) ListAllActs(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	acts, err := ah.as.ListAllActs(ctx)
+// @Param req body req.ListAllActsReq true "分页请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
+// @Router /act/all [post]
+func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ah.as.ListAllActs(ctx, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ah.as.EnrichForSearcher(ctx, acts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // FindActByBid

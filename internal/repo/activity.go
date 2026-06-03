@@ -24,13 +24,6 @@ func NewActivityRepo(dao *dao.ActDao, ch *cache.MultiLevelCache) *ActivityRepo {
 	}
 }
 
-func (r *ActivityRepo) CreateAct(ctx context.Context, act *model.Activity) error {
-	if err := r.dao.CreateAct(ctx, act); err != nil {
-		return err
-	}
-	return r.Invalidate(ctx, act.Bid)
-}
-
 func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity, signers []model.Signer, studentID string) error {
 	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		act.Signers = nil
@@ -142,28 +135,28 @@ func (r *ActivityRepo) LoadDraft(ctx context.Context, sid string) (model.Activit
 	return r.dao.LoadDraft(ctx, sid)
 }
 
-func (r *ActivityRepo) FindActByUser(ctx context.Context, sid, keyword string) ([]model.Activity, error) {
-	return r.dao.FindActByUser(ctx, sid, keyword)
+func (r *ActivityRepo) FindActByUser(ctx context.Context, sid, keyword string, page, limit int) (*model.PaginatedActivities, error) {
+	return r.dao.FindActByUser(ctx, sid, keyword, page, limit)
 }
 
-func (r *ActivityRepo) FindActByName(ctx context.Context, name string) ([]model.Activity, error) {
-	return r.dao.FindActByName(ctx, name)
+func (r *ActivityRepo) FindActByName(ctx context.Context, name string, page, limit int) (*model.PaginatedActivities, error) {
+	return r.dao.FindActByName(ctx, name, page, limit)
 }
 
-func (r *ActivityRepo) FindActByDate(ctx context.Context, date string) ([]model.Activity, error) {
-	return r.dao.FindActByDate(ctx, date)
+func (r *ActivityRepo) FindActByDate(ctx context.Context, date string, page, limit int) (*model.PaginatedActivities, error) {
+	return r.dao.FindActByDate(ctx, date, page, limit)
 }
 
-func (r *ActivityRepo) FindActBySearches(ctx context.Context, req *req.ActSearchReq) ([]model.Activity, error) {
+func (r *ActivityRepo) FindActBySearches(ctx context.Context, req *req.ActSearchReq) (*model.PaginatedActivities, error) {
 	return r.dao.FindActBySearches(ctx, req)
 }
 
-func (r *ActivityRepo) FindActByOwnerID(ctx context.Context, sid string) ([]model.Activity, error) {
-	return r.dao.FindActByOwnerID(ctx, sid)
+func (r *ActivityRepo) FindActByOwnerID(ctx context.Context, sid string, page, limit int) (*model.PaginatedActivities, error) {
+	return r.dao.FindActByOwnerID(ctx, sid, page, limit)
 }
 
-func (r *ActivityRepo) ListAllActs(ctx context.Context) ([]model.Activity, error) {
-	return r.dao.ListAllActs(ctx)
+func (r *ActivityRepo) ListAllActs(ctx context.Context, page, limit int) (*model.PaginatedActivities, error) {
+	return r.dao.ListAllActs(ctx, page, limit)
 }
 
 func (r *ActivityRepo) FindActByBid(ctx context.Context, bid string) (model.Activity, error) {

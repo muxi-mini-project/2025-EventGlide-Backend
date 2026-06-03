@@ -17,16 +17,16 @@ import (
 var _ ActDaoHdl = &ActDao{}
 
 type ActDaoHdl interface {
-	CreateAct(context.Context, *model.Activity) error
 	CreateDraft(context.Context, *model.ActivityDraft) error
-	DeleteAct(context.Context, model.Activity) error
 	LoadDraft(context.Context, string) (model.ActivityDraft, error)
-	FindActByName(context.Context, string) ([]model.Activity, error)
-	FindActByDate(context.Context, string) ([]model.Activity, error)
-	FindActByOwnerID(context.Context, string) ([]model.Activity, error)
-	CheckExist(context.Context, *model.Activity) bool
-	ListAllActs(context.Context) ([]model.Activity, error)
-	FindActBySearches(context.Context, *req.ActSearchReq) ([]model.Activity, error)
+	DeleteAct(context.Context, model.Activity) error
+	ListAllActs(context.Context, int, int) (*model.PaginatedActivities, error)
+	FindActByUser(context.Context, string, string, int, int) (*model.PaginatedActivities, error)
+	FindActByName(context.Context, string, int, int) (*model.PaginatedActivities, error)
+	FindActByDate(context.Context, string, int, int) (*model.PaginatedActivities, error)
+	FindActByOwnerID(context.Context, string, int, int) (*model.PaginatedActivities, error)
+	FindActBySearches(context.Context, *req.ActSearchReq) (*model.PaginatedActivities, error)
+	FindActByBid(context.Context, string) (model.Activity, error)
 }
 
 type ActDao struct {
@@ -40,16 +40,6 @@ func NewActDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *ActDao {
 		DB:     db,
 		effect: cfg.Auditor.Effect,
 		l:      l.Activity.Named("dao"),
-	}
-}
-
-func (ad *ActDao) CreateAct(c context.Context, a *model.Activity) error {
-	if ad.CheckExist(c, a) {
-		ad.l.Warn("tried to create an exist activity", zap.Any("act-bid", a.Bid))
-		return errors.New("activity exist")
-	} else {
-		ad.DB.WithContext(c).Where("student_id = ?", a.StudentID).Delete(model.ActivityDraft{})
-		return ad.DB.Create(a).Error
 	}
 }
 
@@ -71,56 +61,6 @@ func (ad *ActDao) LoadDraft(c context.Context, s string) (model.ActivityDraft, e
 	return d, nil
 }
 
-// TODO: 换成按页展示，每页返回固定个数活动
-func (ad *ActDao) FindActByUser(c context.Context, s string, keyword string) ([]model.Activity, error) {
-	var as []model.Activity
-	if keyword == "" {
-		err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? ", s).Find(&as).Error
-		if err != nil {
-			return nil, err
-		}
-		return as, nil
-	} else {
-		err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Find(&as).Error
-		if err != nil {
-			return nil, err
-		}
-		return as, nil
-	}
-}
-
-func (ad *ActDao) FindActByName(c context.Context, n string) ([]model.Activity, error) {
-	var as []model.Activity
-	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("title like ?", fmt.Sprintf("%%%s%%", n)).Find(&as).Error
-	if err != nil {
-		return nil, err
-	}
-	return as, nil
-}
-
-func (ad *ActDao) FindActByDate(c context.Context, d string) ([]model.Activity, error) {
-	var as []model.Activity
-	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Find(&as).Error
-	if err != nil {
-		return nil, err
-	}
-	return as, nil
-}
-
-func (ad *ActDao) CheckExist(c context.Context, a *model.Activity) bool {
-	ret := ad.DB.WithContext(c).Where(&model.Activity{
-		Type:       a.Type,
-		HolderType: a.HolderType,
-		Position:   a.Position,
-		IfRegister: a.IfRegister,
-	}).Find(&model.Activity{}).RowsAffected
-	if ret == 0 {
-		return false
-	} else {
-		return true
-	}
-}
-
 func (ad *ActDao) DeleteAct(c context.Context, a model.Activity) error {
 	ret := ad.DB.WithContext(c).Where(&model.Activity{
 		Type:       a.Type,
@@ -135,8 +75,136 @@ func (ad *ActDao) DeleteAct(c context.Context, a model.Activity) error {
 	}
 }
 
-func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]model.Activity, error) {
+func (ad *ActDao) ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error) {
 	var as []model.Activity
+	var total int64
+	offset := (page - 1) * limit
+
+	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
+	if err != nil {
+		return nil, err
+	}
+
+	err = ad.DB.WithContext(c).Scopes(ad.SetEffect()).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
+}
+
+func (ad *ActDao) FindActByUser(c context.Context, s string, keyword string, page, limit int) (*model.PaginatedActivities, error) {
+	var as []model.Activity
+	var total int64
+	offset := (page - 1) * limit
+
+	var err error
+	if keyword == "" {
+		err = ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? ", s).Limit(limit).Offset(offset).Find(&as).Error
+		if err != nil {
+			return nil, err
+		}
+		err = ad.DB.WithContext(c).Where("student_id = ? ", s).Model(&model.Activity{}).Count(&total).Error
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err = ad.DB.WithContext(c).Preload("Signers").Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Limit(limit).Offset(offset).Find(&as).Error
+		if err != nil {
+			return nil, err
+		}
+		err = ad.DB.WithContext(c).Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Model(&model.Activity{}).Count(&total).Error
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
+}
+
+func (ad *ActDao) FindActByName(c context.Context, n string, page, limit int) (*model.PaginatedActivities, error) {
+	var as []model.Activity
+	var total int64
+	offset := (page - 1) * limit
+
+	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("title like ?", fmt.Sprintf("%%%s%%", n)).Limit(limit).Offset(offset).Find(&as).Error
+	if err != nil {
+		return nil, err
+	}
+	err = ad.DB.WithContext(c).Scopes(ad.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", n)).Model(&model.Activity{}).Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
+}
+
+func (ad *ActDao) FindActByDate(c context.Context, d string, page, limit int) (*model.PaginatedActivities, error) {
+	var as []model.Activity
+	var total int64
+	offset := (page - 1) * limit
+
+	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Limit(limit).Offset(offset).Find(&as).Error
+	if err != nil {
+		return nil, err
+	}
+	err = ad.DB.WithContext(c).Scopes(ad.SetEffect()).Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Model(&model.Activity{}).Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
+}
+
+func (ad *ActDao) FindActByOwnerID(c context.Context, s string, page, limit int) (*model.PaginatedActivities, error) {
+	var as []model.Activity
+	var total int64
+	offset := (page - 1) * limit
+
+	err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ?", s).Limit(limit).Offset(offset).Find(&as).Error
+	if err != nil {
+		return nil, err
+	}
+	err = ad.DB.WithContext(c).Where("student_id = ?", s).Model(&model.Activity{}).Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
+}
+
+func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) (*model.PaginatedActivities, error) {
+	var as []model.Activity
+	var total int64
+	page := a.Page
+	limit := a.Limit
+	offset := (page - 1) * limit
+
 	q := ad.DB.WithContext(c) // 确保 q 初始化
 	if len(a.Type) > 0 {
 		q = q.Where("type IN ?", a.Type)
@@ -154,31 +222,24 @@ func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) ([]m
 		q = q.Where("start_time <= ? AND end_time >= ?", a.DetailTime, a.DetailTime)
 	}
 
-	err := q.Scopes(ad.SetEffect()).Preload("Signers").Find(&as).Error
+	err := q.Scopes(ad.SetEffect()).Preload("Signers").Limit(limit).Offset(offset).Find(&as).Error
 	if err != nil {
 		ad.l.Error("Failed to find activities by searches", zap.Error(err))
-	}
-
-	return as, err
-}
-
-func (ad *ActDao) FindActByOwnerID(c context.Context, s string) ([]model.Activity, error) {
-	var as []model.Activity
-	err := ad.DB.WithContext(c).Preload("Signers").Where("student_id = ?", s).Find(&as).Error
-	if err != nil {
 		return nil, err
 	}
-	return as, nil
-}
 
-func (ad *ActDao) ListAllActs(c context.Context) ([]model.Activity, error) {
-	var as []model.Activity
-
-	err := ad.DB.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Where("end_time > ?", time.Now()).Order("start_time ASC").Find(&as).Error
+	err = q.Scopes(ad.SetEffect()).Model(&model.Activity{}).Count(&total).Error
 	if err != nil {
+		ad.l.Error("Failed to count activities by searches", zap.Error(err))
 		return nil, err
 	}
-	return as, nil
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
 }
 
 func (ad *ActDao) FindActByBid(c context.Context, bid string) (model.Activity, error) {

@@ -6,6 +6,8 @@ type ActSearchReq struct {
 	Location   []string `json:"location,omitempty"`
 	IfRegister string   `json:"ifRegister,omitempty"`
 	DetailTime string   `json:"detailTime,omitempty"`
+	Page       int      `json:"page,omitempty"`
+	Limit      int      `json:"limit,omitempty"`
 }
 
 type CreateActReq struct {
@@ -25,11 +27,15 @@ type CreateActDraftReq struct {
 }
 
 type FindActByNameReq struct {
-	Name string `json:"name" validate:"required"`
+	Name  string `json:"name" validate:"required"`
+	Page  int    `json:"page,omitempty"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 type FindActByDateReq struct {
 	Date string `json:"date" validate:"required"` // 02-01
+	Page int    `json:"page,omitempty"`
+	Limit int   `json:"limit,omitempty"`
 }
 
 type FindActByBidReq struct {
@@ -38,6 +44,18 @@ type FindActByBidReq struct {
 
 type FindActByUserIDReq struct {
 	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
+	Page   int    `json:"page,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+}
+
+type ListAllActsReq struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+}
+
+type FindActByOwnerIDReq struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
 }
 
 type Signer struct {

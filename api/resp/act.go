@@ -37,6 +37,13 @@ type ListActivitiesResp struct {
 	IsCollect string `json:"isCollect"`
 }
 
+type PaginatedListActivitiesResp struct {
+	Total   int64                  `json:"total"`
+	Page    int                    `json:"page"`
+	Limit   int                    `json:"limit"`
+	Details []ListActivitiesResp   `json:"details"`
+}
+
 type LoadActivitiesDraftResp struct {
 	Title     string   `json:"title"`
 	Introduce string   `json:"introduce"`

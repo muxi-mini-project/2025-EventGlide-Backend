@@ -17,12 +17,12 @@ type ActivityServiceHdl interface {
 	CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error
 	CreateDraft(c context.Context, draft *model.ActivityDraft) error
 	LoadDraft(c context.Context, sid string) (model.ActivityDraft, error)
-	FindActBySearches(c context.Context, search *req.ActSearchReq) ([]model.Activity, error)
-	FindActByDate(c context.Context, date string) ([]model.Activity, error)
-	FindActByName(c context.Context, name string) ([]model.Activity, error)
+	FindActBySearches(c context.Context, search *req.ActSearchReq) (*model.PaginatedActivities, error)
+	FindActByDate(c context.Context, date string, page, limit int) (*model.PaginatedActivities, error)
+	FindActByName(c context.Context, name string, page, limit int) (*model.PaginatedActivities, error)
 	FindActByBid(c context.Context, bid string) (model.Activity, error)
-	FindActByOwnerID(c context.Context, studentID string) ([]model.Activity, error)
-	ListAllActs(c context.Context) ([]model.Activity, error)
+	FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error)
+	ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error)
 	EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail
 	EnrichOneForSearcher(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail
 	AuthorBrief(c context.Context, studentID string) model.UserBrief
@@ -87,7 +87,7 @@ func (as *ActivityService) LoadDraft(c context.Context, sid string) (model.Activ
 	return d, nil
 }
 
-func (as *ActivityService) FindActBySearches(c context.Context, search *req.ActSearchReq) ([]model.Activity, error) {
+func (as *ActivityService) FindActBySearches(c context.Context, search *req.ActSearchReq) (*model.PaginatedActivities, error) {
 	acts, err := as.ad.FindActBySearches(c, search)
 	if err != nil {
 		as.l.Error("Failed to search acts", zap.Error(err))
@@ -96,24 +96,24 @@ func (as *ActivityService) FindActBySearches(c context.Context, search *req.ActS
 	return acts, nil
 }
 
-func (as *ActivityService) FindActByDate(c context.Context, date string) ([]model.Activity, error) {
-	return as.ad.FindActByDate(c, date)
+func (as *ActivityService) FindActByDate(c context.Context, date string, page, limit int) (*model.PaginatedActivities, error) {
+	return as.ad.FindActByDate(c, date, page, limit)
 }
 
-func (as *ActivityService) FindActByName(c context.Context, name string) ([]model.Activity, error) {
-	return as.ad.FindActByName(c, name)
+func (as *ActivityService) FindActByName(c context.Context, name string, page, limit int) (*model.PaginatedActivities, error) {
+	return as.ad.FindActByName(c, name, page, limit)
 }
 
 func (as *ActivityService) FindActByBid(c context.Context, bid string) (model.Activity, error) {
 	return as.ad.FindActByBid(c, bid)
 }
 
-func (as *ActivityService) FindActByOwnerID(c context.Context, studentID string) ([]model.Activity, error) {
-	return as.ad.FindActByOwnerID(c, studentID)
+func (as *ActivityService) FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error) {
+	return as.ad.FindActByOwnerID(c, studentID, page, limit)
 }
 
-func (as *ActivityService) ListAllActs(c context.Context) ([]model.Activity, error) {
-	return as.ad.ListAllActs(c)
+func (as *ActivityService) ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error) {
+	return as.ad.ListAllActs(c, page, limit)
 }
 
 func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail {

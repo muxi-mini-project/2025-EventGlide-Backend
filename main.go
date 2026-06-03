@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/fsnotify/fsnotify"
+	_ "github.com/raiki02/EG/docs"
 	"github.com/raiki02/EG/internal/server"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/spf13/viper"
@@ -16,9 +17,9 @@ var (
 	mu  sync.Mutex
 )
 
-// @Title EventGlide API
-// @Description 校灵通 API 文档
-// @verstion 1.0
+// @title EventGlide API
+// @version 1.0
+// @description 校灵通 API 文档
 func main() {
 	ginx.InitValidation()
 	app = InitApp()

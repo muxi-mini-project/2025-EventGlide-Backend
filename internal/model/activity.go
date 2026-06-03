@@ -69,3 +69,10 @@ type ActivityDetail struct {
 	IsLike    bool
 	IsCollect bool
 }
+
+type PaginatedActivities struct {
+	Total int64
+	Page  int
+	Limit int
+	Acts  []Activity
+}

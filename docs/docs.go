@@ -16,7 +16,10 @@ const docTemplate = `{
     "basePath": "{{.BasePath}}",
     "paths": {
         "/act/all": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -31,6 +34,15 @@ const docTemplate = `{
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.ListAllActsReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -45,7 +57,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -146,7 +158,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -291,10 +303,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -305,7 +314,10 @@ const docTemplate = `{
             }
         },
         "/act/own": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -320,6 +332,15 @@ const docTemplate = `{
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.FindActByOwnerIDReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -334,7 +355,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -383,7 +404,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -1980,11 +2001,17 @@ const docTemplate = `{
                 "ifRegister": {
                     "type": "string"
                 },
+                "limit": {
+                    "type": "integer"
+                },
                 "location": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "page": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "array",
@@ -2212,6 +2239,12 @@ const docTemplate = `{
                 "date": {
                     "description": "02-01",
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2221,8 +2254,25 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "limit": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "req.FindActByOwnerIDReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2249,6 +2299,17 @@ const docTemplate = `{
                 },
                 "targetId": {
                     "type": "string"
+                }
+            }
+        },
+        "req.ListAllActsReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2319,6 +2380,12 @@ const docTemplate = `{
             "properties": {
                 "keyword": {
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2906,6 +2973,26 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.PaginatedListActivitiesResp": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/resp.ListActivitiesResp"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "resp.ReplyCreator": {
             "type": "object",
             "properties": {
@@ -3026,7 +3113,7 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "",
+	Version:          "1.0",
 	Host:             "",
 	BasePath:         "",
 	Schemes:          []string{},

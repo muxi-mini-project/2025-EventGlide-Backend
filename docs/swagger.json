@@ -3,11 +3,15 @@
     "info": {
         "description": "校灵通 API 文档",
         "title": "EventGlide API",
-        "contact": {}
+        "contact": {},
+        "version": "1.0"
     },
     "paths": {
         "/act/all": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -22,6 +26,15 @@
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.ListAllActsReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -36,7 +49,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -137,7 +150,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -282,10 +295,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -296,7 +306,10 @@
             }
         },
         "/act/own": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -311,6 +324,15 @@
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.FindActByOwnerIDReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -325,7 +347,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -374,7 +396,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "$ref": "#/definitions/resp.ListActivitiesResp"
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -1971,11 +1993,17 @@
                 "ifRegister": {
                     "type": "string"
                 },
+                "limit": {
+                    "type": "integer"
+                },
                 "location": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "page": {
+                    "type": "integer"
                 },
                 "type": {
                     "type": "array",
@@ -2203,6 +2231,12 @@
                 "date": {
                     "description": "02-01",
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2212,8 +2246,25 @@
                 "name"
             ],
             "properties": {
+                "limit": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
+                },
+                "page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "req.FindActByOwnerIDReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2240,6 +2291,17 @@
                 },
                 "targetId": {
                     "type": "string"
+                }
+            }
+        },
+        "req.ListAllActsReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2310,6 +2372,12 @@
             "properties": {
                 "keyword": {
                     "type": "string"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2894,6 +2962,26 @@
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "resp.PaginatedListActivitiesResp": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/resp.ListActivitiesResp"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },

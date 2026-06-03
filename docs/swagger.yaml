@@ -9,10 +9,14 @@ definitions:
         type: array
       ifRegister:
         type: string
+      limit:
+        type: integer
       location:
         items:
           type: string
         type: array
+      page:
+        type: integer
       type:
         items:
           type: string
@@ -164,15 +168,30 @@ definitions:
       date:
         description: 02-01
         type: string
+      limit:
+        type: integer
+      page:
+        type: integer
     required:
     - date
     type: object
   req.FindActByNameReq:
     properties:
+      limit:
+        type: integer
       name:
         type: string
+      page:
+        type: integer
     required:
     - name
+    type: object
+  req.FindActByOwnerIDReq:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
     type: object
   req.FindPostReq:
     properties:
@@ -190,6 +209,13 @@ definitions:
     required:
     - subject
     - targetId
+    type: object
+  req.ListAllActsReq:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
     type: object
   req.LoginReq:
     properties:
@@ -235,6 +261,10 @@ definitions:
     properties:
       keyword:
         type: string
+      limit:
+        type: integer
+      page:
+        type: integer
     type: object
   resp.BriefFeedResp:
     properties:
@@ -619,6 +649,19 @@ definitions:
       username:
         type: string
     type: object
+  resp.PaginatedListActivitiesResp:
+    properties:
+      details:
+        items:
+          $ref: '#/definitions/resp.ListActivitiesResp'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+    type: object
   resp.ReplyCreator:
     properties:
       avatar:
@@ -698,6 +741,7 @@ info:
   contact: {}
   description: 校灵通 API 文档
   title: EventGlide API
+  version: "1.0"
 paths:
   /act/{id}:
     get:
@@ -723,13 +767,21 @@ paths:
       tags:
       - Activity
   /act/all:
-    get:
+    post:
+      consumes:
+      - application/json
       parameters:
       - description: token
         in: header
         name: Authorization
         required: true
         type: string
+      - description: 分页请求
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.ListAllActsReq'
       produces:
       - application/json
       responses:
@@ -740,7 +792,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/resp.ListActivitiesResp'
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
               type: object
       summary: 列出所有活动
       tags:
@@ -800,7 +852,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/resp.ListActivitiesResp'
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
               type: object
       summary: 通过日期查找活动
       tags:
@@ -886,21 +938,27 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/resp.ListActivitiesResp'
-                  type: array
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
               type: object
       summary: 通过名称查找活动
       tags:
       - Activity
   /act/own:
-    get:
+    post:
+      consumes:
+      - application/json
       parameters:
       - description: token
         in: header
         name: Authorization
         required: true
         type: string
+      - description: 分页请求
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.FindActByOwnerIDReq'
       produces:
       - application/json
       responses:
@@ -911,7 +969,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/resp.ListActivitiesResp'
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
               type: object
       summary: 通过创建者id查找活动
       tags:
@@ -940,7 +998,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  $ref: '#/definitions/resp.ListActivitiesResp'
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
               type: object
       summary: 通过搜索条件查找活动
       tags:
