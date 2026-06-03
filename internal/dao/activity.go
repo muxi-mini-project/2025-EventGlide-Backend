@@ -17,7 +17,6 @@ import (
 var _ ActDaoHdl = &ActDao{}
 
 type ActDaoHdl interface {
-	CreateAct(context.Context, *model.Activity) error
 	CreateDraft(context.Context, *model.ActivityDraft) error
 	LoadDraft(context.Context, string) (model.ActivityDraft, error)
 	DeleteAct(context.Context, model.Activity) error
@@ -41,30 +40,6 @@ func NewActDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *ActDao {
 		DB:     db,
 		effect: cfg.Auditor.Effect,
 		l:      l.Activity.Named("dao"),
-	}
-}
-
-func (ad *ActDao) CreateAct(c context.Context, a *model.Activity) error {
-	if ad.CheckExist(c, a) {
-		ad.l.Warn("tried to create an exist activity", zap.Any("act-bid", a.Bid))
-		return errors.New("activity exist")
-	} else {
-		ad.DB.WithContext(c).Where("student_id = ?", a.StudentID).Delete(model.ActivityDraft{})
-		return ad.DB.Create(a).Error
-	}
-}
-
-func (ad *ActDao) CheckExist(c context.Context, a *model.Activity) bool {
-	ret := ad.DB.WithContext(c).Where(&model.Activity{
-		Type:       a.Type,
-		HolderType: a.HolderType,
-		Position:   a.Position,
-		IfRegister: a.IfRegister,
-	}).Find(&model.Activity{}).RowsAffected
-	if ret == 0 {
-		return false
-	} else {
-		return true
 	}
 }
 

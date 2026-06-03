@@ -24,13 +24,6 @@ func NewActivityRepo(dao *dao.ActDao, ch *cache.MultiLevelCache) *ActivityRepo {
 	}
 }
 
-func (r *ActivityRepo) CreateAct(ctx context.Context, act *model.Activity) error {
-	if err := r.dao.CreateAct(ctx, act); err != nil {
-		return err
-	}
-	return r.Invalidate(ctx, act.Bid)
-}
-
 func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity, signers []model.Signer, studentID string) error {
 	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		act.Signers = nil
