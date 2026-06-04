@@ -41,3 +41,9 @@ func ToCheckingResp(acts []model.ActivityDetail, posts []model.PostDetail) resp.
 		Posts: ToListPostsResp(posts),
 	}
 }
+
+func ToVerifyUserResp(valid bool) resp.VerifyUserResp {
+	return resp.VerifyUserResp{
+		Valid: valid,
+	}
+}

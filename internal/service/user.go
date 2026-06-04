@@ -40,6 +40,7 @@ type UserServiceHdl interface {
 	LoadCollectPost(ctx context.Context, studentId string) ([]model.PostDetail, error)
 	LoadLikePost(ctx context.Context, studentId string) ([]model.PostDetail, error)
 	LoadLikeAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error)
+	VerifyUser(ctx context.Context, studentId string, realName string) (bool, error)
 }
 
 type UserService struct {
@@ -290,6 +291,17 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]mod
 		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
 	}
 	return res, nil
+}
+
+func (us *UserService) VerifyUser(ctx context.Context, studentId string, realName string) (bool, error) {
+	user, err := us.udh.GetUserInfo(ctx, studentId)
+	if err != nil {
+		return false, errors.New("user not found")
+	}
+	if user.RealName != realName {
+		return false, errors.New("realname does not match studentid")
+	}
+	return true, nil
 }
 
 //---一站式账号登录------------------------------------------------------------

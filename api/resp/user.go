@@ -25,3 +25,7 @@ type UserInfo struct {
 	Username  string `json:"username"`
 	School    string `json:"school"`
 }
+
+type VerifyUserResp struct {
+	Valid bool `json:"valid"`
+}
