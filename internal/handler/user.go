@@ -47,6 +47,7 @@ func (uh *UserHandler) RegisterUserHandlers(e *gin.Engine, handlerFunc gin.Handl
 			user.POST("/like/act", ginx.WrapWithClaims(uh.LoadLikeAct))
 			user.POST("/like/post", ginx.WrapWithClaims(uh.LoadLikePost))
 			user.GET("/checking", ginx.WrapWithClaims(uh.Checking))
+			user.POST("/verify", ginx.WrapRequest(uh.VerifyUser))
 		}
 	}
 }
@@ -250,4 +251,19 @@ func (uh *UserHandler) Checking(ctx *gin.Context, claims jwt.RegisteredClaims) (
 		return ginx.ReturnError(err)
 	}
 	return ginx.ReturnSuccess(converter.ToCheckingResp(acts, posts))
+}
+
+// VerifyUser
+// @Tags User
+// @Summary 验证用户是否存在以及姓名学号是否匹配
+// @Produce json
+// @Param req body req.VerifyUserReq true "验证请求"
+// @Success 200 {object} resp.Resp{data=resp.VerifyUserResp}
+// @Router /user/verify [post]
+func (uh *UserHandler) VerifyUser(ctx *gin.Context, req_ req.VerifyUserReq) (resp.Resp, error) {
+	valid, err := uh.us.VerifyUser(ctx, req_.StudentID, req_.RealName)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	return ginx.ReturnSuccess(resp.VerifyUserResp{Valid: valid})
 }
