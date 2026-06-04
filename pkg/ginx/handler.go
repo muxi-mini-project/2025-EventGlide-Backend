@@ -2,10 +2,11 @@ package ginx
 
 import (
 	"errors"
+	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/resp"
-	"net/http"
 )
 
 type userClaims struct{}
@@ -114,10 +115,12 @@ func bind(ctx *gin.Context, req any) (err error) {
 	if ctx.Request.Method == http.MethodGet {
 		err = ctx.ShouldBindQuery(req)
 	} else {
-		err = ctx.ShouldBind(req)
-	}
-	if err != nil {
-		return
+		if ctx.Request.ContentLength > 0 {
+			err = ctx.ShouldBind(req)
+			if err != nil {
+				return
+			}
+		}
 	}
 
 	if err = validateRequest(req); err != nil {
