@@ -12,6 +12,7 @@ import (
 type UserDaoHdl interface {
 	UpdateAvatar(context.Context, string, string) error
 	UpdateUsername(context.Context, string, string) error
+	UpdateRealName(context.Context, string, string) error
 	Create(context.Context, *model.User) error
 	CheckUserExist(context.Context, string) bool
 	GetUserInfo(context.Context, string) (model.User, error)
@@ -65,4 +66,8 @@ func (ud *UserDao) FindUserByID(ctx context.Context, student_id string) model.Us
 
 func (ud *UserDao) UpdateCollege(ctx context.Context, studentID string, college string) error {
 	return ud.db.WithContext(ctx).Model(&model.User{}).Where("student_id = ?", studentID).Update("college", college).Error
+}
+
+func (ud *UserDao) UpdateRealName(ctx context.Context, studentID string, realName string) error {
+	return ud.db.WithContext(ctx).Model(&model.User{}).Where("student_id = ?", studentID).Update("real_name", realName).Error
 }

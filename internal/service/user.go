@@ -494,13 +494,13 @@ func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) 
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		name, college, err := us.cSvc.getNameAndDepartment(client)
+		realName, college, err := us.cSvc.getNameAndDepartment(client)
 
 		if err == nil {
 			updated := false
 
-			if name != "" {
-				if err = us.udh.UpdateUsername(ctx, studentID, name); err == nil {
+			if realName != "" {
+				if err = us.udh.UpdateRealName(ctx, studentID, realName); err == nil {
 					updated = true
 				}
 			}
@@ -512,7 +512,7 @@ func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) 
 			}
 
 			if updated {
-				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("name", name), zap.String("college", college))
+				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("realName", realName), zap.String("college", college))
 				return
 			}
 		}
