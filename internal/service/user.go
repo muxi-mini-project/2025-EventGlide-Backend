@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/middleware"
@@ -27,7 +26,7 @@ import (
 var _ UserServiceHdl = &UserService{}
 
 type UserServiceHdl interface {
-	CreateUser(context.Context, string, string) error
+	CreateUser(context.Context, string, string, string) error
 	Login(context.Context, string, string) (*model.User, string, error)
 	Logout(context.Context, string) error
 	GetUserInfo(context.Context, string) (*model.User, error)
@@ -71,14 +70,14 @@ func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRe
 	}
 }
 
-func (us *UserService) CreateUser(ctx context.Context, sid string, school string) error {
+func (us *UserService) CreateUser(ctx context.Context, sid string, name string, department string) error {
 	user := &model.User{
 		StudentID: sid,
-		Name:      sid,
+		Name:      name,
 		//Avatar:    genRandomAvatar(ctx),
 		Avatar:  us.cfg.Imgbed.DefaultAvatar1,
 		School:  "华中师范大学",
-		College: school,
+		College: department,
 	}
 	err := us.udh.Create(ctx, user)
 	if err != nil {
@@ -96,19 +95,21 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", errors.New("登录失败")
 	}
 
-	if !us.udh.CheckUserExist(ctx, studentId) {
-		college, err := us.cSvc.getWhichSchool(client, studentId)
-		if err != nil {
-			college = ""
-		}
+	name, department, err := us.cSvc.getNameAndDepartment(client)
+	if err != nil {
+		us.l.Warn("get user info failed", zap.Error(err))
+		name = ""
+		department = ""
+	}
 
-		err = us.CreateUser(ctx, studentId, college)
+	if !us.udh.CheckUserExist(ctx, studentId) {
+		err = us.CreateUser(ctx, studentId, name, department)
 		if err != nil {
 			return nil, "", err
 		}
 
-		if college == "" {
-			go us.loadCollegeAsync(client, studentId)
+		if name == "" || department == "" {
+			go us.loadUserInfoAsync(client, studentId)
 		}
 	}
 
@@ -123,8 +124,8 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", err
 	}
 
-	if user.College == "" {
-		go us.loadCollegeAsync(client, studentId)
+	if user.Name == "" || user.College == "" {
+		go us.loadUserInfoAsync(client, studentId)
 	}
 
 	return &user, token, nil
@@ -369,6 +370,43 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	return client, nil
 }
 
+func (c *ccnuService) getNameAndDepartment(client *http.Client) (string, string, error) {
+	url1 := "https://account.ccnu.edu.cn/cas/login?service=" + url.QueryEscape("https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV_new_10511.htmlx?t1=1")
+
+	req1, err := http.NewRequest("GET", url1, nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	resp, err := client.Do(req1)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	url2 := "https://account.ccnu.edu.cn/cas/login?service=" + url.QueryEscape("https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV_new_10511.htmlx?t1=1")
+
+	req2, err := http.NewRequest("GET", url2, nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	resp2, err := client.Do(req2)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp2.Body.Close()
+
+	body2, _ := io.ReadAll(resp2.Body)
+
+	name, department, err := parseInfo(string(body2))
+	if err != nil {
+		return "", "", err
+	}
+
+	return name, department, nil
+}
+
 type accountRequestParams struct {
 	lt         string
 	execution  string
@@ -452,59 +490,63 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 	return client, params, nil
 }
 
-type Resp struct {
-	Data struct {
-		UserInfo struct {
-			Department string `json:"department"`
-		} `json:"userInfo"`
-	} `json:"data"`
-}
-
-func (c *ccnuService) getWhichSchool(client *http.Client, studentId string) (string, error) {
-	token, err := tools.SignRandJwt(studentId)
-	if err != nil {
-		return "", err
-	}
-
-	url := fmt.Sprintf("https://kjyy.ccnu.edu.cn/spa/static/public/api/remoteCasLogin?sign=&ticketCode=&account=&token=%s&ticket=%s&noAuth=true", token, tools.GenerateRand4())
-
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return "", err
-	}
-
-	res, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer res.Body.Close()
-	body, err := io.ReadAll(res.Body)
-	if err != nil {
-		return "", err
-	}
-	var r Resp
-	if err = json.Unmarshal(body, &r); err != nil {
-		return "", err
-	}
-
-	return r.Data.UserInfo.Department, nil
-}
-
-func (us *UserService) loadCollegeAsync(client *http.Client, studentID string) {
+func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) {
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		college, err := us.cSvc.getWhichSchool(client, studentID)
+		name, college, err := us.cSvc.getNameAndDepartment(client)
 
-		if err == nil && college != "" {
-			if err = us.udh.UpdateCollege(ctx, studentID, college); err == nil {
-				us.l.Info("college updated", zap.String("student_id", studentID), zap.String("college", college))
+		if err == nil {
+			updated := false
+
+			if name != "" {
+				if err = us.udh.UpdateUsername(ctx, studentID, name); err == nil {
+					updated = true
+				}
+			}
+
+			if college != "" {
+				if err = us.udh.UpdateCollege(ctx, studentID, college); err == nil {
+					updated = true
+				}
+			}
+
+			if updated {
+				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("name", name), zap.String("college", college))
 				return
 			}
 		}
 
-		us.l.Warn("load college failed", zap.String("student_id", studentID), zap.Int("retry", i+1), zap.Error(err))
-
+		us.l.Warn("load user info failed", zap.String("student_id", studentID), zap.Int("retry", i+1), zap.Error(err))
 		time.Sleep(30 * time.Second)
 	}
+}
+
+func parseInfo(html string) (name, department string, err error) {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
+	if err != nil {
+		return "", "", err
+	}
+
+	nameText := strings.TrimSpace(
+		doc.Find(".infoContentTitle").First().Text(),
+	)
+
+	if idx := strings.Index(nameText, "-"); idx > 0 {
+		name = nameText[:idx]
+	} else {
+		name = nameText
+	}
+
+	doc.Find(".qz-detailtext").Each(func(i int, s *goquery.Selection) {
+		text := strings.TrimSpace(s.Text())
+
+		if strings.Contains(text, "院：") {
+			if pos := strings.Index(text, "："); pos >= 0 {
+				department = strings.TrimSpace(text[pos+len("："):])
+			}
+		}
+	})
+
+	return
 }
