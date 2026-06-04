@@ -18,6 +18,7 @@ type UserDaoHdl interface {
 	GetUserInfo(context.Context, string) (model.User, error)
 	FindUserByID(context.Context, string) model.User
 	UpdateCollege(context.Context, string, string) error
+	GetUsersByIDs(ctx context.Context, ids []string) ([]model.User, error)
 }
 
 type UserDao struct {
@@ -70,4 +71,10 @@ func (ud *UserDao) UpdateCollege(ctx context.Context, studentID string, college 
 
 func (ud *UserDao) UpdateRealName(ctx context.Context, studentID string, realName string) error {
 	return ud.db.WithContext(ctx).Model(&model.User{}).Where("student_id = ?", studentID).Update("real_name", realName).Error
+}
+
+func (ud *UserDao) GetUsersByIDs(ctx context.Context, ids []string) ([]model.User, error) {
+	var users []model.User
+	err := ud.db.WithContext(ctx).Where("student_id IN ?", ids).Find(&users).Error
+	return users, err
 }

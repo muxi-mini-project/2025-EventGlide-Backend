@@ -15,6 +15,13 @@ type Comment struct {
 
 	LikeNum  int `gorm:"not null;default:0;comment:点赞数;column:like_num"`
 	ReplyNum int `gorm:"not null;default:0;comment:回复数;column:reply_num"`
+
+	CreatorName     string `gorm:"type:varchar(255);comment:评论者名称快照;column:creator_name"`
+	CreatorAvatar   string `gorm:"type:varchar(255);comment:评论者头像快照;column:creator_avatar"`
+	ReplyToUserID   string `gorm:"type:varchar(255);comment:被回复者ID;column:reply_to_user_id"`
+	ReplyToUserName string `gorm:"type:varchar(255);comment:被回复者名称;column:reply_to_user_name"`
+	RootObjectID    string `gorm:"type:varchar(255);comment:根对象ID;column:root_object_id"`
+	RootObjectType  string `gorm:"type:varchar(255);comment:根对象类型;column:root_object_type"`
 }
 
 type CommentDetail struct {
