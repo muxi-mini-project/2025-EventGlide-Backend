@@ -73,7 +73,7 @@ func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRe
 func (us *UserService) CreateUser(ctx context.Context, sid string, name string, department string) error {
 	user := &model.User{
 		StudentID: sid,
-		Name:      name,
+		RealName:  name,
 		//Avatar:    genRandomAvatar(ctx),
 		Avatar:  us.cfg.Imgbed.DefaultAvatar1,
 		School:  "华中师范大学",
