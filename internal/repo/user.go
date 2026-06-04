@@ -69,6 +69,21 @@ func (r *UserRepo) UpdateUsername(ctx context.Context, studentID, name string) e
 	return r.ch.SetAndInvalidate(ctx, r.userInfoKey(studentID), nil, 0)
 }
 
+func (r *UserRepo) UpdateCollege(ctx context.Context, studentID string, college string) error {
+	if err := r.dao.UpdateCollege(ctx, studentID, college); err != nil {
+		return err
+	}
+
+	return r.ch.SetAndInvalidate(ctx, r.userInfoKey(studentID), nil, 0)
+}
+
+func (r *UserRepo) UpdateRealName(ctx context.Context, studentID string, realName string) error {
+	if err := r.dao.UpdateRealName(ctx, studentID, realName); err != nil {
+		return err
+	}
+	return r.ch.SetAndInvalidate(ctx, r.userInfoKey(studentID), nil, 0)
+}
+
 func (r *UserRepo) Invalidate(ctx context.Context, studentID string) error {
 	return r.ch.SetAndInvalidate(ctx, r.userInfoKey(studentID), nil, 0)
 }
