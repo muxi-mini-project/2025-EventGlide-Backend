@@ -38,9 +38,9 @@ func ToCommentResp(d model.CommentDetail) resp.CommentResp {
 	} else {
 		res.IsLike = "false"
 	}
-	res.Creator.StudentID = d.Creator.StudentID
-	res.Creator.Username = d.Creator.Name
-	res.Creator.Avatar = d.Creator.Avatar
+	res.Creator.StudentID = cmt.StudentID
+	res.Creator.Username = cmt.CreatorName
+	res.Creator.Avatar = cmt.CreatorAvatar
 	for _, reply := range d.Replies {
 		res.Reply = append(res.Reply, ToReplyResp(reply))
 	}
@@ -64,7 +64,7 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 		ReplyPos:       cmt.Position,
 		ParentID:       cmt.ParentID,
 		RootID:         cmt.RootID,
-		ParentUserName: d.ParentUserName,
+		ParentUserName: cmt.ReplyToUserName,
 		LikeNum:        cmt.LikeNum,
 		ReplyNum:       cmt.ReplyNum,
 	}
@@ -73,8 +73,8 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 	} else {
 		res.IsLike = "false"
 	}
-	res.ReplyCreator.StudentID = d.Creator.StudentID
-	res.ReplyCreator.Username = d.Creator.Name
-	res.ReplyCreator.Avatar = d.Creator.Avatar
+	res.ReplyCreator.StudentID = cmt.StudentID
+	res.ReplyCreator.Username = cmt.CreatorName
+	res.ReplyCreator.Avatar = cmt.CreatorAvatar
 	return res
 }

@@ -15,6 +15,8 @@ type CommentDaoHdl interface {
 	AnswerComment(context.Context, *model.Comment) error
 	LoadComments(context.Context, string) ([]model.Comment, error)
 	LoadAnswers(context.Context, string) ([]model.Comment, error)
+	FindCmtByID(context.Context, string) *model.Comment
+	DecrementReplyNum(context.Context, string) error
 }
 
 type CommentDao struct {
@@ -59,4 +61,9 @@ func (cd *CommentDao) FindCmtByID(c context.Context, cid string) *model.Comment 
 		return nil
 	}
 	return &cmt
+}
+
+func (cd *CommentDao) DecrementReplyNum(c context.Context, bid string) error {
+	return cd.db.WithContext(c).Model(&model.Comment{}).Where("bid = ?", bid).
+		Update("reply_num", gorm.Expr("reply_num - 1")).Error
 }

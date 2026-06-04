@@ -34,17 +34,22 @@ func (r *UserRepo) CheckUserExist(ctx context.Context, studentID string) bool {
 }
 
 func (r *UserRepo) GetUserInfo(ctx context.Context, studentID string) (model.User, error) {
-	//return cache.GetTyped(r.ch, ctx, r.userInfoKey(studentID), 10*time.Minute, func(context.Context) (model.User, error) {
-	//	user, err := r.dao.GetUserInfo(ctx, studentID)
-	//	if err != nil {
-	//		if errors.Is(err, gorm.ErrRecordNotFound) {
-	//			return model.User{}, cache.MarkNotFound(err)
-	//		}
-	//		return model.User{}, err
-	//	}
-	//	return user, nil
-	//})
 	return r.dao.GetUserInfo(ctx, studentID)
+}
+
+func (r *UserRepo) GetUsersByIDs(ctx context.Context, ids []string) (map[string]*model.User, error) {
+	if len(ids) == 0 {
+		return make(map[string]*model.User), nil
+	}
+	users, err := r.dao.GetUsersByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]*model.User, len(users))
+	for i := range users {
+		result[users[i].StudentID] = &users[i]
+	}
+	return result, nil
 }
 
 func (r *UserRepo) FindUserByID(ctx context.Context, studentID string) model.User {

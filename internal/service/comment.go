@@ -3,13 +3,13 @@ package service
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -46,20 +46,31 @@ func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.Interacti
 }
 
 func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
-	rootID := ""
-	rootType := ""
+	creator, err := cs.ud.GetUserInfo(c, studentID)
+	if err != nil {
+		cs.l.Error("Error get user info failed", zap.Error(err), zap.String("studentID", studentID))
+		return nil, err
+	}
+	cmt.CreatorName = creator.Name
+	cmt.CreatorAvatar = creator.Avatar
+
 	if cmt.Subject == SubjectComment {
-		rootCommentID, resolvedRootID, resolvedRootType, resolveErr := cs.resolveCommentRootMeta(c, cmt.ParentID)
-		if resolveErr != nil {
-			cs.l.Error("Error resolve comment root meta failed", zap.Error(resolveErr), zap.String("parentID", cmt.ParentID))
-			return nil, resolveErr
+		parent := cs.cd.FindCmtByID(c, cmt.ParentID)
+		if parent == nil {
+			return nil, errors.New("comment parent not found")
 		}
-		cmt.RootID = rootCommentID
-		rootID = resolvedRootID
-		rootType = resolvedRootType
+		cmt.RootID = parent.Bid
+		cmt.RootObjectID = parent.RootObjectID
+		cmt.RootObjectType = parent.RootObjectType
+	} else {
+		cmt.RootObjectID = cmt.ParentID
+		cmt.RootObjectType = cmt.Subject
 	}
 
-	err := cs.cd.CreateComment(c, cmt)
+	rootID := cmt.RootObjectID
+	rootType := cmt.RootObjectType
+
+	err = cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
 		zap.String("bid", cmt.Bid),
 		zap.String("studentid", cmt.StudentID),
@@ -115,21 +126,36 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 }
 
 func (cs *CommentService) DeleteComment(c context.Context, targetID, studentID string) error {
-	err := cs.cd.DeleteComment(c, studentID, targetID)
-	if err != nil {
-		cs.l.Error("Error comment delete failed", zap.Error(err))
-		return err
+	cmt := cs.cd.FindCmtByID(c, targetID)
+	if cmt != nil && cmt.Subject == SubjectComment && cmt.RootID != "" {
+		if err := cs.cd.DecrementReplyNum(c, cmt.RootID); err != nil {
+			cs.l.Error("Error decrement reply num", zap.Error(err))
+		}
 	}
-	return nil
+	return cs.cd.DeleteComment(c, studentID, targetID)
 }
 
 func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
-	rootCommentID, rootID, rootType, err := cs.resolveCommentRootMeta(c, cmt.ParentID)
+	creator, err := cs.ud.GetUserInfo(c, studentID)
 	if err != nil {
-		cs.l.Error("Error resolve comment root meta failed", zap.Error(err), zap.String("parentID", cmt.ParentID))
+		cs.l.Error("Error get user info failed", zap.Error(err), zap.String("studentID", studentID))
 		return nil, err
 	}
-	cmt.RootID = rootCommentID
+	cmt.CreatorName = creator.Name
+	cmt.CreatorAvatar = creator.Avatar
+
+	parentCmt := cs.cd.FindCmtByID(c, cmt.ParentID)
+	if parentCmt == nil {
+		return nil, errors.New("comment parent not found")
+	}
+	cmt.RootID = parentCmt.Bid
+	cmt.RootObjectID = parentCmt.RootObjectID
+	cmt.RootObjectType = parentCmt.RootObjectType
+	cmt.ReplyToUserID = parentCmt.StudentID
+	cmt.ReplyToUserName = parentCmt.CreatorName
+
+	rootID := parentCmt.RootObjectID
+	rootType := parentCmt.RootObjectType
 
 	err = cs.cd.AnswerComment(c, cmt)
 	if err != nil {
@@ -223,32 +249,54 @@ func (cs *CommentService) LoadComments(c context.Context, parentID string) ([]mo
 }
 
 func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment, viewerID string) []model.CommentDetail {
+	if len(cmts) == 0 {
+		return nil
+	}
+
+	idSet := make(map[string]struct{})
+	idSet[viewerID] = struct{}{}
+	for _, cmt := range cmts {
+		idSet[cmt.StudentID] = struct{}{}
+	}
+
+	for _, cmt := range cmts {
+		replies, _ := cs.cd.LoadAnswers(c, cmt.Bid)
+		for _, reply := range replies {
+			idSet[reply.StudentID] = struct{}{}
+		}
+	}
+
+	idList := make([]string, 0, len(idSet))
+	for id := range idSet {
+		idList = append(idList, id)
+	}
+	userMap, err := cs.ud.GetUsersByIDs(c, idList)
+	if err != nil {
+		cs.l.Error("Error batch get users", zap.Error(err))
+	}
+
 	details := make([]model.CommentDetail, 0, len(cmts))
 	for i := range cmts {
-		details = append(details, cs.enrichComment(c, &cmts[i], viewerID))
+		details = append(details, cs.enrichCommentWithCache(c, &cmts[i], viewerID, userMap))
 	}
 	return details
 }
 
 func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
-	return cs.enrichComment(c, cmt, viewerID)
+	idList := []string{viewerID, cmt.StudentID}
+	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
+	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap)
 }
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
-	return cs.enrichReply(c, cmt, viewerID)
+	idList := []string{viewerID, cmt.StudentID}
+	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
+	return cs.enrichReplyWithCache(c, cmt, viewerID, userMap)
 }
 
-func (cs *CommentService) enrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
-	user, err := cs.ud.GetUserInfo(c, cmt.StudentID)
-	if err != nil {
-		cs.l.Error("Error get user info when enriching comment", zap.Error(err))
-		return model.CommentDetail{}
-	}
-	searcher, err := cs.ud.GetUserInfo(c, viewerID)
-	if err != nil {
-		cs.l.Error("Error get user info when enriching comment", zap.Error(err))
-		return model.CommentDetail{}
-	}
+func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User) model.CommentDetail {
+	creator := userMap[cmt.StudentID]
+	viewer := userMap[viewerID]
 
 	replies, err := cs.cd.LoadAnswers(c, cmt.Bid)
 	if err != nil {
@@ -258,51 +306,35 @@ func (cs *CommentService) enrichComment(c context.Context, cmt *model.Comment, v
 
 	detail := model.CommentDetail{
 		Comment: *cmt,
-		Creator: model.UserBrief{
-			StudentID: user.StudentID,
-			Name:      user.Name,
-			Avatar:    user.Avatar,
-		},
-		IsLike: strings.Contains(searcher.LikeComment, cmt.Bid),
+	}
+	if creator != nil {
+		detail.Creator = model.UserBrief{
+			StudentID: creator.StudentID,
+			Name:      creator.Name,
+			Avatar:    creator.Avatar,
+		}
+	}
+	if viewer != nil {
+		detail.IsLike = utils.HasLike(viewer.LikeComment, cmt.Bid)
 	}
 	for _, reply := range replies {
-		detail.Replies = append(detail.Replies, cs.enrichReply(c, &reply, viewerID))
+		detail.Replies = append(detail.Replies, cs.enrichReplyWithCache(c, &reply, viewerID, userMap))
 	}
 	return detail
 }
 
-func (cs *CommentService) enrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
-	user, err := cs.ud.GetUserInfo(c, cmt.StudentID)
-	if err != nil {
-		cs.l.Error("Error get user info when enriching reply", zap.Error(err))
-		return model.ReplyDetail{}
-	}
-	searcher, err := cs.ud.GetUserInfo(c, viewerID)
-	if err != nil {
-		cs.l.Error("Error get user info when enriching reply", zap.Error(err))
-		return model.ReplyDetail{}
-	}
+func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User) model.ReplyDetail {
+	viewer := userMap[viewerID]
 
-	pc := cs.cd.FindCmtByID(c, cmt.ParentID)
-	if pc == nil {
-		cs.l.Error("Error find comment by id", zap.String("pid", cmt.ParentID))
-		return model.ReplyDetail{}
-	}
-	pu, err := cs.ud.GetUserInfo(c, pc.StudentID)
-	if err != nil {
-		cs.l.Error("Error get user info when enriching reply", zap.Error(err))
-		return model.ReplyDetail{}
+	isLike := false
+	if viewer != nil {
+		isLike = utils.HasLike(viewer.LikeComment, cmt.Bid)
 	}
 
 	return model.ReplyDetail{
-		Comment: *cmt,
-		Creator: model.UserBrief{
-			StudentID: user.StudentID,
-			Name:      user.Name,
-			Avatar:    user.Avatar,
-		},
-		ParentUserName: pu.Name,
-		IsLike:         strings.Contains(searcher.LikeComment, cmt.Bid),
+		Comment:        *cmt,
+		ParentUserName: cmt.ReplyToUserName,
+		IsLike:         isLike,
 	}
 }
 
