@@ -73,11 +73,11 @@ func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRe
 func (us *UserService) CreateUser(ctx context.Context, sid string, name string, department string) error {
 	user := &model.User{
 		StudentID: sid,
+		Name:      sid,
 		RealName:  name,
-		//Avatar:    genRandomAvatar(ctx),
-		Avatar:  us.cfg.Imgbed.DefaultAvatar1,
-		School:  "华中师范大学",
-		College: department,
+		Avatar:    us.cfg.Imgbed.DefaultAvatar1,
+		School:    "华中师范大学",
+		College:   department,
 	}
 	err := us.udh.Create(ctx, user)
 	if err != nil {
@@ -103,13 +103,13 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 	}
 
 	if !us.udh.CheckUserExist(ctx, studentId) {
+		if name == "" || department == "" {
+			go us.loadUserInfoAsync(client, studentId)
+		}
+
 		err = us.CreateUser(ctx, studentId, name, department)
 		if err != nil {
 			return nil, "", err
-		}
-
-		if name == "" || department == "" {
-			go us.loadUserInfoAsync(client, studentId)
 		}
 	}
 
@@ -124,7 +124,7 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", err
 	}
 
-	if user.Name == "" || user.College == "" {
+	if user.RealName == "" || user.College == "" {
 		go us.loadUserInfoAsync(client, studentId)
 	}
 
