@@ -54,6 +54,7 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	cmt.CreatorName = creator.Name
 	cmt.CreatorAvatar = creator.Avatar
 
+	var rootID, rootType string
 	if cmt.Subject == SubjectComment {
 		parent := cs.cd.FindCmtByID(c, cmt.ParentID)
 		if parent == nil {
@@ -62,13 +63,20 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		cmt.RootID = parent.Bid
 		cmt.RootObjectID = parent.RootObjectID
 		cmt.RootObjectType = parent.RootObjectType
+		rootID = parent.RootObjectID
+		rootType = parent.RootObjectType
 	} else {
 		cmt.RootObjectID = cmt.ParentID
 		cmt.RootObjectType = cmt.Subject
+		rootID = cmt.ParentID
+		rootType = cmt.Subject
 	}
 
-	rootID := cmt.RootObjectID
-	rootType := cmt.RootObjectType
+	subject, err := cs.sg.GetSubjectInfo(c, cmt.ParentID, cmt.Subject)
+	if err != nil {
+		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
+		return nil, err
+	}
 
 	err = cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
@@ -78,12 +86,6 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	)
 	if err != nil {
 		cs.l.Error("Error comment create failed", zap.Error(err))
-		return nil, err
-	}
-
-	subject, err := cs.sg.GetSubjectInfo(c, cmt.ParentID, cmt.Subject)
-	if err != nil {
-		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
 		return nil, err
 	}
 
