@@ -1,6 +1,6 @@
 package req
 
 type InteractionReq struct {
-	TargetID string `json:"targetId" validate:"required"`
+	TargetID int64 `json:"targetId" validate:"required"`
 	Subject  string `json:"subject" validate:"required"`
 }

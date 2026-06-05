@@ -17,11 +17,11 @@ const (
 type SubjectInfo struct {
 	Subject   string
 	StudentID string
-	Bid       string
+	Id       int64
 }
 
 type SubjectGetter interface {
-	GetSubjectInfo(ctx context.Context, bid string, sub string) (SubjectInfo, error)
+	GetSubjectInfo(ctx context.Context, id int64, sub string) (SubjectInfo, error)
 }
 
 type subjectGetter struct {
@@ -38,10 +38,10 @@ func NewSubjectGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentD
 	}
 }
 
-func (g *subjectGetter) GetSubjectInfo(ctx context.Context, bid string, sub string) (SubjectInfo, error) {
+func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string) (SubjectInfo, error) {
 	switch sub {
 	case SubjectActivity:
-		act, err := g.ad.FindActByBid(ctx, bid)
+		act, err := g.ad.FindActById(ctx, id)
 		if err != nil {
 			return SubjectInfo{}, err
 		}
@@ -49,11 +49,11 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, bid string, sub stri
 		return SubjectInfo{
 			Subject:   SubjectActivity,
 			StudentID: act.StudentID,
-			Bid:       act.Bid,
+			Id:        act.Id,
 		}, nil
 
 	case SubjectPost:
-		post, err := g.pd.FindPostByBid(ctx, bid)
+		post, err := g.pd.FindPostById(ctx, id)
 		if err != nil {
 			return SubjectInfo{}, err
 		}
@@ -61,11 +61,11 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, bid string, sub stri
 		return SubjectInfo{
 			Subject:   SubjectPost,
 			StudentID: post.StudentID,
-			Bid:       post.Bid,
+			Id:        post.Id,
 		}, nil
 
 	case SubjectComment:
-		cmt := g.cd.FindCmtByID(ctx, bid)
+		cmt := g.cd.FindCmtByID(ctx, id)
 		if cmt == nil {
 			return SubjectInfo{}, errors.New("comment not found")
 		}
@@ -73,7 +73,7 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, bid string, sub stri
 		return SubjectInfo{
 			Subject:   SubjectComment,
 			StudentID: cmt.StudentID,
-			Bid:       cmt.Bid,
+			Id:        cmt.Id,
 		}, nil
 	}
 

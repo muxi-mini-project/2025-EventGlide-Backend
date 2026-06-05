@@ -40,7 +40,7 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 		post.POST("/delete", ginx.WrapRequestWithClaims(ph.DeletePost))
 		post.GET("/load", ginx.WrapWithClaims(ph.LoadDraft))
 		post.POST("/own", ginx.WrapRequestWithClaims(ph.FindPostByOwnerID))
-		post.GET("/:id", ginx.WrapRequestWithClaims(ph.FindPostByBid))
+		post.GET("/:id", ginx.WrapRequestWithClaims(ph.FindPostById))
 	}
 }
 
@@ -172,15 +172,15 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, req_ req.FindPostByOw
 	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
-// FindPostByBid
+// FindPostById
 // @Tags Post
 // @Summary 通过bid返回帖子详情
 // @Produce json
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.ListPostsResp}
 // @Router /post/{id} [get]
-func (ph *PostHandler) FindPostByBid(ctx *gin.Context, req_ req.FindPostByBidReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostByBid(ctx, req_.Id)
+func (ph *PostHandler) FindPostById(ctx *gin.Context, req_ req.FindPostByIdReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	posts, err := ph.ps.FindPostById(ctx, req_.Id)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

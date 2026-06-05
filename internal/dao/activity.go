@@ -26,13 +26,13 @@ type ActDaoHdl interface {
 	FindActByDate(context.Context, string, int, int) (*model.PaginatedActivities, error)
 	FindActByOwnerID(context.Context, string, int, int) (*model.PaginatedActivities, error)
 	FindActBySearches(context.Context, *req.ActSearchReq) (*model.PaginatedActivities, error)
-	FindActByBid(context.Context, string) (model.Activity, error)
+	FindActById(context.Context, int64) (model.Activity, error)
 	DeleteActivityDraft(context.Context, *gorm.DB, string) error
 	CreateActivity(context.Context, *gorm.DB, *model.Activity) error
 	CreateActivitySigners(context.Context, *gorm.DB, []model.ActivitySigner) error
 	CreateApprovements(context.Context, *gorm.DB, []model.Approvement) error
 	FindDraftsByStudentID(context.Context, *gorm.DB, string, *[]model.ActivityDraft) error
-	DeleteSignersByActivityBid(context.Context, *gorm.DB, string) error
+	DeleteSignersByActivityId(context.Context, *gorm.DB, int64) error
 	DeleteDraftsByStudentID(context.Context, *gorm.DB, string) error
 	BatchCreateSigners(context.Context, *gorm.DB, []model.ActivitySigner) error
 }
@@ -75,8 +75,8 @@ func (ad *ActDao) FindDraftsByStudentID(c context.Context, tx *gorm.DB, studentI
 	return tx.WithContext(c).Where("student_id = ?", studentID).Find(drafts).Error
 }
 
-func (ad *ActDao) DeleteSignersByActivityBid(c context.Context, tx *gorm.DB, activityBid string) error {
-	return tx.WithContext(c).Where("activity_bid = ?", activityBid).Delete(&model.ActivitySigner{}).Error
+func (ad *ActDao) DeleteSignersByActivityId(c context.Context, tx *gorm.DB, activityId int64) error {
+	return tx.WithContext(c).Where("activity_id = ?", activityId).Delete(&model.ActivitySigner{}).Error
 }
 
 func (ad *ActDao) DeleteDraftsByStudentID(c context.Context, tx *gorm.DB, studentID string) error {
@@ -272,9 +272,9 @@ func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) (*mo
 	}, nil
 }
 
-func (ad *ActDao) FindActByBid(c context.Context, bid string) (model.Activity, error) {
+func (ad *ActDao) FindActById(c context.Context, id int64) (model.Activity, error) {
 	var act model.Activity
-	err := ad.db.WithContext(c).Preload("Signers").Where("bid = ?", bid).First(&act).Error
+	err := ad.db.WithContext(c).Preload("Signers").Where("id = ?", id).First(&act).Error
 	if err != nil {
 		return model.Activity{}, err
 	}

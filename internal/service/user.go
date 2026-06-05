@@ -47,6 +47,7 @@ type UserService struct {
 	udh  *repo.UserRepo
 	adh  *repo.ActivityRepo
 	pdh  *repo.PostRepo
+	idh  *repo.InteractionRepo
 	jwth *middleware.Jwt
 	cSvc *ccnuService
 	iuh  *ImgUploader
@@ -56,11 +57,12 @@ type UserService struct {
 	cfg  *config.Conf
 }
 
-func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *logger.LoggerSet, cfg *config.Conf) *UserService {
+func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, ih *repo.InteractionRepo, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *logger.LoggerSet, cfg *config.Conf) *UserService {
 	return &UserService{
 		udh:  udh,
 		adh:  adh,
 		pdh:  pdh,
+		idh:  ih,
 		jwth: jwth,
 		cSvc: cSvc,
 		iuh:  iuh,
@@ -218,15 +220,15 @@ func (us *UserService) LoadCollectAct(ctx context.Context, studentId string) ([]
 	if err != nil {
 		return nil, err
 	}
+	actIds, err := us.idh.GetUserCollectedActivityIds(ctx, int64(user.Id))
+	if err != nil {
+		return nil, err
+	}
 	var res []model.ActivityDetail
-	ActIDs := tools.StringToSlice(user.CollectAct)
-	for _, id := range ActIDs {
-		if id == "" {
-			continue
-		}
-		acts, err := us.adh.FindActByBid(ctx, id)
+	for _, id := range actIds {
+		acts, err := us.adh.FindActById(ctx, id)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
 	}
@@ -238,15 +240,15 @@ func (us *UserService) LoadCollectPost(ctx context.Context, studentId string) ([
 	if err != nil {
 		return nil, err
 	}
+	postIds, err := us.idh.GetUserCollectedPostIds(ctx, int64(user.Id))
+	if err != nil {
+		return nil, err
+	}
 	var res []model.PostDetail
-	PostIDs := tools.StringToSlice(user.CollectPost)
-	for _, id := range PostIDs {
-		if id == "" {
-			continue
-		}
-		posts, err := us.pdh.FindPostByBid(ctx, id)
+	for _, id := range postIds {
+		posts, err := us.pdh.FindPostById(ctx, id)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		res = append(res, us.ps.EnrichOneForSearcher(ctx, &posts, studentId))
 	}
@@ -258,15 +260,15 @@ func (us *UserService) LoadLikePost(ctx context.Context, studentId string) ([]mo
 	if err != nil {
 		return nil, err
 	}
+	postIds, err := us.idh.GetUserLikedPostIds(ctx, int64(user.Id))
+	if err != nil {
+		return nil, err
+	}
 	var res []model.PostDetail
-	PostIDs := tools.StringToSlice(user.LikePost)
-	for _, id := range PostIDs {
-		if id == "" {
-			continue
-		}
-		posts, err := us.pdh.FindPostByBid(ctx, id)
+	for _, id := range postIds {
+		posts, err := us.pdh.FindPostById(ctx, id)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		res = append(res, us.ps.EnrichOneForSearcher(ctx, &posts, studentId))
 	}
@@ -278,15 +280,15 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]mod
 	if err != nil {
 		return nil, err
 	}
+	actIds, err := us.idh.GetUserLikedActivityIds(ctx, int64(user.Id))
+	if err != nil {
+		return nil, err
+	}
 	var res []model.ActivityDetail
-	ActIDs := tools.StringToSlice(user.LikeAct)
-	for _, id := range ActIDs {
-		if id == "" {
-			continue
-		}
-		acts, err := us.adh.FindActByBid(ctx, id)
+	for _, id := range actIds {
+		acts, err := us.adh.FindActById(ctx, id)
 		if err != nil {
-			return nil, err
+			continue
 		}
 		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
 	}

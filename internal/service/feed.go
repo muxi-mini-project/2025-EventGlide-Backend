@@ -22,7 +22,7 @@ import (
 var _ FeedServiceHdl = &FeedService{}
 
 type FeedServiceHdl interface {
-	ReadFeedDetail(ctx context.Context, sid, bid string) error
+	ReadFeedDetail(ctx context.Context, sid string, id int64) error
 	ReadAllFeed(ctx context.Context, sid string) error
 	GetTotalCnt(ctx context.Context, sid string) (model.BriefFeedDetail, error)
 	GetFeedList(ctx context.Context, sid string) (model.FeedDetail, error)
@@ -57,8 +57,8 @@ func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *logger.L
 	return fs
 }
 
-func (fs *FeedService) ReadFeedDetail(ctx context.Context, sid, bid string) error {
-	return fs.fd.ReadFeedDetail(ctx, sid, bid)
+func (fs *FeedService) ReadFeedDetail(ctx context.Context, sid string, id int64) error {
+	return fs.fd.ReadFeedDetail(ctx, sid, id)
 }
 
 func (fs *FeedService) ReadAllFeed(ctx context.Context, sid string) error {
@@ -142,7 +142,7 @@ func (fs *FeedService) ConsumeFeedStream() {
 			for _, msg := range msgs {
 				data, ok := msg.Values["data"].(string)
 				if !ok {
-					fs.l.Warn("Message data is not string", zap.Any("msg", msg))
+					fs.l.Warn("Message data is not String", zap.Any("msg", msg))
 					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
 						fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
 					}
@@ -161,9 +161,9 @@ func (fs *FeedService) ConsumeFeedStream() {
 				feed.CreatedAt = time.Now()
 				feed.Status = "未读"
 				if feed.Object == SubjectComment {
-					rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetBid)
+					rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
 					if resolveErr != nil {
-						fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.String("targetBid", feed.TargetBid))
+						fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
 					} else {
 						feed.RootID = rootID
 						feed.RootType = rootType
@@ -211,7 +211,7 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 			Id:          v.Id,
 			Message:     processMsg(v, user.Name),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetBid:   v.TargetBid,
+			TargetId:    v.TargetId,
 			RootID:      resolvedRootID,
 			RootType:    resolvedRootType,
 			Subject:     v.Object,
@@ -235,7 +235,7 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 			fs.l.Error("Get User Info when get collect feed Failed", zap.Error(err))
 			return nil, err
 		}
-		pics, err := fs.fd.GetPictureFromObj(ctx, v.TargetBid, v.Object)
+		pics, err := fs.fd.GetPictureFromObj(ctx, v.TargetId, v.Object)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get collect feed Failed", zap.Error(err))
 		}
@@ -248,7 +248,7 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 			Id:          v.Id,
 			Message:     processMsg(v, user.Name),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetBid:   v.TargetBid,
+			TargetId:    v.TargetId,
 			RootID:      v.RootID,
 			RootType:    v.RootType,
 			Subject:     v.Object,
@@ -286,7 +286,7 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 			Id:          v.Id,
 			Message:     processMsg(v, user.Name),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetBid:   v.TargetBid,
+			TargetId:    v.TargetId,
 			RootID:      resolvedRootID,
 			RootType:    resolvedRootType,
 			Subject:     v.Object,
@@ -324,7 +324,7 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 			Id:          v.Id,
 			Message:     processMsg(v, user.Name),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetBid:   v.TargetBid,
+			TargetId:    v.TargetId,
 			RootID:      resolvedRootID,
 			RootType:    resolvedRootType,
 			Subject:     v.Object,
@@ -348,7 +348,7 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 			fs.l.Error("Get User Info when get auditor feed Failed", zap.Error(err))
 			return model.FeedDetail{}, err
 		}
-		pics, err := fs.fd.GetPictureFromObj(ctx, v.Bid, "activity")
+		pics, err := fs.fd.GetPictureFromObj(ctx, v.ActivityId, "activity")
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get auditor feed Failed", zap.Error(err))
 		}
@@ -362,8 +362,8 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 				Action: "invitation",
 			}, v.StudentName),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetBid:   v.Bid,
-			RootID:      "",
+			TargetId:    v.ActivityId,
+			RootID:      0,
 			RootType:    "",
 			Subject:     SubjectActivity,
 			Status:      v.Stance,
@@ -373,18 +373,18 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 	return model.FeedDetail{Invitations: res}, nil
 }
 
-func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (string, string) {
+func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (int64, string) {
 	if f.Object != SubjectComment {
-		return "", ""
+		return 0, ""
 	}
 
 	rootID := f.RootID
 	rootType := f.RootType
-	if rootID == "" || rootType == "" {
-		resolvedRootID, resolvedRootType, err := fs.fd.ResolveRootMetaByCommentID(ctx, f.TargetBid)
+	if rootID == 0 || rootType == "" {
+		resolvedRootID, resolvedRootType, err := fs.fd.ResolveRootMetaByCommentID(ctx, f.TargetId)
 		if err != nil {
-			fs.l.Warn("Resolve root id for feed subject failed", zap.Error(err), zap.Int64("feedID", f.Id), zap.String("targetBid", f.TargetBid))
-			return "", ""
+			fs.l.Warn("Resolve root id for feed subject failed", zap.Error(err), zap.Int64("feedID", f.Id), zap.Int64("targetId", f.TargetId))
+			return 0, ""
 		}
 		rootID = resolvedRootID
 		rootType = resolvedRootType
@@ -392,11 +392,11 @@ func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (stri
 	return rootID, rootType
 }
 
-func (fs *FeedService) loadFeedPicture(ctx context.Context, f *model.Feed, resolvedRootID string) (string, error) {
-	if f.Object == SubjectComment && resolvedRootID != "" {
+func (fs *FeedService) loadFeedPicture(ctx context.Context, f *model.Feed, resolvedRootID int64) (string, error) {
+	if f.Object == SubjectComment && resolvedRootID != 0 {
 		return fs.fd.GetPictureFromRootID(ctx, resolvedRootID)
 	}
-	return fs.fd.GetPictureFromObj(ctx, f.TargetBid, f.Object)
+	return fs.fd.GetPictureFromObj(ctx, f.TargetId, f.Object)
 }
 
 func processMsg(f *model.Feed, name string) string {

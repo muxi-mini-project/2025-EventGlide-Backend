@@ -1,8 +1,8 @@
 package resp
 
 type CreatePostResp struct {
-	Bid         string `json:"bid"`
-	StudentID   string `json:"studentId"`
+	Id         int64 `json:"id"`
+	StudentID  string `json:"studentId"`
 	PublishTime string `json:"publishTime"`
 
 	Title      string   `json:"title"`
@@ -14,8 +14,8 @@ type CreatePostResp struct {
 }
 
 type ListPostsResp struct {
-	Bid         string   `json:"bid"`
-	UserInfo    UserInfo `json:"userInfo"`
+	Id         int64   `json:"id"`
+	UserInfo   UserInfo `json:"userInfo"`
 	PublishTime string   `json:"publishTime"`
 
 	Introduce string   `json:"introduce"`
@@ -32,7 +32,7 @@ type ListPostsResp struct {
 }
 
 type LoadPostDraftResp struct {
-	Bid       string   `json:"bid"`
+	Id        int64   `json:"id"`
 	Title     string   `json:"title"`
 	Introduce string   `json:"introduce"`
 	ShowImg   []string `json:"showImg"`

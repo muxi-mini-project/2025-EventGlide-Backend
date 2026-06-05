@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/model"
@@ -17,11 +16,11 @@ type PostServiceHdl interface {
 	GetAllPost(context.Context, int, int) (*model.PaginatedPosts, error)
 	CreatePost(context.Context, *model.Post, *req.AuditWrapper) error
 	FindPostByName(context.Context, string, int, int) (*model.PaginatedPosts, error)
-	DeletePost(context.Context, string, string) error
+	DeletePost(context.Context, int64, string) error
 	CreateDraft(context.Context, *model.PostDraft) error
 	LoadDraft(context.Context, string) (model.PostDraft, error)
 	FindPostByOwnerID(context.Context, string, int, int) (*model.PaginatedPosts, error)
-	FindPostByBid(context.Context, string) (model.Post, error)
+	FindPostById(context.Context, int64) (model.Post, error)
 	EnrichForSearcher(context.Context, []model.Post, string) []model.PostDetail
 	EnrichOneForSearcher(context.Context, *model.Post, string) model.PostDetail
 	AuthorBrief(context.Context, string) model.UserBrief
@@ -31,13 +30,15 @@ type PostService struct {
 	aud AuditorService
 	pdh *repo.PostRepo
 	ud  *repo.UserRepo
+	id  *repo.InteractionRepo
 	l   *zap.Logger
 }
 
-func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, aud AuditorService, l *logger.LoggerSet) *PostService {
+func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, aud AuditorService, l *logger.LoggerSet) *PostService {
 	return &PostService{
 		pdh: pdh,
 		ud:  ud,
+		id:  id,
 		aud: aud,
 		l:   l.Post.Named("service"),
 	}
@@ -48,15 +49,15 @@ func (ps *PostService) GetAllPost(c context.Context, page, limit int) (*model.Pa
 }
 
 func (ps *PostService) CreatePost(c context.Context, post *model.Post, aw *req.AuditWrapper) error {
-	form, err := ps.aud.CreateAuditorForm(c, post.Bid, "", SubjectPost)
+	form, err := ps.aud.CreateAuditorForm(c, post.Id, "", SubjectPost)
 	if err != nil {
-		ps.l.Error("Failed to create auditor form", zap.Error(err), zap.String("bid", post.Bid))
+		ps.l.Error("Failed to create auditor form", zap.Error(err), zap.Int64("id", post.Id))
 		return err
 	}
 
 	err = ps.aud.UploadForm(c, aw, form.Id)
 	if err != nil {
-		ps.l.Error("Failed to upload form", zap.Error(err), zap.String("bid", post.Bid), zap.Uint("formID", form.Id))
+		ps.l.Error("Failed to upload form", zap.Error(err), zap.Int64("id", post.Id), zap.Int64("formID", form.Id))
 		return err
 	}
 
@@ -71,9 +72,9 @@ func (ps *PostService) FindPostByName(c context.Context, name string, page, limi
 	return ps.pdh.FindPostByName(c, name, page, limit)
 }
 
-func (ps *PostService) DeletePost(c context.Context, bid, studentID string) error {
+func (ps *PostService) DeletePost(c context.Context, id int64, studentID string) error {
 	return ps.pdh.DeletePost(c, &model.Post{
-		Bid:       bid,
+		Id:        id,
 		StudentID: studentID,
 	})
 }
@@ -90,8 +91,8 @@ func (ps *PostService) FindPostByOwnerID(c context.Context, studentID string, pa
 	return ps.pdh.FindPostByOwnerID(c, studentID, page, limit)
 }
 
-func (ps *PostService) FindPostByBid(c context.Context, bid string) (model.Post, error) {
-	return ps.pdh.FindPostByBid(c, bid)
+func (ps *PostService) FindPostById(c context.Context, id int64) (model.Post, error) {
+	return ps.pdh.FindPostById(c, id)
 }
 
 func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, viewerID string) []model.PostDetail {
@@ -102,6 +103,11 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 	}
 	usersMap, _ := ps.ud.GetUsersByIDs(c, studentIDs)
 	searcher := usersMap[viewerID]
+
+	viewerUserId := int64(0)
+	if searcher != nil {
+		viewerUserId = int64(searcher.Id)
+	}
 
 	details := make([]model.PostDetail, 0, len(posts))
 	for i := range posts {
@@ -118,8 +124,8 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 				Avatar:    author.Avatar,
 				School:    author.School,
 			},
-			IsLike:    strings.Contains(searcher.LikePost, post.Bid),
-			IsCollect: strings.Contains(searcher.CollectPost, post.Bid),
+			IsLike:    ps.id.IsUserLikedPost(c, viewerUserId, post.Id),
+			IsCollect: ps.id.IsUserCollectedPost(c, viewerUserId, post.Id),
 		})
 	}
 	return details
@@ -157,6 +163,8 @@ func (ps *PostService) enrichOne(c context.Context, post *model.Post, viewerID s
 		author = &model.User{}
 	}
 
+	viewerUserId := int64(searcher.Id)
+
 	return model.PostDetail{
 		Post: *post,
 		Author: model.UserBrief{
@@ -165,7 +173,7 @@ func (ps *PostService) enrichOne(c context.Context, post *model.Post, viewerID s
 			Avatar:    author.Avatar,
 			School:    author.School,
 		},
-		IsLike:    strings.Contains(searcher.LikePost, post.Bid),
-		IsCollect: strings.Contains(searcher.CollectPost, post.Bid),
+		IsLike:    ps.id.IsUserLikedPost(c, viewerUserId, post.Id),
+		IsCollect: ps.id.IsUserCollectedPost(c, viewerUserId, post.Id),
 	}
 }

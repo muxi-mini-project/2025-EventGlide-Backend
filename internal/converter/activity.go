@@ -13,44 +13,60 @@ import (
 )
 
 func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
+	id := tools.MustGenerateID()
 	act := &model.Activity{
-		Bid:            tools.GenUUID(),
-		CreatedAt:      time.Now(),
-		StudentID:      studentID,
-		Title:          r.Title,
-		Introduce:      r.Introduce,
-		ShowImg:        tools.SliceToString(r.ShowImg),
-		Position:       r.LabelForm.Position,
-		HolderType:     r.LabelForm.HolderType,
-		Type:           r.LabelForm.Type,
-		IfRegister:     r.LabelForm.IfRegister,
+		Id:            id,
+		CreatedAt:     time.Now(),
+		StudentID:     studentID,
+		Title:         r.Title,
+		Introduce:     r.Introduce,
+		Position:      r.LabelForm.Position,
+		HolderType:    r.LabelForm.HolderType,
+		Type:          r.LabelForm.Type,
+		IfRegister:    r.LabelForm.IfRegister,
 		RegisterMethod: r.LabelForm.RegisterMethod,
-		StartTime:      r.LabelForm.StartTime,
-		EndTime:        r.LabelForm.EndTime,
-		ActiveForm:     r.LabelForm.ActiveForm,
-		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer),
+		StartTime:     r.LabelForm.StartTime,
+		EndTime:       r.LabelForm.EndTime,
+		ActiveForm:    r.LabelForm.ActiveForm,
+		Signers:       SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
+		Images:        ImagesFromUrls(r.ShowImg, id, "activity"),
 	}
 	return act
 }
 
 func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.ActivityDraft {
+	id := tools.MustGenerateID()
 	return &model.ActivityDraft{
-		Bid:            tools.GenUUID(),
-		CreatedAt:      time.Now(),
-		StudentID:      studentID,
-		Title:          r.Title,
-		Introduce:      r.Introduce,
-		ShowImg:        tools.SliceToString(r.ShowImg),
-		Position:       r.LabelForm.Position,
-		HolderType:     r.LabelForm.HolderType,
-		Type:           r.LabelForm.Type,
-		IfRegister:     r.LabelForm.IfRegister,
+		Id:            id,
+		CreatedAt:     time.Now(),
+		StudentID:     studentID,
+		Title:         r.Title,
+		Introduce:     r.Introduce,
+		Position:      r.LabelForm.Position,
+		HolderType:    r.LabelForm.HolderType,
+		Type:          r.LabelForm.Type,
+		IfRegister:    r.LabelForm.IfRegister,
 		RegisterMethod: r.LabelForm.RegisterMethod,
-		StartTime:      r.LabelForm.StartTime,
-		EndTime:        r.LabelForm.EndTime,
-		ActiveForm:     r.LabelForm.ActiveForm,
-		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer),
+		StartTime:     r.LabelForm.StartTime,
+		EndTime:       r.LabelForm.EndTime,
+		ActiveForm:    r.LabelForm.ActiveForm,
+		Signers:       SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
+		Images:        ImagesFromUrls(r.ShowImg, id, "activity_draft"),
 	}
+}
+
+func ImagesFromUrls(urls []string, ownerId int64, ownerType string) []model.Image {
+	images := make([]model.Image, 0, len(urls))
+	for _, url := range urls {
+		id := tools.MustGenerateID()
+		images = append(images, model.Image{
+			Id:        id,
+			OwnerId:   ownerId,
+			OwnerType: ownerType,
+			Url:       url,
+		})
+	}
+	return images
 }
 
 func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
@@ -58,7 +74,7 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 
 	res.Title = d.Title
 	res.Introduce = d.Introduce
-	res.ShowImg = tools.StringToSlice(d.ShowImg)
+	res.ShowImg = ImagesToUrls(d.Images)
 
 	res.LabelForm.HolderType = d.HolderType
 	res.LabelForm.Position = d.Position
@@ -71,6 +87,14 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 	res.LabelForm.Signer = ActivitySignersToResp(d.Signers)
 
 	return res
+}
+
+func ImagesToUrls(images []model.Image) []string {
+	urls := make([]string, len(images))
+	for i, img := range images {
+		urls[i] = img.Url
+	}
+	return urls
 }
 
 func ToListActivitiesResp(details []model.ActivityDetail) []resp.ListActivitiesResp {
@@ -107,7 +131,6 @@ func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 
 	res.UserInfo.School = d.Author.School
 	res.UserInfo.Username = d.Author.Name
-	res.Bid = act.Bid
 	res.IsChecking = act.IsChecking
 	res.UserInfo.Avatar = d.Author.Avatar
 	res.UserInfo.StudentID = d.Author.StudentID
@@ -122,7 +145,8 @@ func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 	res.CommentNum = act.CommentNum
 	res.CollectNum = act.CollectNum
 	res.IfRegister = act.IfRegister
-	res.ShowImg = tools.StringToSlice(act.ShowImg)
+	res.ShowImg = ImagesToUrls(act.Images)
+	res.Id = act.Id
 
 	return res
 }
@@ -133,9 +157,9 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 
 	res.Title = act.Title
 	res.Introduce = act.Introduce
-	res.ShowImg = tools.StringToSlice(act.ShowImg)
+	res.ShowImg = ImagesToUrls(act.Images)
 	res.Type = act.Type
-	res.Bid = act.Bid
+	res.Id = act.Id
 	res.ActiveForm = act.ActiveForm
 	res.Position = act.Position
 	res.IfRegister = act.IfRegister
@@ -154,9 +178,9 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 
 	res.Title = d.Title
 	res.Introduce = d.Introduce
-	res.ShowImg = tools.StringToSlice(d.ShowImg)
+	res.ShowImg = ImagesToUrls(d.Images)
 	res.Type = d.Type
-	res.Bid = d.Bid
+	res.Id = d.Id
 	res.Position = d.Position
 	res.IfRegister = d.IfRegister
 	res.UserInfo.School = author.School
@@ -177,10 +201,15 @@ func SignersFromReq(signers []req.Signer) []model.Signer {
 	return out
 }
 
-func SignersFromReqToActivitySigner(signers []req.Signer) []model.ActivitySigner {
+func SignersFromReqToActivitySigner(signers []req.Signer, activityId int64) []model.ActivitySigner {
 	out := make([]model.ActivitySigner, len(signers))
 	for i, s := range signers {
-		out[i] = model.ActivitySigner{StudentID: s.StudentID, Name: s.Name}
+		out[i] = model.ActivitySigner{
+			Id:         tools.MustGenerateID(),
+			ActivityId: activityId,
+			StudentID:  s.StudentID,
+			Name:       s.Name,
+		}
 	}
 	return out
 }
@@ -193,11 +222,12 @@ func ActivitySignersToResp(signers []model.ActivitySigner) []resp.Signer {
 	return out
 }
 
-func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id uint, hookURL string) request.UploadReq {
+func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string) request.UploadReq {
 	now := time.Now().Unix()
+	idUint := uint(id)
 	res := request.UploadReq{
 		HookUrl:    &hookURL,
-		Id:         &id,
+		Id:         &idUint,
 		Tags:       &[]string{"校灵通"},
 		PublicTime: &now,
 	}

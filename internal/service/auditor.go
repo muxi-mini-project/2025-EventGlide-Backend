@@ -16,8 +16,8 @@ import (
 var _ dao.AuditorRepository = (*dao.AuditorRepo)(nil)
 
 type AuditorService interface {
-	UploadForm(c context.Context, aw *req.AuditWrapper, FormId uint) error
-	CreateAuditorForm(c context.Context, ActId, FormUrl, Sub string) (*model.AuditorForm, error)
+	UploadForm(c context.Context, aw *req.AuditWrapper, FormId int64) error
+	CreateAuditorForm(c context.Context, ActId int64, FormUrl string, Sub string) (*model.AuditorForm, error)
 }
 
 type auditorService struct {
@@ -49,7 +49,7 @@ func NewAuditorService(repo dao.AuditorRepository, cfg *config.Conf, l *logger.L
 	return c
 }
 
-func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id uint) error {
+func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id int64) error {
 	uploadReq := converter.AuditorUploadReqFromWrapper(aw, id, a.HookUrl)
 	_, err := a.MuxiCli.UploadItem(c, &uploadReq)
 	if err != nil {
@@ -59,6 +59,6 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 	return nil
 }
 
-func (a *auditorService) CreateAuditorForm(c context.Context, ActId, FormUrl string, sub string) (*model.AuditorForm, error) {
+func (a *auditorService) CreateAuditorForm(c context.Context, ActId int64, FormUrl string, sub string) (*model.AuditorForm, error) {
 	return a.AuditorRepo.Insert(c, ActId, FormUrl, sub)
 }

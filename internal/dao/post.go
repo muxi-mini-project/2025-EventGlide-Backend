@@ -22,7 +22,7 @@ type PostDaoHdl interface {
 	CreateDraft(ctx context.Context, tx *gorm.DB, draft *model.PostDraft) error
 	LoadDraft(ctx context.Context, sid string) (model.PostDraft, error)
 	FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error)
-	FindPostByBid(ctx context.Context, bid string) (model.Post, error)
+	FindPostById(ctx context.Context, id int64) (model.Post, error)
 }
 
 type PostDao struct {
@@ -95,7 +95,7 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit 
 
 func (pd *PostDao) DeletePost(ctx context.Context, post *model.Post) error {
 	var p model.Post
-	return pd.db.WithContext(ctx).Where("bid = ? and student_id = ?", post.Bid, post.StudentID).Delete(&p).Error
+	return pd.db.WithContext(ctx).Where("id = ? and student_id = ?", post.Id, post.StudentID).Delete(&p).Error
 }
 
 func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword string, page, limit int) (*model.PaginatedPosts, error) {
@@ -168,9 +168,9 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 	}, nil
 }
 
-func (pd *PostDao) FindPostByBid(ctx context.Context, bid string) (model.Post, error) {
+func (pd *PostDao) FindPostById(ctx context.Context, id int64) (model.Post, error) {
 	var post model.Post
-	err := pd.db.WithContext(ctx).Where("bid = ?", bid).First(&post).Error
+	err := pd.db.WithContext(ctx).Where("id = ?", id).First(&post).Error
 	if err != nil {
 		return model.Post{}, err
 	}

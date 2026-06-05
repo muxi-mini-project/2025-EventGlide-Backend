@@ -30,10 +30,10 @@ func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService
 
 func (w *CallbackAuditorHandler) CallbackAuditor(c *gin.Context, req *request.HookPayload) (response.Resp, error) {
 
-	if err := w.svc.UpdateStatus(c, req.Data.Id, req.Data.Status); err != nil {
-		w.l.Error("Failed to update auditor status", zap.Uint("id", req.Data.Id), zap.String("status", req.Data.Status), zap.Error(err))
+	if err := w.svc.UpdateStatus(c, int64(req.Data.Id), req.Data.Status); err != nil {
+		w.l.Error("Failed to update auditor status", zap.Int64("id", int64(req.Data.Id)), zap.String("status", req.Data.Status), zap.Error(err))
 	} else {
-		w.l.Info("Auditor status updated successfully", zap.Uint("id", req.Data.Id), zap.String("status", req.Data.Status))
+		w.l.Info("Auditor status updated successfully", zap.Int64("id", int64(req.Data.Id)), zap.String("status", req.Data.Status))
 	}
 	return response.Resp{
 		Code: 200,

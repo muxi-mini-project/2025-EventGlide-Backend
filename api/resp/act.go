@@ -1,7 +1,7 @@
 package resp
 
 type CreateActivityResp struct {
-	Bid        string   `json:"bid"`
+	Id         int64   `json:"id"`
 	Title      string   `json:"title"`
 	Introduce  string   `json:"introduce"`
 	ShowImg    []string `json:"showImg"`
@@ -20,7 +20,7 @@ type ListActivitiesResp struct {
 	DetailTime DetailTime `json:"detailTime"`
 
 	Title      string   `json:"title"`
-	Bid        string   `json:"bid"`
+	Id         int64   `json:"id"`
 	Introduce  string   `json:"introduce"`
 	Position   string   `json:"position"`
 	Type       string   `json:"type"`

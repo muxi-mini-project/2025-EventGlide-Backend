@@ -3,15 +3,15 @@ package model
 import "time"
 
 type Comment struct {
-	Bid       string    `gorm:"unique;primaryKey;not null;type:varchar(255);comment:评论ID;column:bid"`
+	Id        int64    `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
 	CreatedAt time.Time `gorm:"not null;type:datetime;comment:创建时间;column:created_at"`
 
 	StudentID string `gorm:"not null;type:varchar(255);comment:学生ID;column:student_id"`
 	Content   string `gorm:"not null;type:text;comment:评论内容;column:content"`
-	ParentID  string `gorm:"type:varchar(255);comment:父评论ID;column:parent_id"`
+	ParentID  int64 `gorm:"type:bigint;comment:父评论ID;column:parent_id"`
 	Position  string `gorm:"not null;type:varchar(255);comment:位置;column:position"`
 	Subject   string `gorm:"not null;comment:评论类型;column:subject"` // activity/post/comment
-	RootID    string `gorm:"type:varchar(255);comment:根评论ID;column:root_id"`
+	RootID    int64 `gorm:"type:bigint;comment:根评论ID;column:root_id"`
 
 	LikeNum  int `gorm:"not null;default:0;comment:点赞数;column:like_num"`
 	ReplyNum int `gorm:"not null;default:0;comment:回复数;column:reply_num"`
@@ -20,7 +20,7 @@ type Comment struct {
 	CreatorAvatar   string `gorm:"type:varchar(255);comment:评论者头像快照;column:creator_avatar"`
 	ReplyToUserID   string `gorm:"type:varchar(255);comment:被回复者ID;column:reply_to_user_id"`
 	ReplyToUserName string `gorm:"type:varchar(255);comment:被回复者名称;column:reply_to_user_name"`
-	RootObjectID    string `gorm:"type:varchar(255);comment:根对象ID;column:root_object_id"`
+	RootObjectID    int64 `gorm:"type:bigint;comment:根对象ID;column:root_object_id"`
 	RootObjectType  string `gorm:"type:varchar(255);comment:根对象类型;column:root_object_type"`
 }
 

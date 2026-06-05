@@ -10,12 +10,14 @@ import (
 )
 
 func CommentFromReq(r req.CreateCommentReq, studentID string) *model.Comment {
+	id := tools.MustGenerateID()
 	return &model.Comment{
+		Id:        id,
 		StudentID: studentID,
 		Content:   r.Content,
 		ParentID:  r.ParentID,
+		RootID:    r.ParentID,
 		CreatedAt: time.Now(),
-		Bid:       tools.GenUUID(),
 		Position:  "华中师范大学",
 		Subject:   r.Subject,
 	}
@@ -24,7 +26,7 @@ func CommentFromReq(r req.CreateCommentReq, studentID string) *model.Comment {
 func ToCommentResp(d model.CommentDetail) resp.CommentResp {
 	cmt := d.Comment
 	res := resp.CommentResp{
-		Bid:           cmt.Bid,
+		Id:           cmt.Id,
 		CommentedTime: tools.ParseTime(cmt.CreatedAt),
 		CommentedPos:  cmt.Position,
 		Content:       cmt.Content,
@@ -58,7 +60,7 @@ func ToCommentResps(details []model.CommentDetail) []resp.CommentResp {
 func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 	cmt := d.Comment
 	res := resp.ReplyResp{
-		Bid:            cmt.Bid,
+		Id:            cmt.Id,
 		ReplyContent:   cmt.Content,
 		ReplyTime:      tools.ParseTime(cmt.CreatedAt),
 		ReplyPos:       cmt.Position,

@@ -2,6 +2,7 @@ package repo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
@@ -40,7 +41,7 @@ func (r *PostRepo) CreatePost(ctx context.Context, post *model.Post) error {
 	}); err != nil {
 		return err
 	}
-	return r.Invalidate(ctx, post.Bid)
+	return r.Invalidate(ctx, post.Id)
 }
 
 func (r *PostRepo) FindPostByName(ctx context.Context, name string, page, limit int) (*model.PaginatedPosts, error) {
@@ -51,10 +52,10 @@ func (r *PostRepo) DeletePost(ctx context.Context, post *model.Post) error {
 	if err := r.dao.DeletePost(ctx, post); err != nil {
 		return err
 	}
-	if post.Bid == "" {
+	if post.Id == 0 {
 		return nil
 	}
-	return r.Invalidate(ctx, post.Bid)
+	return r.Invalidate(ctx, post.Id)
 }
 
 func (r *PostRepo) FindPostByUser(ctx context.Context, sid, keyword string, page, limit int) (*model.PaginatedPosts, error) {
@@ -78,18 +79,18 @@ func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string, page, limit
 	return r.dao.FindPostByOwnerID(ctx, id, page, limit)
 }
 
-func (r *PostRepo) FindPostByBid(ctx context.Context, bid string) (model.Post, error) {
-	return r.dao.FindPostByBid(ctx, bid)
+func (r *PostRepo) FindPostById(ctx context.Context, id int64) (model.Post, error) {
+	return r.dao.FindPostById(ctx, id)
 }
 
 func (r *PostRepo) GetChecking(ctx context.Context, sid string) ([]model.Post, error) {
 	return r.dao.GetChecking(ctx, sid)
 }
 
-func (r *PostRepo) Invalidate(ctx context.Context, bid string) error {
-	return r.ch.SetAndInvalidate(ctx, r.postByBidKey(bid), nil, 0)
+func (r *PostRepo) Invalidate(ctx context.Context, id int64) error {
+	return r.ch.SetAndInvalidate(ctx, r.postByIdKey(id), nil, 0)
 }
 
-func (r *PostRepo) postByBidKey(bid string) string {
-	return r.kb.Build("bid", bid)
+func (r *PostRepo) postByIdKey(id int64) string {
+	return r.kb.Build("id", fmt.Sprintf("%d", id))
 }

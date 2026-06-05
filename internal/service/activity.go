@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/raiki02/EG/api/req"
@@ -21,7 +20,7 @@ type ActivityServiceHdl interface {
 	FindActBySearches(c context.Context, search *req.ActSearchReq) (*model.PaginatedActivities, error)
 	FindActByDate(c context.Context, date string, page, limit int) (*model.PaginatedActivities, error)
 	FindActByName(c context.Context, name string, page, limit int) (*model.PaginatedActivities, error)
-	FindActByBid(c context.Context, bid string) (model.Activity, error)
+	FindActById(c context.Context, id int64) (model.Activity, error)
 	FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error)
 	ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error)
 	EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail
@@ -63,7 +62,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 	go as.publishFeeds(act, signers, studentID)
 
 	as.l.Info("create activity tx",
-		zap.String("act", act.Bid),
+		zap.Int64("actId", act.Id),
 		zap.String("studentID", studentID),
 		zap.String("host", act.HolderType),
 		zap.String("formfile", act.ActiveForm),
@@ -101,8 +100,8 @@ func (as *ActivityService) FindActByName(c context.Context, name string, page, l
 	return as.ad.FindActByName(c, name, page, limit)
 }
 
-func (as *ActivityService) FindActByBid(c context.Context, bid string) (model.Activity, error) {
-	return as.ad.FindActByBid(c, bid)
+func (as *ActivityService) FindActById(c context.Context, id int64) (model.Activity, error) {
+	return as.ad.FindActById(c, id)
 }
 
 func (as *ActivityService) FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error) {
@@ -122,6 +121,11 @@ func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Act
 	usersMap, _ := as.ud.GetUsersByIDs(c, studentIDs)
 	searcher := usersMap[viewerID]
 
+	viewerUserId := int64(0)
+	if searcher != nil {
+		viewerUserId = int64(searcher.Id)
+	}
+
 	details := make([]model.ActivityDetail, 0, len(acts))
 	for i := range acts {
 		act := &acts[i]
@@ -137,8 +141,8 @@ func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Act
 				Avatar:    author.Avatar,
 				School:    author.School,
 			},
-			IsLike:    strings.Contains(searcher.LikeAct, act.Bid),
-			IsCollect: strings.Contains(searcher.CollectAct, act.Bid),
+			IsLike:    as.id.IsUserLikedActivity(c, viewerUserId, act.Id),
+			IsCollect: as.id.IsUserCollectedActivity(c, viewerUserId, act.Id),
 		})
 	}
 	return details
@@ -176,6 +180,8 @@ func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, vie
 		author = &model.User{}
 	}
 
+	viewerUserId := int64(searcher.Id)
+
 	return model.ActivityDetail{
 		Activity: *act,
 		Author: model.UserBrief{
@@ -184,8 +190,8 @@ func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, vie
 			Avatar:    author.Avatar,
 			School:    author.School,
 		},
-		IsLike:    strings.Contains(searcher.LikeAct, act.Bid),
-		IsCollect: strings.Contains(searcher.CollectAct, act.Bid),
+		IsLike:    as.id.IsUserLikedActivity(c, viewerUserId, act.Id),
+		IsCollect: as.id.IsUserCollectedActivity(c, viewerUserId, act.Id),
 	}
 }
 
@@ -200,14 +206,14 @@ func (as *ActivityService) publishFeeds(act *model.Activity, signers []model.Sig
 
 		f := model.Feed{
 			StudentID: studentID,
-			TargetBid: act.Bid,
+			TargetId:  act.Id,
 			Object:    "activity",
 			Action:    "invitation",
 			Receiver:  s.StudentID,
 		}
 
 		if err := as.mq.Publish(ctx, "feed_stream", f); err != nil {
-			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("receiver", s.StudentID), zap.String("actBid", act.Bid))
+			as.l.Error("Failed to publish feed", zap.Error(err), zap.String("receiver", s.StudentID), zap.Int64("actId", act.Id))
 		}
 	}
 }
@@ -219,21 +225,21 @@ func (as *ActivityService) retryUploadAuditorForm(act *model.Activity, aw *req.A
 		err := as.uploadAuditorForm(ctx, act, aw)
 		cancel()
 		if err == nil {
-			as.l.Info("Upload auditor form success", zap.String("actBid", act.Bid), zap.Int("retry", i))
+			as.l.Info("Upload auditor form success", zap.Int64("actId", act.Id), zap.Int("retry", i))
 			return
 		}
 
-		as.l.Error("Upload auditor form failed", zap.Error(err), zap.String("actBid", act.Bid), zap.Int("retry", i))
+		as.l.Error("Upload auditor form failed", zap.Error(err), zap.Int64("actId", act.Id), zap.Int("retry", i))
 		if i < maxRetry {
 			time.Sleep(time.Duration(i*i) * time.Second)
 		}
 	}
 
-	as.l.Error("Upload auditor form finally failed", zap.String("actBid", act.Bid))
+	as.l.Error("Upload auditor form finally failed", zap.Int64("actId", act.Id))
 }
 
 func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Activity, aw *req.AuditWrapper) error {
-	form, err := as.aud.CreateAuditorForm(ctx, act.Bid, act.ActiveForm, SubjectActivity)
+	form, err := as.aud.CreateAuditorForm(ctx, act.Id, act.ActiveForm, SubjectActivity)
 	if err != nil {
 		return err
 	}
