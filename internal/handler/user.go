@@ -10,6 +10,7 @@ import (
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -138,7 +139,7 @@ func (uh *UserHandler) UpdateUsername(ctx *gin.Context, req_ req.UpdateNameReq, 
 // @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
 // @Router /user/search/act [post]
 func (uh *UserHandler) SearchUserAct(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	details, err := uh.us.SearchUserAct(ctx, claims.Subject, req_.Keyword, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)

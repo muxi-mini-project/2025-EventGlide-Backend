@@ -239,14 +239,3 @@ func extractAuthors(signers []req.Signer) string {
 	}
 	return builder.String()
 }
-
-func IndexValid(page, limit int) (int, int) {
-	if page <= 0 {
-		page = 1
-	}
-	if limit <= 0 || limit > 10 {
-		limit = 10
-	}
-
-	return page, limit
-}

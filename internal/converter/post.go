@@ -50,6 +50,15 @@ func ToListPostsResp(details []model.PostDetail) []resp.ListPostsResp {
 	return res
 }
 
+func ToPaginatedListPostsResp(total int64, page, limit int, details []model.PostDetail) resp.PaginatedListPostsResp {
+	return resp.PaginatedListPostsResp{
+		Total:   total,
+		Page:    page,
+		Limit:   limit,
+		Details: ToListPostsResp(details),
+	}
+}
+
 func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 	post := d.Post
 	var res resp.ListPostsResp

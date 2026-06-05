@@ -13,7 +13,9 @@ type CreatePostDraftReq struct {
 }
 
 type FindPostReq struct {
-	Name string `json:"name" validate:"required"`
+	Name  string `json:"name" validate:"required"`
+	Page  int    `json:"page"`
+	Limit int    `json:"limit"`
 }
 
 type DeletePostReq struct {
@@ -24,6 +26,23 @@ type FindPostByBidReq struct {
 	Id string `json:"id" validate:"required" form:"id" uri:"id"`
 }
 
-type FindPostByUserIDReq struct {
+type FindByUserIDReq struct {
 	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
+	Page   int    `json:"page,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+}
+
+type ListAllPostsReq struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+}
+
+type FindPostByOwnerIDReq struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
+}
+
+type GetAllPostsReq struct {
+	Page  int `json:"page"`
+	Limit int `json:"limit"`
 }

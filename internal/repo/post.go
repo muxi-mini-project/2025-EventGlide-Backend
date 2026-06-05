@@ -22,8 +22,8 @@ func NewPostRepo(dao *dao.PostDao, ch *cache.MultiLevelCache) *PostRepo {
 	}
 }
 
-func (r *PostRepo) GetAllPost(ctx context.Context) ([]model.Post, error) {
-	return r.dao.GetAllPost(ctx)
+func (r *PostRepo) GetAllPost(ctx context.Context, page, limit int) (*model.PaginatedPosts, error) {
+	return r.dao.GetAllPost(ctx, page, limit)
 }
 
 func (r *PostRepo) CreatePost(ctx context.Context, post *model.Post) error {
@@ -33,8 +33,8 @@ func (r *PostRepo) CreatePost(ctx context.Context, post *model.Post) error {
 	return r.Invalidate(ctx, post.Bid)
 }
 
-func (r *PostRepo) FindPostByName(ctx context.Context, name string) ([]model.Post, error) {
-	return r.dao.FindPostByName(ctx, name)
+func (r *PostRepo) FindPostByName(ctx context.Context, name string, page, limit int) (*model.PaginatedPosts, error) {
+	return r.dao.FindPostByName(ctx, name, page, limit)
 }
 
 func (r *PostRepo) DeletePost(ctx context.Context, post *model.Post) error {
@@ -47,8 +47,8 @@ func (r *PostRepo) DeletePost(ctx context.Context, post *model.Post) error {
 	return r.Invalidate(ctx, post.Bid)
 }
 
-func (r *PostRepo) FindPostByUser(ctx context.Context, sid, keyword string) ([]model.Post, error) {
-	return r.dao.FindPostByUser(ctx, sid, keyword)
+func (r *PostRepo) FindPostByUser(ctx context.Context, sid, keyword string, page, limit int) (*model.PaginatedPosts, error) {
+	return r.dao.FindPostByUser(ctx, sid, keyword, page, limit)
 }
 
 func (r *PostRepo) CreateDraft(ctx context.Context, draft *model.PostDraft) error {
@@ -59,21 +59,11 @@ func (r *PostRepo) LoadDraft(ctx context.Context, sid string) (model.PostDraft, 
 	return r.dao.LoadDraft(ctx, sid)
 }
 
-func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string) ([]model.Post, error) {
-	return r.dao.FindPostByOwnerID(ctx, id)
+func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error) {
+	return r.dao.FindPostByOwnerID(ctx, id, page, limit)
 }
 
 func (r *PostRepo) FindPostByBid(ctx context.Context, bid string) (model.Post, error) {
-	//return cache.GetTyped(r.ch, ctx, r.postByBidKey(bid), 5*time.Minute, func(context.Context) (model.Post, error) {
-	//	post, err := r.dao.FindPostByBid(ctx, bid)
-	//	if err != nil {
-	//		if errors.Is(err, gorm.ErrRecordNotFound) {
-	//			return model.Post{}, cache.MarkNotFound(err)
-	//		}
-	//		return model.Post{}, err
-	//	}
-	//	return post, nil
-	//})
 	return r.dao.FindPostByBid(ctx, bid)
 }
 

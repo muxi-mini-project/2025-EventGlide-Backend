@@ -39,3 +39,10 @@ type LoadPostDraftResp struct {
 	StudentID string   `json:"studentId"`
 	CreatedAt string   `json:"createdAt"`
 }
+
+type PaginatedListPostsResp struct {
+	Total   int64            `json:"total"`
+	Page    int              `json:"page"`
+	Limit   int              `json:"limit"`
+	Details []ListPostsResp  `json:"details"`
+}

@@ -14,3 +14,13 @@ func HasLike(likes string, bid string) bool {
 	}
 	return false
 }
+
+func IndexValid(page, limit int) (int, int) {
+	if page <= 0 {
+		page = 1
+	}
+	if limit <= 0 || limit > 10 {
+		limit = 10
+	}
+	return page, limit
+}

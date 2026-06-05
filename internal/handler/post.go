@@ -10,6 +10,7 @@ import (
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -32,13 +33,13 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 	post := e.Group("/post")
 	post.Use(handlerFunc)
 	{
-		post.GET("/all", ginx.WrapWithClaims(ph.GetAllPost))
+		post.POST("/all", ginx.WrapRequestWithClaims(ph.GetAllPost))
 		post.POST("/create", ginx.WrapRequestWithClaims(ph.CreatePost))
 		post.POST("/find", ginx.WrapRequestWithClaims(ph.FindPostByName))
 		post.POST("/draft", ginx.WrapRequestWithClaims(ph.CreateDraft))
 		post.POST("/delete", ginx.WrapRequestWithClaims(ph.DeletePost))
 		post.GET("/load", ginx.WrapWithClaims(ph.LoadDraft))
-		post.GET("/own", ginx.WrapWithClaims(ph.FindPostByOwnerID))
+		post.POST("/own", ginx.WrapRequestWithClaims(ph.FindPostByOwnerID))
 		post.GET("/:id", ginx.WrapRequestWithClaims(ph.FindPostByBid))
 	}
 }
@@ -48,15 +49,17 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 // @Summary 获取所有帖子
 // @Produce json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
-// @Router /post/all [get]
-func (ph *PostHandler) GetAllPost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.GetAllPost(ctx)
+// @Param req body req.ListAllPostsReq true "分页请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
+// @Router /post/all [post]
+func (ph *PostHandler) GetAllPost(ctx *gin.Context, req_ req.ListAllPostsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ph.ps.GetAllPost(ctx, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
+	details := ph.ps.EnrichForSearcher(ctx, paginated.Posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // CreatePost
@@ -87,16 +90,17 @@ func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, clai
 // @Summary 通过帖子名查找帖子
 // @Produce json
 // @Param Authorization header string true "token"
-// @Param name body req.FindPostReq true "帖子名"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Param req body req.FindPostReq true "帖子名"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
 // @Router /post/find [post]
 func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostByName(ctx, req_.Name)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ph.ps.FindPostByName(ctx, req_.Name, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
+	details := ph.ps.EnrichForSearcher(ctx, paginated.Posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // DeletePost
@@ -153,16 +157,19 @@ func (ph *PostHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) 
 // @Tags Post
 // @Summary 通过用户ID查找帖子
 // @Produce json
+// @Accept json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
-// @Router /post/own [get]
-func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostByOwnerID(ctx, claims.Subject)
+// @Param req body req.FindPostByOwnerIDReq true "分页请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
+// @Router /post/own [post]
+func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, req_ req.FindPostByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ph.ps.FindPostByOwnerID(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ph.ps.EnrichForSearcher(ctx, posts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
+	details := ph.ps.EnrichForSearcher(ctx, paginated.Posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
 // FindPostByBid
@@ -170,7 +177,7 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, claims jwt.Registered
 // @Summary 通过bid返回帖子详情
 // @Produce json
 // @Param Authorization header string true "token"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Success 200 {object} resp.Resp{data=resp.ListPostsResp}
 // @Router /post/{id} [get]
 func (ph *PostHandler) FindPostByBid(ctx *gin.Context, req_ req.FindPostByBidReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	posts, err := ph.ps.FindPostByBid(ctx, req_.Id)

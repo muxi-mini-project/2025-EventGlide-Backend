@@ -117,9 +117,32 @@ func (as *ActivityService) ListAllActs(c context.Context, page, limit int) (*mod
 }
 
 func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail {
+	studentIDs := make([]string, 0, len(acts)+1)
+	studentIDs = append(studentIDs, viewerID)
+	for _, act := range acts {
+		studentIDs = append(studentIDs, act.StudentID)
+	}
+	usersMap, _ := as.ud.GetUsersByIDs(c, studentIDs)
+	searcher := usersMap[viewerID]
+
 	details := make([]model.ActivityDetail, 0, len(acts))
 	for i := range acts {
-		details = append(details, as.enrichOne(c, &acts[i], viewerID))
+		act := &acts[i]
+		author := usersMap[act.StudentID]
+		if author == nil {
+			author = &model.User{}
+		}
+		details = append(details, model.ActivityDetail{
+			Activity: *act,
+			Author: model.UserBrief{
+				StudentID: author.StudentID,
+				Name:      author.Name,
+				Avatar:    author.Avatar,
+				School:    author.School,
+			},
+			IsLike:    strings.Contains(searcher.LikeAct, act.Bid),
+			IsCollect: strings.Contains(searcher.CollectAct, act.Bid),
+		})
 	}
 	return details
 }
@@ -129,7 +152,14 @@ func (as *ActivityService) EnrichOneForSearcher(c context.Context, act *model.Ac
 }
 
 func (as *ActivityService) AuthorBrief(c context.Context, studentID string) model.UserBrief {
-	user := as.ud.FindUserByID(c, studentID)
+	usersMap, _ := as.ud.GetUsersByIDs(c, []string{studentID})
+	if len(usersMap) == 0 {
+		return model.UserBrief{}
+	}
+	user := usersMap[studentID]
+	if user == nil {
+		return model.UserBrief{}
+	}
 	return model.UserBrief{
 		StudentID: user.StudentID,
 		Name:      user.Name,
@@ -139,8 +169,15 @@ func (as *ActivityService) AuthorBrief(c context.Context, studentID string) mode
 }
 
 func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail {
-	searcher := as.ud.FindUserByID(c, viewerID)
-	author := as.ud.FindUserByID(c, act.StudentID)
+	usersMap, _ := as.ud.GetUsersByIDs(c, []string{viewerID, act.StudentID})
+	searcher := usersMap[viewerID]
+	author := usersMap[act.StudentID]
+	if searcher == nil {
+		searcher = &model.User{}
+	}
+	if author == nil {
+		author = &model.User{}
+	}
 
 	return model.ActivityDetail{
 		Activity: *act,

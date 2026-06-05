@@ -34,3 +34,10 @@ type PostDetail struct {
 	IsLike    bool
 	IsCollect bool
 }
+
+type PaginatedPosts struct {
+	Total int64
+	Page  int
+	Limit int
+	Posts []Post
+}
