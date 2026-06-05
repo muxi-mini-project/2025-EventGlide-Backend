@@ -11,6 +11,7 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 type ActivityServiceHdl interface {
@@ -49,7 +50,9 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.Inter
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
-	err := as.ad.CreateActivityTx(c, act, signers, studentID)
+	err := as.ad.Transaction(c, func(tx *gorm.DB) error {
+		return as.ad.CreateActivity(c, tx, act, signers, studentID)
+	})
 	if err != nil {
 		as.l.Error("failed to create activity tx", zap.Error(err))
 		return err
@@ -70,13 +73,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 }
 
 func (as *ActivityService) CreateDraft(c context.Context, draft *model.ActivityDraft) error {
-	err := as.ad.CreateDraft(c, draft)
-	if err != nil {
-		as.l.Error("Failed to create draft", zap.Error(err))
-		return err
-	}
-	as.l.Info("create draft", zap.String("draft", draft.Bid), zap.String("student", draft.StudentID))
-	return nil
+	return as.ad.CreateDraft(c, draft)
 }
 
 func (as *ActivityService) LoadDraft(c context.Context, sid string) (model.ActivityDraft, error) {

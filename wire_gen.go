@@ -20,6 +20,10 @@ import (
 	"github.com/raiki02/EG/pkg/logger"
 )
 
+import (
+	_ "github.com/raiki02/EG/docs"
+)
+
 // Injectors from wire.go:
 
 func InitApp() *server.Server {
