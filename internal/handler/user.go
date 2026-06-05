@@ -153,10 +153,11 @@ func (uh *UserHandler) SearchUserAct(ctx *gin.Context, req_ req.UserSearchReq, c
 // @Produce json
 // @Param Authorization header string true "token"
 // @Param ureq body req.UserSearchReq true "搜索请求"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
 // @Router /user/search/post [post]
 func (uh *UserHandler) SearchUserPost(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	details, err := uh.us.SearchUserPost(ctx, claims.Subject, req_.Keyword)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	details, err := uh.us.SearchUserPost(ctx, claims.Subject, req_.Keyword, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
