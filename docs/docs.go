@@ -422,7 +422,7 @@ const docTemplate = `{
                 "tags": [
                     "Activity"
                 ],
-                "summary": "根据bid返回活动详情",
+                "summary": "根据id返回活动详情",
                 "parameters": [
                     {
                         "type": "string",
@@ -1045,7 +1045,7 @@ const docTemplate = `{
             }
         },
         "/post/all": {
-            "get": {
+            "post": {
                 "produces": [
                     "application/json"
                 ],
@@ -1060,6 +1060,15 @@ const docTemplate = `{
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.ListAllPostsReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -1074,10 +1083,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -1238,7 +1244,7 @@ const docTemplate = `{
                     },
                     {
                         "description": "帖子名",
-                        "name": "name",
+                        "name": "req",
                         "in": "body",
                         "required": true,
                         "schema": {
@@ -1258,10 +1264,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -1315,7 +1318,10 @@ const docTemplate = `{
             }
         },
         "/post/own": {
-            "get": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1330,6 +1336,15 @@ const docTemplate = `{
                         "name": "Authorization",
                         "in": "header",
                         "required": true
+                    },
+                    {
+                        "description": "分页请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.FindPostByOwnerIDReq"
+                        }
                     }
                 ],
                 "responses": {
@@ -1344,10 +1359,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -1387,10 +1399,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.ListPostsResp"
                                         }
                                     }
                                 }
@@ -1894,10 +1903,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -1979,6 +1985,48 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/resp.Resp"
+                        }
+                    }
+                }
+            }
+        },
+        "/user/verify": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "User"
+                ],
+                "summary": "验证用户是否存在以及姓名学号是否匹配",
+                "parameters": [
+                    {
+                        "description": "验证请求",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.VerifyUserReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/resp.Resp"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/resp.VerifyUserResp"
+                                        }
+                                    }
+                                }
+                            ]
                         }
                     }
                 }
@@ -2126,7 +2174,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parentId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "subject": {
                     "type": "string"
@@ -2215,7 +2263,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "targetId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -2226,7 +2274,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "targetId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -2276,14 +2324,31 @@ const docTemplate = `{
                 }
             }
         },
+        "req.FindPostByOwnerIDReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                }
+            }
+        },
         "req.FindPostReq": {
             "type": "object",
             "required": [
                 "name"
             ],
             "properties": {
+                "limit": {
+                    "type": "integer"
+                },
                 "name": {
                     "type": "string"
+                },
+                "page": {
+                    "type": "integer"
                 }
             }
         },
@@ -2298,11 +2363,22 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "targetId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
         "req.ListAllActsReq": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "req.ListAllPostsReq": {
             "type": "object",
             "properties": {
                 "limit": {
@@ -2338,7 +2414,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "targetId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -2389,6 +2465,21 @@ const docTemplate = `{
                 }
             }
         },
+        "req.VerifyUserReq": {
+            "type": "object",
+            "required": [
+                "realName",
+                "studentId"
+            ],
+            "properties": {
+                "realName": {
+                    "type": "string"
+                },
+                "studentId": {
+                    "type": "string"
+                }
+            }
+        },
         "resp.BriefFeedResp": {
             "type": "object",
             "properties": {
@@ -2423,9 +2514,6 @@ const docTemplate = `{
         "resp.CommentResp": {
             "type": "object",
             "properties": {
-                "bid": {
-                    "type": "string"
-                },
                 "commentedPos": {
                     "type": "string"
                 },
@@ -2438,6 +2526,9 @@ const docTemplate = `{
                 "creator": {
                     "$ref": "#/definitions/resp.Creator"
                 },
+                "id": {
+                    "type": "integer"
+                },
                 "isLike": {
                     "type": "string"
                 },
@@ -2445,7 +2536,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "parentId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "reply": {
                     "type": "array",
@@ -2457,7 +2548,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -2467,8 +2558,8 @@ const docTemplate = `{
                 "activeForm": {
                     "type": "string"
                 },
-                "bid": {
-                    "type": "string"
+                "id": {
+                    "type": "integer"
                 },
                 "ifRegister": {
                     "type": "string"
@@ -2546,7 +2637,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "rootType": {
                     "type": "string"
@@ -2557,8 +2648,8 @@ const docTemplate = `{
                 "subject": {
                     "type": "string"
                 },
-                "targetBid": {
-                    "type": "string"
+                "targetId": {
+                    "type": "integer"
                 },
                 "userInfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
@@ -2581,7 +2672,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "rootType": {
                     "type": "string"
@@ -2592,8 +2683,8 @@ const docTemplate = `{
                 "subject": {
                     "type": "string"
                 },
-                "targetBid": {
-                    "type": "string"
+                "targetId": {
+                    "type": "integer"
                 },
                 "userInfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
@@ -2616,7 +2707,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "rootType": {
                     "type": "string"
@@ -2627,8 +2718,8 @@ const docTemplate = `{
                 "subject": {
                     "type": "string"
                 },
-                "targetBid": {
-                    "type": "string"
+                "targetId": {
+                    "type": "integer"
                 },
                 "userInfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
@@ -2651,7 +2742,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "rootType": {
                     "type": "string"
@@ -2662,8 +2753,8 @@ const docTemplate = `{
                 "subject": {
                     "type": "string"
                 },
-                "targetBid": {
-                    "type": "string"
+                "targetId": {
+                    "type": "integer"
                 },
                 "userInfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
@@ -2686,7 +2777,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "rootType": {
                     "type": "string"
@@ -2697,8 +2788,8 @@ const docTemplate = `{
                 "subject": {
                     "type": "string"
                 },
-                "targetBid": {
-                    "type": "string"
+                "targetId": {
+                    "type": "integer"
                 },
                 "userInfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
@@ -2804,9 +2895,6 @@ const docTemplate = `{
         "resp.ListActivitiesResp": {
             "type": "object",
             "properties": {
-                "bid": {
-                    "type": "string"
-                },
                 "collectNum": {
                     "type": "integer"
                 },
@@ -2818,6 +2906,9 @@ const docTemplate = `{
                 },
                 "holderType": {
                     "type": "string"
+                },
+                "id": {
+                    "type": "integer"
                 },
                 "ifRegister": {
                     "type": "string"
@@ -2860,13 +2951,13 @@ const docTemplate = `{
         "resp.ListPostsResp": {
             "type": "object",
             "properties": {
-                "bid": {
-                    "type": "string"
-                },
                 "collectNum": {
                     "type": "integer"
                 },
                 "commentNum": {
+                    "type": "integer"
+                },
+                "id": {
                     "type": "integer"
                 },
                 "introduce": {
@@ -2924,11 +3015,11 @@ const docTemplate = `{
         "resp.LoadPostDraftResp": {
             "type": "object",
             "properties": {
-                "bid": {
-                    "type": "string"
-                },
                 "createdAt": {
                     "type": "string"
+                },
+                "id": {
+                    "type": "integer"
                 },
                 "introduce": {
                     "type": "string"
@@ -2993,6 +3084,26 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.PaginatedListPostsResp": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/resp.ListPostsResp"
+                    }
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "resp.ReplyCreator": {
             "type": "object",
             "properties": {
@@ -3010,8 +3121,8 @@ const docTemplate = `{
         "resp.ReplyResp": {
             "type": "object",
             "properties": {
-                "bid": {
-                    "type": "string"
+                "id": {
+                    "type": "integer"
                 },
                 "isLike": {
                     "type": "string"
@@ -3020,7 +3131,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "parentId": {
-                    "type": "string"
+                    "type": "integer"
                 },
                 "parentUserName": {
                     "type": "string"
@@ -3041,7 +3152,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "string"
+                    "type": "integer"
                 }
             }
         },
@@ -3105,6 +3216,14 @@ const docTemplate = `{
                 },
                 "username": {
                     "type": "string"
+                }
+            }
+        },
+        "resp.VerifyUserResp": {
+            "type": "object",
+            "properties": {
+                "valid": {
+                    "type": "boolean"
                 }
             }
         }
