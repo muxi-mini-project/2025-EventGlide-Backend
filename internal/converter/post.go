@@ -10,33 +10,35 @@ import (
 )
 
 func CreatePostFromReq(r *req.CreatePostReq, studentID string) *model.Post {
+	id := tools.MustGenerateID()
 	return &model.Post{
-		Bid:       tools.GenUUID(),
+		Id:        id,
 		CreatedAt: time.Now(),
 		StudentID: studentID,
 		Title:     r.Title,
 		Introduce: r.Introduce,
-		ShowImg:   tools.SliceToString(r.ShowImg),
+		Images:    ImagesFromUrls(r.ShowImg, id, "post"),
 	}
 }
 
 func CreatePostDraftFromReq(r *req.CreatePostReq, studentID string) *model.PostDraft {
+	id := tools.MustGenerateID()
 	return &model.PostDraft{
-		Bid:       tools.GenUUID(),
+		Id:        id,
 		CreatedAt: time.Now(),
 		StudentID: studentID,
 		Title:     r.Title,
 		Introduce: r.Introduce,
-		ShowImg:   tools.SliceToString(r.ShowImg),
+		Images:    ImagesFromUrls(r.ShowImg, id, "post_draft"),
 	}
 }
 
 func ToLoadPostDraftResp(d model.PostDraft) resp.LoadPostDraftResp {
 	return resp.LoadPostDraftResp{
-		Bid:       d.Bid,
+		Id:        d.Id,
 		Title:     d.Title,
 		Introduce: d.Introduce,
-		ShowImg:   tools.StringToSlice(d.ShowImg),
+		ShowImg:   ImagesToUrls(d.Images),
 		StudentID: d.StudentID,
 		CreatedAt: tools.ParseTime(d.CreatedAt),
 	}
@@ -48,6 +50,15 @@ func ToListPostsResp(details []model.PostDetail) []resp.ListPostsResp {
 		res = append(res, ToListPostResp(d))
 	}
 	return res
+}
+
+func ToPaginatedListPostsResp(total int64, page, limit int, details []model.PostDetail) resp.PaginatedListPostsResp {
+	return resp.PaginatedListPostsResp{
+		Total:   total,
+		Page:    page,
+		Limit:   limit,
+		Details: ToListPostsResp(details),
+	}
 }
 
 func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
@@ -69,15 +80,15 @@ func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 	res.UserInfo.Username = d.Author.Name
 	res.UserInfo.Avatar = d.Author.Avatar
 	res.UserInfo.StudentID = d.Author.StudentID
-	res.Bid = post.Bid
 	res.PublishTime = tools.ParseTime(post.CreatedAt)
 	res.Title = post.Title
 	res.Introduce = post.Introduce
 	res.IsChecking = post.IsChecking
-	res.ShowImg = tools.StringToSlice(post.ShowImg)
+	res.ShowImg = ImagesToUrls(post.Images)
 	res.LikeNum = post.LikeNum
 	res.CommentNum = post.CommentNum
 	res.CollectNum = post.CollectNum
+	res.Id = post.Id
 
 	return res
 }
@@ -85,12 +96,12 @@ func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 	post := d.Post
 	res := resp.CreatePostResp{
-		Bid:         post.Bid,
+		Id:          post.Id,
 		StudentID:   d.Author.StudentID,
 		PublishTime: tools.ParseTime(post.CreatedAt),
 		Title:       post.Title,
 		Introduce:   post.Introduce,
-		ShowImg:     tools.StringToSlice(post.ShowImg),
+		ShowImg:     ImagesToUrls(post.Images),
 		IsChecking:  post.IsChecking,
 	}
 	res.UserInfo.StudentID = d.Author.StudentID
@@ -102,12 +113,12 @@ func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 
 func ToCreatePostRespFromDraft(d model.PostDraft, author model.UserBrief) resp.CreatePostResp {
 	res := resp.CreatePostResp{
-		Bid:         d.Bid,
+		Id:          d.Id,
 		StudentID:   author.StudentID,
 		PublishTime: tools.ParseTime(d.CreatedAt),
 		Title:       d.Title,
-		Introduce:   d.Introduce,
-		ShowImg:     tools.StringToSlice(d.ShowImg),
+		Introduce:    d.Introduce,
+		ShowImg:      ImagesToUrls(d.Images),
 	}
 	res.UserInfo.StudentID = author.StudentID
 	res.UserInfo.Avatar = author.Avatar

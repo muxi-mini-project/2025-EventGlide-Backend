@@ -2,11 +2,13 @@ package repo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/tools"
 	"gorm.io/gorm"
 )
 
@@ -24,95 +26,96 @@ func NewActivityRepo(dao *dao.ActDao, ch *cache.MultiLevelCache) *ActivityRepo {
 	}
 }
 
-func (r *ActivityRepo) CreateActivityTx(ctx context.Context, act *model.Activity, signers []model.Signer, studentID string) error {
-	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		act.Signers = nil
-		if err := tx.Where("student_id = ?", studentID).Delete(&model.ActivityDraft{}).Error; err != nil {
+func (r *ActivityRepo) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return r.dao.DB().WithContext(ctx).Transaction(fn)
+}
+
+func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
+	act.Signers = nil
+	act.Images = nil
+	if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
+		return err
+	}
+
+	if err := r.dao.CreateActivity(ctx, tx, act); err != nil {
+		return err
+	}
+
+	activitySigners := make([]model.ActivitySigner, 0, len(signers))
+	for _, s := range signers {
+		id, _ := tools.GenerateID()
+		activitySigners = append(activitySigners, model.ActivitySigner{
+			Id:         id,
+			ActivityId: act.Id,
+			StudentID:  s.StudentID,
+			Name:       s.Name,
+		})
+	}
+	if len(activitySigners) > 0 {
+		if err := r.dao.CreateActivitySigners(ctx, tx, activitySigners); err != nil {
 			return err
 		}
+	}
 
-		if err := tx.Create(act).Error; err != nil {
+	approvements := make([]model.Approvement, 0, len(signers))
+	for _, s := range signers {
+		if s.StudentID == studentID {
+			continue
+		}
+		approvements = append(approvements, model.Approvement{
+			Id:          tools.MustGenerateID(),
+			StudentId:   s.StudentID,
+			StudentName: s.Name,
+			ActivityId:  act.Id,
+		})
+	}
+
+	if len(approvements) > 0 {
+		if err := r.dao.CreateApprovements(ctx, tx, approvements); err != nil {
 			return err
 		}
+	}
 
-		activitySigners := make([]model.ActivitySigner, 0, len(signers))
-		for _, s := range signers {
-			activitySigners = append(activitySigners, model.ActivitySigner{
-				ActivityBid: act.Bid,
-				StudentID:   s.StudentID,
-				Name:        s.Name,
-			})
-		}
-		if len(activitySigners) > 0 {
-			if err := tx.Create(&activitySigners).Error; err != nil {
-				return err
-			}
-		}
-
-		approvements := make([]model.Approvement, 0, len(signers))
-
-		for _, s := range signers {
-			if s.StudentID == studentID {
-				continue
-			}
-
-			approvements = append(approvements, model.Approvement{
-				StudentId:   s.StudentID,
-				StudentName: s.Name,
-				Bid:         act.Bid,
-			},
-			)
-		}
-
-		if len(approvements) > 0 {
-			if err := tx.Create(&approvements).Error; err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
+	return nil
 }
 
 func (r *ActivityRepo) CreateDraft(ctx context.Context, draft *model.ActivityDraft) error {
-	draftSigners := draft.Signers
-	draft.Signers = nil
-	return r.dao.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return r.dao.DB().WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		draftSigners := draft.Signers
+		draftCopy := *draft
+		draftCopy.Signers = nil
+
 		var oldDrafts []model.ActivityDraft
-		if err := tx.
-			Where("student_id = ?", draft.StudentID).
-			Find(&oldDrafts).Error; err != nil {
+		if err := r.dao.FindDraftsByStudentID(ctx, tx, draft.StudentID, &oldDrafts); err != nil {
 			return err
 		}
 
 		for _, d := range oldDrafts {
-			if err := tx.
-				Where("activity_bid = ?", d.Bid).
-				Delete(&model.ActivitySigner{}).Error; err != nil {
+			if err := r.dao.DeleteSignersByActivityId(ctx, tx, d.Id); err != nil {
 				return err
 			}
 		}
 
-		if err := tx.
-			Where("student_id = ?", draft.StudentID).
-			Delete(&model.ActivityDraft{}).Error; err != nil {
+		if err := r.dao.DeleteDraftsByStudentID(ctx, tx, draft.StudentID); err != nil {
 			return err
 		}
 
-		if err := tx.Create(draft).Error; err != nil {
+		if err := r.dao.CreateDraft(ctx, tx, &draftCopy); err != nil {
 			return err
 		}
 
 		if len(draftSigners) > 0 {
 			signers := make([]model.ActivitySigner, 0, len(draftSigners))
 			for _, s := range draftSigners {
+				id, _ := tools.GenerateID()
 				signers = append(signers, model.ActivitySigner{
-					ActivityBid: draft.Bid,
-					StudentID:   s.StudentID,
-					Name:        s.Name,
+					Id:         id,
+					ActivityId: draft.Id,
+					StudentID:  s.StudentID,
+					Name:       s.Name,
 				})
 			}
-			if err := tx.Create(&signers).Error; err != nil {
+			if err := r.dao.BatchCreateSigners(ctx, tx, signers); err != nil {
 				return err
 			}
 		}
@@ -125,10 +128,10 @@ func (r *ActivityRepo) DeleteAct(ctx context.Context, act model.Activity) error 
 	if err := r.dao.DeleteAct(ctx, act); err != nil {
 		return err
 	}
-	if act.Bid == "" {
+	if act.Id == 0 {
 		return nil
 	}
-	return r.Invalidate(ctx, act.Bid)
+	return r.Invalidate(ctx, act.Id)
 }
 
 func (r *ActivityRepo) LoadDraft(ctx context.Context, sid string) (model.ActivityDraft, error) {
@@ -159,28 +162,18 @@ func (r *ActivityRepo) ListAllActs(ctx context.Context, page, limit int) (*model
 	return r.dao.ListAllActs(ctx, page, limit)
 }
 
-func (r *ActivityRepo) FindActByBid(ctx context.Context, bid string) (model.Activity, error) {
-	//return cache.GetTyped(r.ch, ctx, r.actByBidKey(bid), 5*time.Minute, func(context.Context) (model.Activity, error) {
-	//	act, err := r.dao.FindActByBid(ctx, bid)
-	//	if err != nil {
-	//		if errors.Is(err, gorm.ErrRecordNotFound) {
-	//			return model.Activity{}, cache.MarkNotFound(err)
-	//		}
-	//		return model.Activity{}, err
-	//	}
-	//	return act, nil
-	//})
-	return r.dao.FindActByBid(ctx, bid)
+func (r *ActivityRepo) FindActById(ctx context.Context, id int64) (model.Activity, error) {
+	return r.dao.FindActById(ctx, id)
 }
 
 func (r *ActivityRepo) GetChecking(ctx context.Context, sid string) ([]model.Activity, error) {
 	return r.dao.GetChecking(ctx, sid)
 }
 
-func (r *ActivityRepo) Invalidate(ctx context.Context, bid string) error {
-	return r.ch.SetAndInvalidate(ctx, r.actByBidKey(bid), nil, 0)
+func (r *ActivityRepo) Invalidate(ctx context.Context, id int64) error {
+	return r.ch.SetAndInvalidate(ctx, r.actByIdKey(id), nil, 0)
 }
 
-func (r *ActivityRepo) actByBidKey(bid string) string {
-	return r.kb.Build("bid", bid)
+func (r *ActivityRepo) actByIdKey(id int64) string {
+	return r.kb.Build("id", fmt.Sprintf("%d", id))
 }

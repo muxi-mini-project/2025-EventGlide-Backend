@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/IBM/sarama v1.46.3
+	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/dgraph-io/ristretto/v2 v2.4.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/gin-contrib/cors v1.7.6
@@ -19,6 +20,7 @@ require (
 	github.com/nacos-group/nacos-sdk-go v1.1.6
 	github.com/qiniu/go-sdk/v7 v7.25.5
 	github.com/redis/go-redis/v9 v9.17.2
+	github.com/sony/sonyflake v1.1.0
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/files v1.0.1
 	github.com/swaggo/gin-swagger v1.6.1
@@ -33,7 +35,6 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/KyleBanks/depth v1.2.1 // indirect
-	github.com/PuerkitoBio/goquery v1.12.0 // indirect
 	github.com/alex-ant/gomath v0.0.0-20160516115720-89013a210a82 // indirect
 	github.com/alibabacloud-go/debug v1.0.1 // indirect
 	github.com/alibabacloud-go/tea v1.3.13 // indirect

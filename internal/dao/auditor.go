@@ -6,15 +6,16 @@ import (
 
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 type AuditorRepository interface {
-	Insert(c context.Context, bid string, formUrl string, sub string) (*model.AuditorForm, error)
-	Update(c context.Context, formId uint, status string) error
-	Get(c context.Context, bid string) (model.AuditorForm, error)
-	IsRejected(c context.Context, bid string) (bool, error)
+	Insert(c context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error)
+	Update(c context.Context, formId int64, status string) error
+	Get(c context.Context, activityId int64) (model.AuditorForm, error)
+	IsRejected(c context.Context, activityId int64) (bool, error)
 }
 type AuditorRepo struct {
 	db *gorm.DB
@@ -29,11 +30,12 @@ func NewAuditorRepo(db *gorm.DB, l *logger.LoggerSet) AuditorRepository {
 	}
 }
 
-func (a *AuditorRepo) Insert(c context.Context, bid string, formUrl string, sub string) (*model.AuditorForm, error) {
+func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error) {
 	form := model.AuditorForm{
-		Bid:     bid,
-		FormUrl: formUrl,
-		Subject: sub,
+		Id:        tools.MustGenerateID(),
+		ActivityId: activityId,
+		FormUrl:   formUrl,
+		Subject:   sub,
 	}
 	if err := a.db.WithContext(c).Create(&form).Error; err != nil {
 		return nil, err
@@ -42,7 +44,7 @@ func (a *AuditorRepo) Insert(c context.Context, bid string, formUrl string, sub 
 	return &form, nil
 }
 
-func (a *AuditorRepo) Update(c context.Context, formId uint, status string) error {
+func (a *AuditorRepo) Update(c context.Context, formId int64, status string) error {
 	var form model.AuditorForm
 	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).Where("id = ?", formId).First(&form).Error; err != nil {
 		a.l.Error("auditor form not found", zap.Error(err))
@@ -56,15 +58,15 @@ func (a *AuditorRepo) Update(c context.Context, formId uint, status string) erro
 	return nil
 }
 
-func (a *AuditorRepo) Get(c context.Context, bid string) (model.AuditorForm, error) {
+func (a *AuditorRepo) Get(c context.Context, activityId int64) (model.AuditorForm, error) {
 	var form model.AuditorForm
-	err := a.db.WithContext(c).Where("bid = ?", bid).First(&form).Error
+	err := a.db.WithContext(c).Where("activity_id = ?", activityId).First(&form).Error
 	return form, err
 }
 
-func (a *AuditorRepo) IsRejected(c context.Context, bid string) (bool, error) {
+func (a *AuditorRepo) IsRejected(c context.Context, activityId int64) (bool, error) {
 	var form model.AuditorForm
-	err := a.db.WithContext(c).Where("bid = ? and status = ?", bid, "rejected").First(&form).Error
+	err := a.db.WithContext(c).Where("activity_id = ? and status = ?", activityId, "reject").First(&form).Error
 	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil // Not rejected
 	}

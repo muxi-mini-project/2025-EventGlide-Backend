@@ -8,14 +8,14 @@ import (
 )
 
 type CallbackAuditorService interface {
-	UpdateStatus(c context.Context, id uint, status string) error
+	UpdateStatus(c context.Context, id int64, status string) error
 }
 
 type callbackAuditorService struct {
 	repo dao.AuditorRepository
 }
 
-func (ad *callbackAuditorService) UpdateStatus(c context.Context, id uint, status string) error {
+func (ad *callbackAuditorService) UpdateStatus(c context.Context, id int64, status string) error {
 	return ad.repo.Update(c, id, tools.StatusMapper(status))
 }
 

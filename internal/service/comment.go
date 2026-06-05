@@ -9,7 +9,6 @@ import (
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
-	"github.com/raiki02/EG/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -17,9 +16,9 @@ var _ CommentServiceHdl = &CommentService{}
 
 type CommentServiceHdl interface {
 	CreateComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error)
-	DeleteComment(c context.Context, targetID, studentID string) error
+	DeleteComment(c context.Context, targetID int64, studentID string) error
 	AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error)
-	LoadComments(c context.Context, parentID string) ([]model.Comment, error)
+	LoadComments(c context.Context, parentID int64) ([]model.Comment, error)
 	EnrichComments(c context.Context, cmts []model.Comment, viewerID string) []model.CommentDetail
 	EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail
 	EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail
@@ -54,13 +53,14 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	cmt.CreatorName = creator.Name
 	cmt.CreatorAvatar = creator.Avatar
 
-	var rootID, rootType string
+	var rootID int64
+	var rootType string
 	if cmt.Subject == SubjectComment {
 		parent := cs.cd.FindCmtByID(c, cmt.ParentID)
 		if parent == nil {
 			return nil, errors.New("comment parent not found")
 		}
-		cmt.RootID = parent.Bid
+		cmt.RootID = parent.Id
 		cmt.RootObjectID = parent.RootObjectID
 		cmt.RootObjectType = parent.RootObjectType
 		rootID = parent.RootObjectID
@@ -80,23 +80,22 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 
 	err = cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
-		zap.String("bid", cmt.Bid),
+		zap.Int64("id", cmt.Id),
 		zap.String("studentid", cmt.StudentID),
-		zap.String("parentid", cmt.ParentID),
+		zap.Int64("parentid", cmt.ParentID),
 	)
 	if err != nil {
 		cs.l.Error("Error comment create failed", zap.Error(err))
 		return nil, err
 	}
 
-	// TODO 优雅实现
 	if studentID == subject.StudentID {
 		return cmt, nil
 	}
 
 	f := model.Feed{
 		StudentID: studentID,
-		TargetBid: cmt.ParentID,
+		TargetId:  cmt.ParentID,
 		Object:    cmt.Subject,
 		Action:    "comment",
 		Receiver:  subject.StudentID,
@@ -127,10 +126,10 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	return cmt, nil
 }
 
-func (cs *CommentService) DeleteComment(c context.Context, targetID, studentID string) error {
+func (cs *CommentService) DeleteComment(c context.Context, targetID int64, studentID string) error {
 	cmt := cs.cd.FindCmtByID(c, targetID)
-	if cmt != nil && cmt.Subject == SubjectComment && cmt.RootID != "" {
-		if err := cs.cd.DecrementReplyNum(c, cmt.RootID); err != nil {
+	if cmt != nil && cmt.Subject == SubjectComment && cmt.RootID != 0 {
+		if err := cs.cd.DecrementReplyNum(c, cmt.Id); err != nil {
 			cs.l.Error("Error decrement reply num", zap.Error(err))
 		}
 	}
@@ -150,7 +149,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	if parentCmt == nil {
 		return nil, errors.New("comment parent not found")
 	}
-	cmt.RootID = parentCmt.Bid
+	cmt.RootID = parentCmt.Id
 	cmt.RootObjectID = parentCmt.RootObjectID
 	cmt.RootObjectType = parentCmt.RootObjectType
 	cmt.ReplyToUserID = parentCmt.StudentID
@@ -165,7 +164,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		return nil, err
 	}
 	cs.l.Info("AnswerComment",
-		zap.String("bid", cmt.Bid),
+		zap.Int64("id", cmt.Id),
 		zap.String("studentid", cmt.StudentID),
 	)
 
@@ -192,7 +191,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 
 	f := model.Feed{
 		StudentID: studentID,
-		TargetBid: cmt.ParentID,
+		TargetId:  cmt.ParentID,
 		Object:    "comment",
 		Action:    "at",
 		Receiver:  parent.StudentID,
@@ -210,38 +209,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	return cmt, nil
 }
 
-func (cs *CommentService) resolveCommentRootMeta(c context.Context, commentID string) (string, string, string, error) {
-	cur := cs.cd.FindCmtByID(c, commentID)
-	if cur == nil {
-		return "", "", "", errors.New("comment not found")
-	}
-
-	rootCommentID := cur.RootID
-	if rootCommentID == "" {
-		rootCommentID = cur.Bid
-	}
-
-	for i := 0; i < 20; i++ {
-		switch cur.Subject {
-		case SubjectActivity, SubjectPost:
-			return rootCommentID, cur.ParentID, cur.Subject, nil
-		case SubjectComment:
-			if cur.ParentID == "" {
-				return "", "", "", errors.New("comment parent id is empty")
-			}
-			cur = cs.cd.FindCmtByID(c, cur.ParentID)
-			if cur == nil {
-				return "", "", "", errors.New("comment parent not found")
-			}
-		default:
-			return "", "", "", errors.New("unknown comment subject")
-		}
-	}
-
-	return "", "", "", errors.New("comment chain too deep")
-}
-
-func (cs *CommentService) LoadComments(c context.Context, parentID string) ([]model.Comment, error) {
+func (cs *CommentService) LoadComments(c context.Context, parentID int64) ([]model.Comment, error) {
 	cmts, err := cs.cd.LoadComments(c, parentID)
 	if err != nil {
 		cs.l.Error("Error load comments failed", zap.Error(err))
@@ -262,7 +230,7 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 	}
 
 	for _, cmt := range cmts {
-		replies, _ := cs.cd.LoadAnswers(c, cmt.Bid)
+		replies, _ := cs.cd.LoadAnswers(c, cmt.Id)
 		for _, reply := range replies {
 			idSet[reply.StudentID] = struct{}{}
 		}
@@ -300,7 +268,7 @@ func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.C
 	creator := userMap[cmt.StudentID]
 	viewer := userMap[viewerID]
 
-	replies, err := cs.cd.LoadAnswers(c, cmt.Bid)
+	replies, err := cs.cd.LoadAnswers(c, cmt.Id)
 	if err != nil {
 		cs.l.Error("Error load answers when enriching comment", zap.Error(err))
 		return model.CommentDetail{}
@@ -317,7 +285,7 @@ func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.C
 		}
 	}
 	if viewer != nil {
-		detail.IsLike = utils.HasLike(viewer.LikeComment, cmt.Bid)
+		detail.IsLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
 	}
 	for _, reply := range replies {
 		detail.Replies = append(detail.Replies, cs.enrichReplyWithCache(c, &reply, viewerID, userMap))
@@ -330,7 +298,7 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 
 	isLike := false
 	if viewer != nil {
-		isLike = utils.HasLike(viewer.LikeComment, cmt.Bid)
+		isLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
 	}
 
 	return model.ReplyDetail{
@@ -343,11 +311,11 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {
 	switch subject.Subject {
 	case SubjectActivity:
-		return cs.id.CommentActivity(ctx, commenterID, subject.Bid)
+		return cs.id.CommentActivity(ctx, commenterID, subject.Id)
 	case SubjectPost:
-		return cs.id.CommentPost(ctx, commenterID, subject.Bid)
+		return cs.id.CommentPost(ctx, commenterID, subject.Id)
 	case SubjectComment:
-		return cs.id.CommentComment(ctx, commenterID, subject.Bid)
+		return cs.id.CommentComment(ctx, commenterID, subject.Id)
 	}
 
 	return errors.New("invalid subject")

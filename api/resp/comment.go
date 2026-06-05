@@ -1,7 +1,7 @@
 package resp
 
 type CommentResp struct {
-	Bid string `json:"bid"`
+	Id int64 `json:"id"`
 
 	Creator Creator `json:"creator"`
 
@@ -11,14 +11,14 @@ type CommentResp struct {
 	LikeNum       int    `json:"likeNum"`
 	ReplyNum      int    `json:"replyNum"`
 	IsLike        string `json:"isLike"`
-	ParentID      string `json:"parentId"`
-	RootID        string `json:"rootId"`
+	ParentID      int64 `json:"parentId"`
+	RootID        int64 `json:"rootId"`
 
 	Reply []ReplyResp `json:"reply"`
 }
 
 type ReplyResp struct {
-	Bid string `json:"bid"`
+	Id int64 `json:"id"`
 
 	ReplyCreator ReplyCreator `json:"replyCreator"`
 
@@ -26,8 +26,8 @@ type ReplyResp struct {
 	ReplyTime    string `json:"replyTime"`
 	ReplyPos     string `json:"replyPos"`
 
-	ParentID       string `json:"parentId"`
-	RootID         string `json:"rootId"`
+	ParentID       int64 `json:"parentId"`
+	RootID         int64 `json:"rootId"`
 	ParentUserName string `json:"parentUserName"`
 
 	IsLike   string `json:"isLike"`

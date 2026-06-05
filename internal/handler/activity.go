@@ -10,6 +10,7 @@ import (
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/utils"
 	"go.uber.org/zap"
 )
 
@@ -42,7 +43,7 @@ func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.Handler
 		act.POST("/search", ginx.WrapRequestWithClaims(ah.FindActBySearches))
 		act.POST("/own", ginx.WrapRequestWithClaims(ah.FindActByOwnerID))
 		act.POST("/all", ginx.WrapRequestWithClaims(ah.ListAllActs))
-		act.GET("/:id", ginx.WrapRequestWithClaims(ah.FindActByBid))
+		act.GET("/:id", ginx.WrapRequestWithClaims(ah.FindActById))
 	}
 }
 
@@ -113,7 +114,7 @@ func (ah *ActHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) (
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/name [post]
 func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ah.as.FindActByName(ctx, req_.Name, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
@@ -131,7 +132,7 @@ func (ah *ActHandler) FindActByName(ctx *gin.Context, req_ req.FindActByNameReq,
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/search [post]
 func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ah.as.FindActBySearches(ctx, &req_)
 	if err != nil {
 		return ginx.ReturnError(err)
@@ -149,7 +150,7 @@ func (ah *ActHandler) FindActBySearches(ctx *gin.Context, req_ req.ActSearchReq,
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/date [post]
 func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ah.as.FindActByDate(ctx, req_.Date, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
@@ -168,7 +169,7 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/own [post]
 func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ah.as.FindActByOwnerID(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
@@ -187,7 +188,7 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwner
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/all [post]
 func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	req_.Page, req_.Limit = converter.IndexValid(req_.Page, req_.Limit)
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ah.as.ListAllActs(ctx, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
@@ -196,15 +197,15 @@ func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, cla
 	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
 }
 
-// FindActByBid
+// FindActById
 // @Tags Activity
-// @Summary 根据bid返回活动详情
+// @Summary 根据id返回活动详情
 // @Produce json
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/{id} [get]
-func (ah *ActHandler) FindActByBid(ctx *gin.Context, req_ req.FindActByBidReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	act, err := ah.as.FindActByBid(ctx, req_.Id)
+func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	act, err := ah.as.FindActById(ctx, req_.Id)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

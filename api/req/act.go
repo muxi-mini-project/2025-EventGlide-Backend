@@ -38,8 +38,8 @@ type FindActByDateReq struct {
 	Limit int   `json:"limit,omitempty"`
 }
 
-type FindActByBidReq struct {
-	Id string `json:"id" validate:"required" form:"id" uri:"id"`
+type FindActByIdReq struct {
+	Id int64 `json:"id" validate:"required" form:"id" uri:"id"`
 }
 
 type FindActByUserIDReq struct {

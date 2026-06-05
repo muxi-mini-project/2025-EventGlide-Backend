@@ -1,7 +1,7 @@
 package req
 
 type DraftReq struct {
-	Bid string `json:"bid"`
+	Id int64 `json:"id"`
 }
 
 type UserAvatarReq struct {

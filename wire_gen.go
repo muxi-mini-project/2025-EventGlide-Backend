@@ -20,6 +20,10 @@ import (
 	"github.com/raiki02/EG/pkg/logger"
 )
 
+import (
+	_ "github.com/raiki02/EG/docs"
+)
+
 // Injectors from wire.go:
 
 func InitApp() *server.Server {
@@ -36,21 +40,21 @@ func InitApp() *server.Server {
 	activityRepo := repo.NewActivityRepo(actDao, multiLevelCache)
 	postDao := dao.NewPostDao(db, conf, loggerSet)
 	postRepo := repo.NewPostRepo(postDao, multiLevelCache)
+	interactionDao := dao.NewInteractionDao(db, loggerSet)
+	interactionRepo := repo.NewInteractionRepo(interactionDao, userRepo, activityRepo, postRepo)
 	jwt := middleware.NewJwt(client, conf)
 	ccnuService := service.NewCCNUService()
 	imgUploader := service.NewImgUploader(conf)
-	commentDao := dao.NewCommentDao(db, loggerSet)
-	interactionDao := dao.NewInteractionDao(db, commentDao, userDao, actDao, postDao, loggerSet)
-	interactionRepo := repo.NewInteractionRepo(interactionDao, userRepo, activityRepo, postRepo)
 	mqHdl := mq.NewMQ(client)
 	auditorRepository := dao.NewAuditorRepo(db, loggerSet)
 	auditorService := service.NewAuditorService(auditorRepository, conf, loggerSet)
 	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, loggerSet)
-	postService := service.NewPostService(postRepo, userRepo, auditorService, loggerSet)
-	userService := service.NewUserService(userRepo, activityRepo, postRepo, jwt, ccnuService, imgUploader, activityService, postService, loggerSet, conf)
+	postService := service.NewPostService(postRepo, userRepo, interactionRepo, auditorService, loggerSet)
+	userService := service.NewUserService(userRepo, activityRepo, postRepo, interactionRepo, jwt, ccnuService, imgUploader, activityService, postService, loggerSet, conf)
 	userHandler := handler.NewUserHandler(engine, userService, jwt, loggerSet)
 	actHandler := handler.NewActHandler(engine, activityService, imgUploader, jwt, loggerSet)
 	postHandler := handler.NewPostHandler(engine, postService, jwt, loggerSet)
+	commentDao := dao.NewCommentDao(db, loggerSet)
 	subjectGetter := service.NewSubjectGetter(activityRepo, postRepo, commentDao)
 	commentService := service.NewCommentService(commentDao, userRepo, interactionRepo, mqHdl, subjectGetter, loggerSet)
 	commentHandler := handler.NewCommentHandler(engine, commentService, jwt, loggerSet)
