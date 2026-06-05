@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"gorm.io/gorm"
 )
 
 type PostRepo struct {
@@ -22,12 +23,21 @@ func NewPostRepo(dao *dao.PostDao, ch *cache.MultiLevelCache) *PostRepo {
 	}
 }
 
+func (r *PostRepo) Transaction(ctx context.Context, fn func(tx *gorm.DB) error) error {
+	return r.dao.DB().WithContext(ctx).Transaction(fn)
+}
+
 func (r *PostRepo) GetAllPost(ctx context.Context, page, limit int) (*model.PaginatedPosts, error) {
 	return r.dao.GetAllPost(ctx, page, limit)
 }
 
 func (r *PostRepo) CreatePost(ctx context.Context, post *model.Post) error {
-	if err := r.dao.CreatePost(ctx, post); err != nil {
+	if err := r.Transaction(ctx, func(tx *gorm.DB) error {
+		if err := r.dao.DeleteDraftByStudent(ctx, tx, post.StudentID); err != nil {
+			return err
+		}
+		return r.dao.CreatePost(ctx, tx, post)
+	}); err != nil {
 		return err
 	}
 	return r.Invalidate(ctx, post.Bid)
@@ -52,7 +62,12 @@ func (r *PostRepo) FindPostByUser(ctx context.Context, sid, keyword string, page
 }
 
 func (r *PostRepo) CreateDraft(ctx context.Context, draft *model.PostDraft) error {
-	return r.dao.CreateDraft(ctx, draft)
+	return r.Transaction(ctx, func(tx *gorm.DB) error {
+		if err := r.dao.DeleteDraftByStudent(ctx, tx, draft.StudentID); err != nil {
+			return err
+		}
+		return r.dao.CreateDraft(ctx, tx, draft)
+	})
 }
 
 func (r *PostRepo) LoadDraft(ctx context.Context, sid string) (model.PostDraft, error) {

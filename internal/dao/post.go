@@ -14,12 +14,13 @@ import (
 
 type PostDaoHdl interface {
 	GetAllPost(ctx context.Context, page, limit int) (*model.PaginatedPosts, error)
-	CreatePost(ctx context.Context, post *model.Post) error
+	CreatePost(ctx context.Context, tx *gorm.DB, post *model.Post) error
+	DeleteDraftByStudent(ctx context.Context, tx *gorm.DB, sid string) error
 	FindPostByName(ctx context.Context, name string, page, limit int) (*model.PaginatedPosts, error)
 	DeletePost(ctx context.Context, post *model.Post) error
 	FindPostByUser(ctx context.Context, sid string, keyword string, page, limit int) (*model.PaginatedPosts, error)
-	CreateDraft(ctx context.Context, draft *model.PostDraft) error
-	LoadDraft(ctx context.Context, bid string, sid string) (model.PostDraft, error)
+	CreateDraft(ctx context.Context, tx *gorm.DB, draft *model.PostDraft) error
+	LoadDraft(ctx context.Context, sid string) (model.PostDraft, error)
 	FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error)
 	FindPostByBid(ctx context.Context, bid string) (model.Post, error)
 }
@@ -36,6 +37,10 @@ func NewPostDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *PostDao {
 		effect: cfg.Auditor.Effect,
 		l:      l.Post.Named("dao"),
 	}
+}
+
+func (pd *PostDao) DB() *gorm.DB {
+	return pd.db
 }
 
 func (pd *PostDao) GetAllPost(ctx context.Context, page, limit int) (*model.PaginatedPosts, error) {
@@ -59,9 +64,12 @@ func (pd *PostDao) GetAllPost(ctx context.Context, page, limit int) (*model.Pagi
 	}, nil
 }
 
-func (pd *PostDao) CreatePost(ctx context.Context, post *model.Post) error {
-	pd.db.WithContext(ctx).Where("student_id = ?", post.StudentID).Delete(model.PostDraft{})
-	return pd.db.WithContext(ctx).Create(post).Error
+func (pd *PostDao) CreatePost(ctx context.Context, tx *gorm.DB, post *model.Post) error {
+	return tx.WithContext(ctx).Create(post).Error
+}
+
+func (pd *PostDao) DeleteDraftByStudent(ctx context.Context, tx *gorm.DB, sid string) error {
+	return tx.WithContext(ctx).Where("student_id = ?", sid).Delete(&model.PostDraft{}).Error
 }
 
 func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit int) (*model.PaginatedPosts, error) {
@@ -123,17 +131,16 @@ func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword strin
 	}, nil
 }
 
-func (pd *PostDao) CreateDraft(ctx context.Context, draft *model.PostDraft) error {
-	pd.db.WithContext(ctx).Where("student_id = ?", draft.StudentID).Delete(&model.PostDraft{})
-	return pd.db.WithContext(ctx).Create(draft).Error
+func (pd *PostDao) CreateDraft(ctx context.Context, tx *gorm.DB, draft *model.PostDraft) error {
+	return tx.WithContext(ctx).Create(draft).Error
 }
 
 func (pd *PostDao) LoadDraft(ctx context.Context, sid string) (model.PostDraft, error) {
 	var draft model.PostDraft
-	err := pd.db.WithContext(ctx).Where("student_id = ?", sid).Find(&draft).Error
+	err := pd.db.WithContext(ctx).Where("student_id = ?", sid).First(&draft).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return draft, nil
+			return model.PostDraft{}, nil
 		}
 		return model.PostDraft{}, err
 	}
