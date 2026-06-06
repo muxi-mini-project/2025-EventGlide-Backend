@@ -124,6 +124,7 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 				Avatar:    author.Avatar,
 				School:    author.School,
 			},
+			Images:    post.Images,
 			IsLike:    ps.id.IsUserLikedPost(c, viewerUserId, post.Id),
 			IsCollect: ps.id.IsUserCollectedPost(c, viewerUserId, post.Id),
 		})
@@ -173,6 +174,7 @@ func (ps *PostService) enrichOne(c context.Context, post *model.Post, viewerID s
 			Avatar:    author.Avatar,
 			School:    author.School,
 		},
+		Images:    post.Images,
 		IsLike:    ps.id.IsUserLikedPost(c, viewerUserId, post.Id),
 		IsCollect: ps.id.IsUserCollectedPost(c, viewerUserId, post.Id),
 	}

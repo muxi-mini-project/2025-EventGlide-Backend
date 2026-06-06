@@ -66,7 +66,11 @@ func (ah *ActHandler) NewAct(ctx *gin.Context, req_ req.CreateActReq, claims jwt
 	if err := ah.as.CreateActivity(ctx, act, converter.SignersFromReq(req_.LabelForm.Signer), claims.Subject, aw); err != nil {
 		return ginx.ReturnError(err)
 	}
-	detail := ah.as.EnrichOneForSearcher(ctx, act, claims.Subject)
+	loadedAct, err := ah.as.FindActById(ctx, act.Id)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	detail := ah.as.EnrichOneForSearcher(ctx, &loadedAct, claims.Subject)
 	return ginx.ReturnSuccess(converter.ToCreateActivityResp(detail))
 }
 
