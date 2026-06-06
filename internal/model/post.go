@@ -32,6 +32,7 @@ type PostDraft struct {
 type PostDetail struct {
 	Post      Post
 	Author    UserBrief
+	Images    []Image
 	IsLike    bool
 	IsCollect bool
 }

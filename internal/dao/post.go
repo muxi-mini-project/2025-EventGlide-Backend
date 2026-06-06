@@ -48,7 +48,7 @@ func (pd *PostDao) GetAllPost(ctx context.Context, page, limit int) (*model.Pagi
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit 
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", name)).Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", name)).Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword strin
 
 	var err error
 	if keyword == "" {
-		err = pd.db.WithContext(ctx).Where("student_id = ?", sid).Limit(limit).Offset(offset).Find(&posts).Error
+		err = pd.db.WithContext(ctx).Preload("Images").Where("student_id = ?", sid).Limit(limit).Offset(offset).Find(&posts).Error
 		if err != nil {
 			return nil, err
 		}
@@ -114,7 +114,7 @@ func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword strin
 			return nil, err
 		}
 	} else {
-		err = pd.db.WithContext(ctx).Where("student_id = ? and title like ?", sid, fmt.Sprintf("%%%s%%", keyword)).Limit(limit).Offset(offset).Find(&posts).Error
+		err = pd.db.WithContext(ctx).Preload("Images").Where("student_id = ? and title like ?", sid, fmt.Sprintf("%%%s%%", keyword)).Limit(limit).Offset(offset).Find(&posts).Error
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +137,7 @@ func (pd *PostDao) CreateDraft(ctx context.Context, tx *gorm.DB, draft *model.Po
 
 func (pd *PostDao) LoadDraft(ctx context.Context, sid string) (model.PostDraft, error) {
 	var draft model.PostDraft
-	err := pd.db.WithContext(ctx).Where("student_id = ?", sid).First(&draft).Error
+	err := pd.db.WithContext(ctx).Preload("Images").Where("student_id = ?", sid).First(&draft).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return model.PostDraft{}, nil
@@ -152,7 +152,7 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Where("student_id = ?", id).Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Preload("Images").Where("student_id = ?", id).Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 
 func (pd *PostDao) FindPostById(ctx context.Context, id int64) (model.Post, error) {
 	var post model.Post
-	err := pd.db.WithContext(ctx).Where("id = ?", id).First(&post).Error
+	err := pd.db.WithContext(ctx).Preload("Images").Where("id = ?", id).First(&post).Error
 	if err != nil {
 		return model.Post{}, err
 	}
@@ -194,7 +194,7 @@ func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
 
 func (pd *PostDao) GetChecking(c context.Context, sid string) ([]model.Post, error) {
 	var posts []model.Post
-	err := pd.db.WithContext(c).Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&posts).Error
+	err := pd.db.WithContext(c).Preload("Images").Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&posts).Error
 	if err != nil {
 		pd.l.Error("Failed to get checking posts", zap.Error(err), zap.String("student_id", sid))
 		return nil, err

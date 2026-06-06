@@ -141,6 +141,8 @@ func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Act
 				Avatar:    author.Avatar,
 				School:    author.School,
 			},
+			Images:    act.Images,
+			Signers:   act.Signers,
 			IsLike:    as.id.IsUserLikedActivity(c, viewerUserId, act.Id),
 			IsCollect: as.id.IsUserCollectedActivity(c, viewerUserId, act.Id),
 		})
@@ -190,6 +192,8 @@ func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, vie
 			Avatar:    author.Avatar,
 			School:    author.School,
 		},
+		Images:    act.Images,
+		Signers:   act.Signers,
 		IsLike:    as.id.IsUserLikedActivity(c, viewerUserId, act.Id),
 		IsCollect: as.id.IsUserCollectedActivity(c, viewerUserId, act.Id),
 	}

@@ -32,7 +32,6 @@ func (r *ActivityRepo) Transaction(ctx context.Context, fn func(tx *gorm.DB) err
 
 func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
 	act.Signers = nil
-	act.Images = nil
 	if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
 		return err
 	}

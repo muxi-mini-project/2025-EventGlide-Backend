@@ -81,7 +81,11 @@ func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, clai
 	if err := ph.ps.CreatePost(ctx, post, aw); err != nil {
 		return ginx.ReturnError(err)
 	}
-	detail := ph.ps.EnrichOneForSearcher(ctx, post, claims.Subject)
+	loadedPost, err := ph.ps.FindPostById(ctx, post.Id)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	detail := ph.ps.EnrichOneForSearcher(ctx, &loadedPost, claims.Subject)
 	return ginx.ReturnSuccess(converter.ToCreatePostResp(detail))
 }
 

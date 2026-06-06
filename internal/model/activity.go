@@ -73,6 +73,8 @@ type UserBrief struct {
 type ActivityDetail struct {
 	Activity  Activity
 	Author    UserBrief
+	Images    []Image
+	Signers   []ActivitySigner
 	IsLike    bool
 	IsCollect bool
 }
