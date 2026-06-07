@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/repo"
 )
 
@@ -67,7 +67,7 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string
 	case SubjectComment:
 		cmt := g.cd.FindCmtByID(ctx, id)
 		if cmt == nil {
-			return SubjectInfo{}, errors.New("comment not found")
+			return SubjectInfo{}, errs.ErrCommentNotFound
 		}
 
 		return SubjectInfo{
@@ -77,5 +77,5 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string
 		}, nil
 	}
 
-	return SubjectInfo{}, errors.New("invalid subject")
+	return SubjectInfo{}, errs.ErrInvalidSubject
 }

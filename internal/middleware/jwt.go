@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"context"
-	"errors"
+	"net/http"
 	"strings"
 	"time"
 
@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/raiki02/EG/tools"
 	"github.com/redis/go-redis/v9"
@@ -63,12 +64,12 @@ func (c *Jwt) StoreInRedis(ctx context.Context, sid string, token string) error 
 func (c *Jwt) CheckToken(ctx context.Context, token string) error {
 	id := c.parseTokenId(token)
 	if id == "" {
-		return errors.New("token is invalid")
+		return errs.ErrJWTInvalid
 	}
 	id = "token:" + id
 	_, err := c.rdb.Get(ctx, id).Result()
 	if err != nil {
-		return err
+		return errs.ErrJWTExpired.Wrap(err)
 	}
 	return nil
 }
@@ -111,14 +112,14 @@ func (c *Jwt) WrapCheckToken() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		token := ctx.GetHeader("Authorization")
 		if token == "" {
-			ctx.JSON(401, tools.ReturnMSG(401, "token is empty", nil))
+			ctx.JSON(http.StatusOK, tools.ReturnMSG(errs.ErrUnauthorized.Code, "token is empty", nil))
 			ctx.Abort()
 			return
 		}
 		reqCtx:=ctx.Request.Context()
 		err := c.CheckToken(reqCtx, token)
 		if err != nil {
-			ctx.JSON(401, tools.ReturnMSG(401, "token is invalid", nil))
+			ctx.JSON(http.StatusOK, tools.ReturnMSG(errs.ErrJWTInvalid.Code, "token is invalid", nil))
 			ctx.Abort()
 			return
 		}

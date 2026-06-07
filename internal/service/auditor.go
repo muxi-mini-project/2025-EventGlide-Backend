@@ -8,6 +8,7 @@ import (
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
@@ -54,7 +55,7 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 	_, err := a.MuxiCli.UploadItem(c, &uploadReq)
 	if err != nil {
 		a.l.Error("Upload to auditor failed", zap.Error(err))
-		return err
+		return errs.ErrUploadFormFailed.Wrap(err)
 	}
 	return nil
 }

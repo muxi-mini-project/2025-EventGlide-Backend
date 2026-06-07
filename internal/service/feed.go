@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -85,7 +86,7 @@ func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (model.FeedD
 	a, err4 := fs.GetAtFeed(ctx, sid)
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		fs.l.Error("Get Feed List Failed", zap.Error(err1), zap.Error(err2), zap.Error(err3), zap.Error(err4))
-		return model.FeedDetail{}, errors.New("get feed list error")
+		return model.FeedDetail{}, errs.ErrFeedListFailed
 	}
 	return model.FeedDetail{
 		Likes:    l,

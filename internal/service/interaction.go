@@ -2,11 +2,11 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
@@ -64,7 +64,7 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 	case SubjectComment:
 		return is.id.LikeComment(c, sid, r.TargetID)
 	default:
-		return errors.New("subject error")
+		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
@@ -77,7 +77,7 @@ func (is *InteractionService) Dislike(c *gin.Context, r *req.InteractionReq, sid
 	case SubjectComment:
 		return is.id.DislikeComment(c, sid, r.TargetID)
 	default:
-		return errors.New("subject error")
+		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
@@ -104,7 +104,7 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 	case SubjectComment:
 		return is.id.CommentComment(c, sid, r.TargetID)
 	default:
-		return errors.New("subject error")
+		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
@@ -129,7 +129,7 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 	case SubjectPost:
 		return is.id.CollectPost(c, sid, r.TargetID)
 	default:
-		return errors.New("subject error")
+		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
@@ -140,7 +140,7 @@ func (is *InteractionService) DisCollect(c *gin.Context, r *req.InteractionReq, 
 	case SubjectPost:
 		return is.id.DiscollectPost(c, sid, r.TargetID)
 	default:
-		return errors.New("subject error")
+		return errs.ErrInteractionSubjectInvalid
 	}
 }
 

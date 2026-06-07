@@ -7,6 +7,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/errs"
+	"github.com/raiki02/EG/pkg/errorx"
 )
 
 type userClaims struct{}
@@ -131,16 +133,30 @@ func bind(ctx *gin.Context, req any) (err error) {
 }
 
 func ReturnError(err error) (resp.Resp, error) {
+	var e *errorx.Error
+	if errors.As(err, &e) {
+		return resp.Resp{
+			Code: e.Code,
+			Msg:  e.Msg,
+		}, err
+	}
 	return resp.Resp{
-		Msg:  err.Error(),
-		Code: 500,
+		Code: errs.InternalError,
+		Msg:  "服务器错误",
 	}, err
 }
 
 func ReturnOnlyErrorResp(err error) resp.Resp {
+	var e *errorx.Error
+	if errors.As(err, &e) {
+		return resp.Resp{
+			Code: e.Code,
+			Msg:  e.Msg,
+		}
+	}
 	return resp.Resp{
-		Code: 500,
-		Msg:  err.Error(),
+		Code: errs.InternalError,
+		Msg:  "服务器错误",
 	}
 }
 

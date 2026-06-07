@@ -15,6 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
@@ -95,7 +96,7 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", err
 	}
 	if client == nil {
-		return nil, "", errors.New("登录失败")
+		return nil, "", errs.ErrLoginFailed
 	}
 
 	name, department, err := us.cSvc.getNameAndDepartment(client)
@@ -298,10 +299,10 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]mod
 func (us *UserService) VerifyUser(ctx context.Context, studentId string, realName string) (bool, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return false, errors.New("user not found")
+		return false, errs.ErrUserNotFound
 	}
 	if user.RealName != realName {
-		return false, errors.New("realname does not match studentid")
+		return false, errs.ErrRealNameMismatch
 	}
 	return true, nil
 }
@@ -372,14 +373,14 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	if err != nil {
 		var opErr *net.OpError
 		if errors.As(err, &opErr) {
-			return nil, errors.New("网络异常")
+			return nil, errs.ErrNetworkError
 		}
 		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if strings.Contains(string(body), "有误") {
-		return client, errors.New("密码账号错误")
+		return client, errs.ErrLoginFailed
 	}
 	return client, nil
 }
@@ -467,7 +468,7 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 	}
 
 	if JSESSIONID == "" {
-		return client, params, errors.New("Can not get JSESSIONID")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 
 	// 正则匹配 HTML 返回的表单字段
@@ -479,19 +480,19 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 
 	ltArr := ltReg.FindStringSubmatch(bodyStr)
 	if len(ltArr) != 2 {
-		return client, params, errors.New("Can not get form paramater: lt")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 	lt = ltArr[1]
 
 	execArr := executionReg.FindStringSubmatch(bodyStr)
 	if len(execArr) != 2 {
-		return client, params, errors.New("Can not get form paramater: execution")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 	execution = execArr[1]
 
 	_eventIdArr := _eventIdReg.FindStringSubmatch(bodyStr)
 	if len(_eventIdArr) != 2 {
-		return client, params, errors.New("Can not get form paramater: _eventId")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 	_eventId = _eventIdArr[1]
 

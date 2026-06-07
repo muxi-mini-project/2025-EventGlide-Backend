@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -54,7 +55,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 	})
 	if err != nil {
 		as.l.Error("failed to create activity tx", zap.Error(err))
-		return err
+		return errs.ErrActivityCreateFailed.Wrap(err)
 	}
 
 	go as.retryUploadAuditorForm(act, aw)

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
@@ -52,18 +53,18 @@ func (ps *PostService) CreatePost(c context.Context, post *model.Post, aw *req.A
 	form, err := ps.aud.CreateAuditorForm(c, post.Id, "", SubjectPost)
 	if err != nil {
 		ps.l.Error("Failed to create auditor form", zap.Error(err), zap.Int64("id", post.Id))
-		return err
+		return errs.ErrPostCreateFailed.Wrap(err)
 	}
 
 	err = ps.aud.UploadForm(c, aw, form.Id)
 	if err != nil {
 		ps.l.Error("Failed to upload form", zap.Error(err), zap.Int64("id", post.Id), zap.Int64("formID", form.Id))
-		return err
+		return errs.ErrUploadFormFailed.Wrap(err)
 	}
 
 	err = ps.pdh.CreatePost(c, post)
 	if err != nil {
-		return err
+		return errs.ErrPostCreateFailed.Wrap(err)
 	}
 	return nil
 }

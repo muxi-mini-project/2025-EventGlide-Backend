@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -58,7 +58,7 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	if cmt.Subject == SubjectComment {
 		parent := cs.cd.FindCmtByID(c, cmt.ParentID)
 		if parent == nil {
-			return nil, errors.New("comment parent not found")
+			return nil, errs.ErrCommentParentNotFound
 		}
 		cmt.RootID = parent.Id
 		cmt.RootObjectID = parent.RootObjectID
@@ -147,7 +147,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 
 	parentCmt := cs.cd.FindCmtByID(c, cmt.ParentID)
 	if parentCmt == nil {
-		return nil, errors.New("comment parent not found")
+		return nil, errs.ErrCommentParentNotFound
 	}
 	cmt.RootID = parentCmt.Id
 	cmt.RootObjectID = parentCmt.RootObjectID
@@ -318,5 +318,5 @@ func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject Subjec
 		return cs.id.CommentComment(ctx, commenterID, subject.Id)
 	}
 
-	return errors.New("invalid subject")
+	return errs.ErrInvalidSubject
 }
