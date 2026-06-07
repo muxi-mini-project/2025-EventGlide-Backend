@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"errors"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -58,7 +58,7 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	if cmt.Subject == SubjectComment {
 		parent := cs.cd.FindCmtByID(c, cmt.ParentID)
 		if parent == nil {
-			return nil, errors.New("comment parent not found")
+			return nil, errs.ErrCommentParentNotFound
 		}
 		cmt.RootID = parent.Id
 		cmt.RootObjectID = parent.RootObjectID
@@ -147,7 +147,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 
 	parentCmt := cs.cd.FindCmtByID(c, cmt.ParentID)
 	if parentCmt == nil {
-		return nil, errors.New("comment parent not found")
+		return nil, errs.ErrCommentParentNotFound
 	}
 	cmt.RootID = parentCmt.Id
 	cmt.RootObjectID = parentCmt.RootObjectID
@@ -213,7 +213,7 @@ func (cs *CommentService) LoadComments(c context.Context, parentID int64) ([]mod
 	cmts, err := cs.cd.LoadComments(c, parentID)
 	if err != nil {
 		cs.l.Error("Error load comments failed", zap.Error(err))
-		return nil, err
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	return cmts, nil
 }
@@ -230,7 +230,11 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 	}
 
 	for _, cmt := range cmts {
-		replies, _ := cs.cd.LoadAnswers(c, cmt.Id)
+		replies, err := cs.cd.LoadAnswers(c, cmt.Id)
+		if err != nil {
+			cs.l.Error("Error load answers when enriching comments", zap.Error(err), zap.Int64("cmtId", cmt.Id))
+			continue
+		}
 		for _, reply := range replies {
 			idSet[reply.StudentID] = struct{}{}
 		}
@@ -318,5 +322,5 @@ func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject Subjec
 		return cs.id.CommentComment(ctx, commenterID, subject.Id)
 	}
 
-	return errors.New("invalid subject")
+	return errs.ErrInvalidSubject
 }

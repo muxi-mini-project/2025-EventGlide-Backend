@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
@@ -45,54 +46,87 @@ func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionR
 }
 
 func (ps *PostService) GetAllPost(c context.Context, page, limit int) (*model.PaginatedPosts, error) {
-	return ps.pdh.GetAllPost(c, page, limit)
+	posts, err := ps.pdh.GetAllPost(c, page, limit)
+	if err != nil {
+		ps.l.Error("Failed to get all posts", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return posts, nil
 }
 
 func (ps *PostService) CreatePost(c context.Context, post *model.Post, aw *req.AuditWrapper) error {
 	form, err := ps.aud.CreateAuditorForm(c, post.Id, "", SubjectPost)
 	if err != nil {
 		ps.l.Error("Failed to create auditor form", zap.Error(err), zap.Int64("id", post.Id))
-		return err
+		return errs.ErrPostCreateFailed.Wrap(err)
 	}
 
 	err = ps.aud.UploadForm(c, aw, form.Id)
 	if err != nil {
 		ps.l.Error("Failed to upload form", zap.Error(err), zap.Int64("id", post.Id), zap.Int64("formID", form.Id))
-		return err
+		return errs.ErrUploadFormFailed.Wrap(err)
 	}
 
 	err = ps.pdh.CreatePost(c, post)
 	if err != nil {
-		return err
+		return errs.ErrPostCreateFailed.Wrap(err)
 	}
 	return nil
 }
 
 func (ps *PostService) FindPostByName(c context.Context, name string, page, limit int) (*model.PaginatedPosts, error) {
-	return ps.pdh.FindPostByName(c, name, page, limit)
+	posts, err := ps.pdh.FindPostByName(c, name, page, limit)
+	if err != nil {
+		ps.l.Error("Failed to find posts by name", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return posts, nil
 }
 
 func (ps *PostService) DeletePost(c context.Context, id int64, studentID string) error {
-	return ps.pdh.DeletePost(c, &model.Post{
+	if err := ps.pdh.DeletePost(c, &model.Post{
 		Id:        id,
 		StudentID: studentID,
-	})
+	}); err != nil {
+		ps.l.Error("Failed to delete post", zap.Error(err), zap.Int64("id", id))
+		return errs.ErrInternal.Wrap(err)
+	}
+	return nil
 }
 
 func (ps *PostService) CreateDraft(c context.Context, draft *model.PostDraft) error {
-	return ps.pdh.CreateDraft(c, draft)
+	if err := ps.pdh.CreateDraft(c, draft); err != nil {
+		ps.l.Error("Failed to create draft", zap.Error(err))
+		return errs.ErrInternal.Wrap(err)
+	}
+	return nil
 }
 
 func (ps *PostService) LoadDraft(c context.Context, sid string) (model.PostDraft, error) {
-	return ps.pdh.LoadDraft(c, sid)
+	draft, err := ps.pdh.LoadDraft(c, sid)
+	if err != nil {
+		ps.l.Error("Failed to load draft", zap.Error(err), zap.String("sid", sid))
+		return model.PostDraft{}, errs.ErrDraftNotFound.Wrap(err)
+	}
+	return draft, nil
 }
 
 func (ps *PostService) FindPostByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedPosts, error) {
-	return ps.pdh.FindPostByOwnerID(c, studentID, page, limit)
+	posts, err := ps.pdh.FindPostByOwnerID(c, studentID, page, limit)
+	if err != nil {
+		ps.l.Error("Failed to find posts by owner id", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return posts, nil
 }
 
 func (ps *PostService) FindPostById(c context.Context, id int64) (model.Post, error) {
-	return ps.pdh.FindPostById(c, id)
+	post, err := ps.pdh.FindPostById(c, id)
+	if err != nil {
+		ps.l.Error("Failed to find post by id", zap.Error(err), zap.Int64("id", id))
+		return model.Post{}, errs.ErrPostNotFound.Wrap(err)
+	}
+	return post, nil
 }
 
 func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, viewerID string) []model.PostDetail {

@@ -15,6 +15,7 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
@@ -82,9 +83,9 @@ func (us *UserService) CreateUser(ctx context.Context, sid string, name string, 
 		School:    "华中师范大学",
 		College:   department,
 	}
-	err := us.udh.Create(ctx, user)
-	if err != nil {
-		return err
+	if err := us.udh.Create(ctx, user); err != nil {
+		us.l.Error("Failed to create user", zap.Error(err), zap.String("studentId", sid))
+		return errs.ErrInternal.Wrap(err)
 	}
 	return nil
 }
@@ -92,10 +93,11 @@ func (us *UserService) CreateUser(ctx context.Context, sid string, name string, 
 func (us *UserService) Login(ctx context.Context, studentId string, password string) (*model.User, string, error) {
 	client, err := us.cSvc.Login(ctx, studentId, password)
 	if err != nil {
-		return nil, "", err
+		us.l.Error("Login failed", zap.Error(err), zap.String("studentId", studentId))
+		return nil, "", errs.ErrInternal.Wrap(err)
 	}
 	if client == nil {
-		return nil, "", errors.New("登录失败")
+		return nil, "", errs.ErrLoginFailed
 	}
 
 	name, department, err := us.cSvc.getNameAndDepartment(client)
@@ -112,19 +114,22 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 
 		err = us.CreateUser(ctx, studentId, name, department)
 		if err != nil {
-			return nil, "", err
+			us.l.Error("Create user failed", zap.Error(err), zap.String("studentId", studentId))
+			return nil, "", errs.ErrInternal.Wrap(err)
 		}
 	}
 
 	token := us.jwth.GenToken(ctx, studentId)
 	err = us.jwth.StoreInRedis(ctx, studentId, token)
 	if err != nil {
-		return nil, "", err
+		us.l.Error("Store token in redis failed", zap.Error(err), zap.String("studentId", studentId))
+		return nil, "", errs.ErrInternal.Wrap(err)
 	}
 
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, "", err
+		us.l.Error("Get user info failed", zap.Error(err), zap.String("studentId", studentId))
+		return nil, "", errs.ErrUserNotFound.Wrap(err)
 	}
 
 	if user.RealName == "" || user.College == "" {
@@ -137,7 +142,8 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 func (us *UserService) Logout(ctx context.Context, token string) error {
 	err := us.jwth.ClearToken(ctx, token)
 	if err != nil {
-		return err
+		us.l.Error("Clear token failed", zap.Error(err))
+		return errs.ErrInternal.Wrap(err)
 	}
 	return nil
 }
@@ -145,23 +151,24 @@ func (us *UserService) Logout(ctx context.Context, token string) error {
 func (us *UserService) GetUserInfo(ctx context.Context, studentId string) (*model.User, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	return &user, nil
 }
 
 func (us *UserService) UpdateAvatar(ctx context.Context, req req.UserAvatarReq, sid string) error {
-	err := us.udh.UpdateAvatar(ctx, sid, req.AvatarUrl)
-	if err != nil {
-		return err
+	if err := us.udh.UpdateAvatar(ctx, sid, req.AvatarUrl); err != nil {
+		us.l.Error("Failed to update avatar", zap.Error(err), zap.String("studentId", sid))
+		return errs.ErrInternal.Wrap(err)
 	}
 	return nil
 }
 
 func (us *UserService) UpdateUsername(ctx context.Context, studentId string, name string) error {
-	err := us.udh.UpdateUsername(ctx, studentId, name)
-	if err != nil {
-		return err
+	if err := us.udh.UpdateUsername(ctx, studentId, name); err != nil {
+		us.l.Error("Failed to update username", zap.Error(err), zap.String("studentId", studentId))
+		return errs.ErrInternal.Wrap(err)
 	}
 	return nil
 }
@@ -169,7 +176,8 @@ func (us *UserService) UpdateUsername(ctx context.Context, studentId string, nam
 func (us *UserService) SearchUserAct(ctx context.Context, studentId string, keyword string, page int, limit int) ([]model.ActivityDetail, error) {
 	acts, err := us.adh.FindActByUser(ctx, studentId, keyword, page, limit)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to search user acts", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	return us.as.EnrichForSearcher(ctx, acts.Acts, studentId), nil
 }
@@ -177,7 +185,8 @@ func (us *UserService) SearchUserAct(ctx context.Context, studentId string, keyw
 func (us *UserService) SearchUserPost(ctx context.Context, studentId string, keyword string, page, limit int) ([]model.PostDetail, error) {
 	posts, err := us.pdh.FindPostByUser(ctx, studentId, keyword, page, limit)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to search user posts", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	return us.ps.EnrichForSearcher(ctx, posts.Posts, studentId), nil
 }
@@ -185,13 +194,15 @@ func (us *UserService) SearchUserPost(ctx context.Context, studentId string, key
 func (us *UserService) GetChecking(ctx context.Context, studentId string) ([]model.ActivityDetail, []model.PostDetail, error) {
 	acts, err := us.adh.GetChecking(ctx, studentId)
 	if err != nil {
-		return nil, nil, err
+		us.l.Error("Failed to get checking acts", zap.Error(err), zap.String("studentId", studentId))
+		return nil, nil, errs.ErrInternal.Wrap(err)
 	}
 	actDetails := us.as.EnrichForSearcher(ctx, acts, studentId)
 
 	posts, err := us.pdh.GetChecking(ctx, studentId)
 	if err != nil {
-		return nil, nil, err
+		us.l.Error("Failed to get checking posts", zap.Error(err), zap.String("studentId", studentId))
+		return nil, nil, errs.ErrInternal.Wrap(err)
 	}
 	postDetails := us.ps.EnrichForSearcher(ctx, posts, studentId)
 
@@ -218,11 +229,13 @@ func (us *UserService) GenQINIUToken(ctx context.Context) (string, string) {
 func (us *UserService) LoadCollectAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	actIds, err := us.idh.GetUserCollectedActivityIds(ctx, int64(user.Id))
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get collected activity ids", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.ActivityDetail
 	for _, id := range actIds {
@@ -238,11 +251,13 @@ func (us *UserService) LoadCollectAct(ctx context.Context, studentId string) ([]
 func (us *UserService) LoadCollectPost(ctx context.Context, studentId string) ([]model.PostDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	postIds, err := us.idh.GetUserCollectedPostIds(ctx, int64(user.Id))
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get collected post ids", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.PostDetail
 	for _, id := range postIds {
@@ -258,11 +273,13 @@ func (us *UserService) LoadCollectPost(ctx context.Context, studentId string) ([
 func (us *UserService) LoadLikePost(ctx context.Context, studentId string) ([]model.PostDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	postIds, err := us.idh.GetUserLikedPostIds(ctx, int64(user.Id))
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get liked post ids", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.PostDetail
 	for _, id := range postIds {
@@ -278,11 +295,13 @@ func (us *UserService) LoadLikePost(ctx context.Context, studentId string) ([]mo
 func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	actIds, err := us.idh.GetUserLikedActivityIds(ctx, int64(user.Id))
 	if err != nil {
-		return nil, err
+		us.l.Error("Failed to get liked activity ids", zap.Error(err), zap.String("studentId", studentId))
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.ActivityDetail
 	for _, id := range actIds {
@@ -298,10 +317,10 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]mod
 func (us *UserService) VerifyUser(ctx context.Context, studentId string, realName string) (bool, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
-		return false, errors.New("user not found")
+		return false, errs.ErrUserNotFound
 	}
 	if user.RealName != realName {
-		return false, errors.New("realname does not match studentid")
+		return false, errs.ErrRealNameMismatch
 	}
 	return true, nil
 }
@@ -372,14 +391,14 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	if err != nil {
 		var opErr *net.OpError
 		if errors.As(err, &opErr) {
-			return nil, errors.New("网络异常")
+			return nil, errs.ErrNetworkError
 		}
 		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if strings.Contains(string(body), "有误") {
-		return client, errors.New("密码账号错误")
+		return client, errs.ErrLoginFailed
 	}
 	return client, nil
 }
@@ -467,7 +486,7 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 	}
 
 	if JSESSIONID == "" {
-		return client, params, errors.New("Can not get JSESSIONID")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 
 	// 正则匹配 HTML 返回的表单字段
@@ -479,19 +498,19 @@ func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountReque
 
 	ltArr := ltReg.FindStringSubmatch(bodyStr)
 	if len(ltArr) != 2 {
-		return client, params, errors.New("Can not get form paramater: lt")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 	lt = ltArr[1]
 
 	execArr := executionReg.FindStringSubmatch(bodyStr)
 	if len(execArr) != 2 {
-		return client, params, errors.New("Can not get form paramater: execution")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 	execution = execArr[1]
 
 	_eventIdArr := _eventIdReg.FindStringSubmatch(bodyStr)
 	if len(_eventIdArr) != 2 {
-		return client, params, errors.New("Can not get form paramater: _eventId")
+		return client, params, errs.ErrLoginInfoInvalid
 	}
 	_eventId = _eventIdArr[1]
 

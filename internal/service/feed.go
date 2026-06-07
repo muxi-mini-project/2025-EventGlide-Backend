@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -69,7 +70,7 @@ func (fs *FeedService) GetTotalCnt(ctx context.Context, sid string) (model.Brief
 	ints, err := fs.fd.GetTotalCnt(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get All Events Failed", zap.Error(err))
-		return model.BriefFeedDetail{}, err
+		return model.BriefFeedDetail{}, errs.ErrInternal.Wrap(err)
 	}
 	return model.BriefFeedDetail{
 		LikeAndCollect: ints.LikeAndCollect,
@@ -85,7 +86,7 @@ func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (model.FeedD
 	a, err4 := fs.GetAtFeed(ctx, sid)
 	if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
 		fs.l.Error("Get Feed List Failed", zap.Error(err1), zap.Error(err2), zap.Error(err3), zap.Error(err4))
-		return model.FeedDetail{}, errors.New("get feed list error")
+		return model.FeedDetail{}, errs.ErrInternal.Wrap(err1)
 	}
 	return model.FeedDetail{
 		Likes:    l,
@@ -188,14 +189,14 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 	likes, err := fs.fd.GetLikeFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Like Feed List Failed", zap.Error(err))
-		return nil, err
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.FeedLikeDetail
 	for _, v := range likes {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get like feed Failed", zap.Error(err))
-			return nil, err
+			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
@@ -226,14 +227,14 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 	collects, err := fs.fd.GetCollectFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Collect Feed List Failed", zap.Error(err))
-		return nil, err
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.FeedCollectDetail
 	for _, v := range collects {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get collect feed Failed", zap.Error(err))
-			return nil, err
+			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		pics, err := fs.fd.GetPictureFromObj(ctx, v.TargetId, v.Object)
 		if err != nil {
@@ -263,14 +264,14 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 	comments, err := fs.fd.GetCommentFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Comment Feed List Failed", zap.Error(err))
-		return nil, err
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.FeedCommentDetail
 	for _, v := range comments {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get comment feed Failed", zap.Error(err))
-			return nil, err
+			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
@@ -301,14 +302,14 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 	ats, err := fs.fd.GetAtFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get At Feed List Failed", zap.Error(err))
-		return nil, err
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.FeedAtDetail
 	for _, v := range ats {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get at feed Failed", zap.Error(err))
-			return nil, err
+			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
 		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
@@ -339,14 +340,14 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 	invites, err := fs.fd.GetAuditorFeed(ctx, sid)
 	if err != nil {
 		fs.l.Error("Get Auditor Feed List Failed", zap.Error(err))
-		return model.FeedDetail{}, err
+		return model.FeedDetail{}, errs.ErrInternal.Wrap(err)
 	}
 	var res []model.FeedInvitationDetail
 	for _, v := range invites {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentId)
 		if err != nil {
 			fs.l.Error("Get User Info when get auditor feed Failed", zap.Error(err))
-			return model.FeedDetail{}, err
+			return model.FeedDetail{}, errs.ErrUserNotFound.Wrap(err)
 		}
 		pics, err := fs.fd.GetPictureFromObj(ctx, v.ActivityId, "activity")
 		if err != nil {
