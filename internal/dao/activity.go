@@ -35,6 +35,8 @@ type ActDaoHdl interface {
 	DeleteSignersByActivityId(context.Context, *gorm.DB, int64) error
 	DeleteDraftsByStudentID(context.Context, *gorm.DB, string) error
 	BatchCreateSigners(context.Context, *gorm.DB, []model.ActivitySigner) error
+	FindRejectedAct(context.Context, string, string, string, string) (model.Activity, error) // studentID, title, startTime, endTime
+	FindPendingAuditorActivities(context.Context) ([]model.Activity, error)
 }
 
 type ActDao struct {
@@ -336,6 +338,28 @@ func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, 
 	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&acts).Error
 	if err != nil {
 		ad.l.Error("Failed to get checking activities", zap.Error(err), zap.String("student_id", sid))
+		return nil, err
+	}
+	return acts, nil
+}
+
+func (ad *ActDao) FindRejectedAct(c context.Context, studentID, title, startTime, endTime string) (model.Activity, error) {
+	var act model.Activity
+	err := ad.db.WithContext(c).Where("student_id = ? AND title = ? AND start_time = ? AND end_time = ? AND is_checking = ?", studentID, title, startTime, endTime, "reject").Preload("Signers").Preload("Images").First(&act).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return model.Activity{}, nil
+		}
+		ad.l.Error("Failed to find rejected activity", zap.Error(err))
+		return model.Activity{}, err
+	}
+	return act, nil
+}
+
+func (ad *ActDao) FindPendingAuditorActivities(c context.Context) ([]model.Activity, error) {
+	var acts []model.Activity
+	err := ad.db.WithContext(c).Where("is_checking = 'pending_auditor'").Preload("Signers").Preload("Images").Find(&acts).Error
+	if err != nil {
 		return nil, err
 	}
 	return acts, nil

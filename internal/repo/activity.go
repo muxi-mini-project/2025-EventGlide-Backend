@@ -32,6 +32,16 @@ func (r *ActivityRepo) Transaction(ctx context.Context, fn func(tx *gorm.DB) err
 
 func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
 	act.Signers = nil
+
+	signerCount := 0
+	for _, s := range signers {
+		if s.StudentID != studentID {
+			signerCount++
+		}
+	}
+	act.SignerCount = signerCount
+	act.SignedCount = 0
+
 	if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
 		return err
 	}
@@ -175,4 +185,8 @@ func (r *ActivityRepo) Invalidate(ctx context.Context, id int64) error {
 
 func (r *ActivityRepo) actByIdKey(id int64) string {
 	return r.kb.Build("id", fmt.Sprintf("%d", id))
+}
+
+func (r *ActivityRepo) FindPendingAuditorActivities(ctx context.Context) ([]model.Activity, error) {
+	return r.dao.FindPendingAuditorActivities(ctx)
 }

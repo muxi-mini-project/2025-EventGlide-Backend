@@ -58,8 +58,6 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 		return errs.ErrActivityCreateFailed.Wrap(err)
 	}
 
-	go as.retryUploadAuditorForm(act, aw)
-
 	go as.publishFeeds(act, signers, studentID)
 
 	as.l.Info("create activity tx",
@@ -253,26 +251,6 @@ func (as *ActivityService) publishFeeds(act *model.Activity, signers []model.Sig
 	}
 }
 
-func (as *ActivityService) retryUploadAuditorForm(act *model.Activity, aw *req.AuditWrapper) {
-	const maxRetry = 5
-	for i := 1; i <= maxRetry; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := as.uploadAuditorForm(ctx, act, aw)
-		cancel()
-		if err == nil {
-			as.l.Info("Upload auditor form success", zap.Int64("actId", act.Id), zap.Int("retry", i))
-			return
-		}
-
-		as.l.Error("Upload auditor form failed", zap.Error(err), zap.Int64("actId", act.Id), zap.Int("retry", i))
-		if i < maxRetry {
-			time.Sleep(time.Duration(i*i) * time.Second)
-		}
-	}
-
-	as.l.Error("Upload auditor form finally failed", zap.Int64("actId", act.Id))
-}
-
 func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Activity, aw *req.AuditWrapper) error {
 	form, err := as.aud.CreateAuditorForm(ctx, act.Id, act.ActiveForm, SubjectActivity)
 	if err != nil {
@@ -287,4 +265,19 @@ func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Act
 	}
 
 	return nil
+}
+
+func (as *ActivityService) TriggerAuditorUpload(ctx context.Context, actId int64) error {
+	act, err := as.ad.FindActById(ctx, actId)
+	if err != nil {
+		as.l.Error("Failed to find activity for auditor upload", zap.Error(err), zap.Int64("actId", actId))
+		return errs.ErrActivityNotFound.Wrap(err)
+	}
+
+	aw := &req.AuditWrapper{
+		Subject:   SubjectActivity,
+		StudentId: act.StudentID,
+	}
+
+	return as.uploadAuditorForm(ctx, &act, aw)
 }

@@ -1,9 +1,10 @@
 package model
 
 import (
-	"gorm.io/gorm"
 	"log"
 	"time"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -12,8 +13,8 @@ const (
 )
 
 type Approvement struct {
-	Id          int64    `gorm:"primaryKey;type:bigint;column:id"`
-	ActivityId  int64    `gorm:"type:bigint;column:activity_id;not null"`
+	Id          int64     `gorm:"primaryKey;type:bigint;column:id"`
+	ActivityId  int64     `gorm:"type:bigint;column:activity_id;not null"`
 	StudentId   string    `gorm:"type:varchar(255);not null;column:student_id"`
 	StudentName string    `gorm:"type:varchar(255);not null;column:student_name"`
 	Stance      string    `gorm:"type:enum('pass','reject','pending');default:'pending';column:stance;not null"`
@@ -25,19 +26,16 @@ func (a *Approvement) AfterUpdate(tx *gorm.DB) (err error) {
 	if a.Stance == StancePass {
 		passUpdate := tx.Exec(`
 			UPDATE activity
-			SET is_checking = 'pass'
+			SET is_checking = 'pending_auditor',
+				signed_count = (
+					SELECT COUNT(*) FROM approvement
+					WHERE activity_id = ? AND stance = 'pass'
+				)
 			WHERE id = ?
+			AND is_checking = 'pending_signers'
 			AND NOT EXISTS (
-				SELECT 1
-				FROM approvement
-				WHERE activity_id = ?
-				AND stance != 'pass'
-			)
-			AND EXISTS (
-				SELECT 1
-				FROM auditor_form
-				WHERE activity_id = ?
-				AND status = 'pass'
+				SELECT 1 FROM approvement
+				WHERE activity_id = ? AND stance != 'pass'
 			)
 		`, a.ActivityId, a.ActivityId, a.ActivityId)
 		if passUpdate.Error != nil {
@@ -45,7 +43,7 @@ func (a *Approvement) AfterUpdate(tx *gorm.DB) (err error) {
 			return passUpdate.Error
 		}
 		if passUpdate.RowsAffected > 0 {
-			log.Println("approvement AfterUpdate passed successfully for activity:", a.ActivityId)
+			log.Println("approvement AfterUpdate: all signers approved, activity now pending_auditor:", a.ActivityId)
 			return nil
 		}
 	} else if a.Stance == StanceReject {
