@@ -73,13 +73,18 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 }
 
 func (as *ActivityService) CreateDraft(c context.Context, draft *model.ActivityDraft) error {
-	return as.ad.CreateDraft(c, draft)
+	if err := as.ad.CreateDraft(c, draft); err != nil {
+		as.l.Error("Failed to create draft", zap.Error(err))
+		return errs.ErrInternal.Wrap(err)
+	}
+	return nil
 }
 
 func (as *ActivityService) LoadDraft(c context.Context, sid string) (model.ActivityDraft, error) {
 	d, err := as.ad.LoadDraft(c, sid)
 	if err != nil {
-		return model.ActivityDraft{}, err
+		as.l.Error("Failed to load draft", zap.Error(err), zap.String("sid", sid))
+		return model.ActivityDraft{}, errs.ErrDraftNotFound.Wrap(err)
 	}
 	return d, nil
 }
@@ -88,29 +93,54 @@ func (as *ActivityService) FindActBySearches(c context.Context, search *req.ActS
 	acts, err := as.ad.FindActBySearches(c, search)
 	if err != nil {
 		as.l.Error("Failed to search acts", zap.Error(err))
-		return nil, err
+		return nil, errs.ErrInternal.Wrap(err)
 	}
 	return acts, nil
 }
 
 func (as *ActivityService) FindActByDate(c context.Context, date string, page, limit int) (*model.PaginatedActivities, error) {
-	return as.ad.FindActByDate(c, date, page, limit)
+	acts, err := as.ad.FindActByDate(c, date, page, limit)
+	if err != nil {
+		as.l.Error("Failed to find acts by date", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return acts, nil
 }
 
 func (as *ActivityService) FindActByName(c context.Context, name string, page, limit int) (*model.PaginatedActivities, error) {
-	return as.ad.FindActByName(c, name, page, limit)
+	acts, err := as.ad.FindActByName(c, name, page, limit)
+	if err != nil {
+		as.l.Error("Failed to find acts by name", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return acts, nil
 }
 
 func (as *ActivityService) FindActById(c context.Context, id int64) (model.Activity, error) {
-	return as.ad.FindActById(c, id)
+	act, err := as.ad.FindActById(c, id)
+	if err != nil {
+		as.l.Error("Failed to find act by id", zap.Error(err), zap.Int64("id", id))
+		return model.Activity{}, errs.ErrActivityNotFound.Wrap(err)
+	}
+	return act, nil
 }
 
 func (as *ActivityService) FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error) {
-	return as.ad.FindActByOwnerID(c, studentID, page, limit)
+	acts, err := as.ad.FindActByOwnerID(c, studentID, page, limit)
+	if err != nil {
+		as.l.Error("Failed to find acts by owner id", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return acts, nil
 }
 
 func (as *ActivityService) ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error) {
-	return as.ad.ListAllActs(c, page, limit)
+	acts, err := as.ad.ListAllActs(c, page, limit)
+	if err != nil {
+		as.l.Error("Failed to list all acts", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return acts, nil
 }
 
 func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail {
@@ -246,12 +276,14 @@ func (as *ActivityService) retryUploadAuditorForm(act *model.Activity, aw *req.A
 func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Activity, aw *req.AuditWrapper) error {
 	form, err := as.aud.CreateAuditorForm(ctx, act.Id, act.ActiveForm, SubjectActivity)
 	if err != nil {
-		return err
+		as.l.Error("Failed to create auditor form", zap.Error(err), zap.Int64("actId", act.Id))
+		return errs.ErrInternal.Wrap(err)
 	}
 
 	err = as.aud.UploadForm(ctx, aw, form.Id)
 	if err != nil {
-		return err
+		as.l.Error("Failed to upload form", zap.Error(err), zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
+		return errs.ErrInternal.Wrap(err)
 	}
 
 	return nil

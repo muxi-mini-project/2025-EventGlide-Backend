@@ -44,7 +44,8 @@ func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, sg SubjectGett
 func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid string) error {
 	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
 	if err != nil {
-		return err
+		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", r.TargetID), zap.String("subject", r.Subject))
+		return errs.ErrInternal.Wrap(err)
 	}
 	if sid != ap.StudentID {
 		jreq := converter.FeedFromInteractionReq(r, "like", sid, ap.StudentID)
@@ -84,7 +85,8 @@ func (is *InteractionService) Dislike(c *gin.Context, r *req.InteractionReq, sid
 func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid string) error {
 	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
 	if err != nil {
-		return err
+		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", r.TargetID), zap.String("subject", r.Subject))
+		return errs.ErrInternal.Wrap(err)
 	}
 	if sid != ap.StudentID {
 		jreq := converter.FeedFromInteractionReq(r, SubjectComment, sid, ap.StudentID)
@@ -111,7 +113,8 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid string) error {
 	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
 	if err != nil {
-		return err
+		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", r.TargetID), zap.String("subject", r.Subject))
+		return errs.ErrInternal.Wrap(err)
 	}
 	if sid != ap.StudentID {
 		jreq := converter.FeedFromInteractionReq(r, "collect", sid, ap.StudentID)
