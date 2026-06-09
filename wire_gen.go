@@ -66,6 +66,7 @@ func InitApp() *server.Server {
 	callbackAuditorService := service.NewCallbackAuditor(auditorRepository)
 	callbackAuditorHandler := handler.NewCallbackAuditorHandler(engine, callbackAuditorService, conf, loggerSet)
 	handlerHandler := handler.NewHandler(engine, cors, userHandler, actHandler, postHandler, commentHandler, feedHandler, interactionHandler, callbackAuditorHandler)
-	serverServer := server.NewServer(handlerHandler)
+	auditorUploadWorker := service.NewAuditorUploadWorker(activityRepo, auditorService, loggerSet)
+	serverServer := server.NewServer(handlerHandler, auditorUploadWorker)
 	return serverServer
 }

@@ -4,6 +4,7 @@ import "github.com/google/wire"
 
 var Provider = wire.NewSet(
 	NewActivityService,
+	NewAuditorUploadWorker,
 	NewCCNUService,
 	NewCommentService,
 	NewAuditorService,
