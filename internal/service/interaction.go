@@ -110,7 +110,7 @@ func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid st
 	}
 
 	// 发送 feed（如果需要）
-	if sid != ap.StudentID {
+	if added && sid != ap.StudentID {
 		jreq := converter.FeedFromInteractionReq(r, "like", sid, ap.StudentID)
 		err = is.mq.Publish(ctx, "feed_stream", jreq)
 		if err != nil {
