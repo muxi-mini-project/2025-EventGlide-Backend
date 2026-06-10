@@ -145,20 +145,24 @@ func (c *InteractionConsumer) handleEvent(ctx context.Context, event *Interactio
 
 // handleLike 处理点赞事件
 func (c *InteractionConsumer) handleLike(ctx context.Context, event *InteractionEvent) error {
-	if event.Action == "add" {
+	switch event.Action {
+	case "add":
 		return c.dao.InsertLike(ctx, event.Subject, event.SubjectID, event.UserID)
-	} else if event.Action == "remove" {
+	case "remove":
 		return c.dao.DeleteLike(ctx, event.Subject, event.SubjectID, event.UserID)
+	default:
+		return fmt.Errorf("unknown like action: %s", event.Action)
 	}
-	return nil
 }
 
 // handleCollect 处理收藏事件
 func (c *InteractionConsumer) handleCollect(ctx context.Context, event *InteractionEvent) error {
-	if event.Action == "add" {
+	switch event.Action {
+	case "add":
 		return c.dao.InsertCollect(ctx, event.Subject, event.SubjectID, event.UserID)
-	} else if event.Action == "remove" {
+	case "remove":
 		return c.dao.DeleteCollect(ctx, event.Subject, event.SubjectID, event.UserID)
+	default:
+		return fmt.Errorf("unknown collect action: %s", event.Action)
 	}
-	return nil
 }
