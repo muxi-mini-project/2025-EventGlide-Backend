@@ -15,6 +15,8 @@ type MQHdl interface {
 	EnsureConsumerGroup(ctx context.Context, stream, group string) error
 	ConsumeGroup(ctx context.Context, stream, group, consumer string, count int64, block time.Duration) ([]redis.XMessage, error)
 	Ack(ctx context.Context, stream, group string, ids ...string) error
+	AutoClaim(ctx context.Context, stream, group, consumer string, minIdle time.Duration, start string) ([]redis.XMessage, string, error)
+	ListPendingExt(ctx context.Context, stream, group string, idle time.Duration, start, end string, count int64) ([]redis.XPendingExt, error)
 }
 
 type MQ struct {
@@ -85,4 +87,34 @@ func (mq *MQ) Ack(ctx context.Context, stream, group string, ids ...string) erro
 		return nil
 	}
 	return mq.rdb.XAck(ctx, stream, group, ids...).Err()
+}
+
+func (mq *MQ) AutoClaim(ctx context.Context, stream, group, consumer string, minIdle time.Duration, start string) ([]redis.XMessage, string, error) {
+	result, nextStart, err := mq.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+		Stream:   stream,
+		Group:    group,
+		Consumer: consumer,
+		MinIdle:  minIdle,
+		Start:    start,
+		Count:    100,
+	}).Result()
+	if err != nil {
+		return nil, "", err
+	}
+	return result, nextStart, nil
+}
+
+func (mq *MQ) ListPendingExt(ctx context.Context, stream, group string, idle time.Duration, start, end string, count int64) ([]redis.XPendingExt, error) {
+	result, err := mq.rdb.XPendingExt(ctx, &redis.XPendingExtArgs{
+		Stream:   stream,
+		Group:    group,
+		Idle:     idle,
+		Start:    start,
+		End:      end,
+		Count:    count,
+	}).Result()
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
