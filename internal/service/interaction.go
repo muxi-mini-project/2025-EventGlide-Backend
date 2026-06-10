@@ -103,11 +103,8 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 		return is.id.CommentActivity(c, sid, int64(r.TargetID))
 	case SubjectPost:
 		return is.id.CommentPost(c, sid, int64(r.TargetID))
-	case SubjectComment:
-		return is.id.CommentComment(c, sid, int64(r.TargetID))
-	default:
-		return errs.ErrInteractionSubjectInvalid
 	}
+	return nil
 }
 
 func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid string) error {

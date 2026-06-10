@@ -115,8 +115,6 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		err = cs.id.CommentActivity(c, studentID, cmt.ParentID)
 	case SubjectPost:
 		err = cs.id.CommentPost(c, studentID, cmt.ParentID)
-	case SubjectComment:
-		err = cs.id.CommentComment(c, studentID, cmt.ParentID)
 	}
 	if err != nil {
 		cs.l.Error("Error comment create failed", zap.Error(err))
@@ -127,12 +125,6 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 }
 
 func (cs *CommentService) DeleteComment(c context.Context, targetID int64, studentID string) error {
-	cmt := cs.cd.FindCmtByID(c, targetID)
-	if cmt != nil && cmt.Subject == SubjectComment && cmt.RootID != 0 {
-		if err := cs.cd.DecrementReplyNum(c, cmt.Id); err != nil {
-			cs.l.Error("Error decrement reply num", zap.Error(err))
-		}
-	}
 	return cs.cd.DeleteComment(c, studentID, targetID)
 }
 
@@ -229,15 +221,19 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 		idSet[cmt.StudentID] = struct{}{}
 	}
 
-	for _, cmt := range cmts {
-		replies, err := cs.cd.LoadAnswers(c, cmt.Id)
-		if err != nil {
-			cs.l.Error("Error load answers when enriching comments", zap.Error(err), zap.Int64("cmtId", cmt.Id))
-			continue
-		}
-		for _, reply := range replies {
-			idSet[reply.StudentID] = struct{}{}
-		}
+	rootIDs := make([]int64, len(cmts))
+	for i, cmt := range cmts {
+		rootIDs[i] = cmt.Id
+	}
+	allReplies, err := cs.cd.LoadAnswersBatch(c, rootIDs)
+	if err != nil {
+		cs.l.Error("Error batch load answers when enriching comments", zap.Error(err))
+	}
+
+	replyMap := make(map[int64][]model.Comment)
+	for _, reply := range allReplies {
+		replyMap[reply.RootID] = append(replyMap[reply.RootID], reply)
+		idSet[reply.StudentID] = struct{}{}
 	}
 
 	idList := make([]string, 0, len(idSet))
@@ -251,7 +247,7 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 
 	details := make([]model.CommentDetail, 0, len(cmts))
 	for i := range cmts {
-		details = append(details, cs.enrichCommentWithCache(c, &cmts[i], viewerID, userMap))
+		details = append(details, cs.enrichCommentWithCache(c, &cmts[i], viewerID, userMap, replyMap))
 	}
 	return details
 }
@@ -259,7 +255,7 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
 	idList := []string{viewerID, cmt.StudentID}
 	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
-	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap)
+	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap, nil)
 }
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
@@ -268,14 +264,19 @@ func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, vie
 	return cs.enrichReplyWithCache(c, cmt, viewerID, userMap)
 }
 
-func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User) model.CommentDetail {
+func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User, replyMap map[int64][]model.Comment) model.CommentDetail {
 	creator := userMap[cmt.StudentID]
 	viewer := userMap[viewerID]
 
-	replies, err := cs.cd.LoadAnswers(c, cmt.Id)
-	if err != nil {
-		cs.l.Error("Error load answers when enriching comment", zap.Error(err))
-		return model.CommentDetail{}
+	var replies []model.Comment
+	if replyMap != nil {
+		replies = replyMap[cmt.Id]
+	} else {
+		var err error
+		replies, err = cs.cd.LoadAnswers(c, cmt.Id)
+		if err != nil {
+			cs.l.Error("Error load answers when enriching comment", zap.Error(err))
+		}
 	}
 
 	detail := model.CommentDetail{
@@ -318,9 +319,6 @@ func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject Subjec
 		return cs.id.CommentActivity(ctx, commenterID, subject.Id)
 	case SubjectPost:
 		return cs.id.CommentPost(ctx, commenterID, subject.Id)
-	case SubjectComment:
-		return cs.id.CommentComment(ctx, commenterID, subject.Id)
 	}
-
-	return errs.ErrInvalidSubject
+	return nil
 }

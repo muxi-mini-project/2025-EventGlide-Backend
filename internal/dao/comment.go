@@ -15,8 +15,8 @@ type CommentDaoHdl interface {
 	AnswerComment(context.Context, *model.Comment) error
 	LoadComments(context.Context, int64) ([]model.Comment, error)
 	LoadAnswers(context.Context, int64) ([]model.Comment, error)
+	LoadAnswersBatch(context.Context, []int64) ([]model.Comment, error)
 	FindCmtByID(context.Context, int64) *model.Comment
-	DecrementReplyNum(context.Context, int64) error
 }
 
 type CommentDao struct {
@@ -63,7 +63,12 @@ func (cd *CommentDao) FindCmtByID(c context.Context, id int64) *model.Comment {
 	return &cmt
 }
 
-func (cd *CommentDao) DecrementReplyNum(c context.Context, id int64) error {
-	return cd.db.WithContext(c).Model(&model.Comment{}).Where("id = ?", id).
-		Update("reply_num", gorm.Expr("reply_num - 1")).Error
+func (cd *CommentDao) LoadAnswersBatch(c context.Context, rootIDs []int64) ([]model.Comment, error) {
+	if len(rootIDs) == 0 {
+		return nil, nil
+	}
+	var cmts []model.Comment
+	err := cd.db.WithContext(c).Where("root_id IN ? AND subject = 'comment'", rootIDs).Find(&cmts).Error
+	return cmts, err
 }
+
