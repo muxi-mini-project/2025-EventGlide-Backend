@@ -48,7 +48,7 @@ func (pd *PostDao) GetAllPost(ctx context.Context, page, limit int) (*model.Pagi
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit 
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", name)).Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", name)).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
@@ -105,20 +105,20 @@ func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword strin
 
 	var err error
 	if keyword == "" {
-		err = pd.db.WithContext(ctx).Preload("Images").Where("student_id = ?", sid).Limit(limit).Offset(offset).Find(&posts).Error
+		err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("student_id = ?", sid).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 		if err != nil {
 			return nil, err
 		}
-		err = pd.db.WithContext(ctx).Where("student_id = ?", sid).Model(&model.Post{}).Count(&total).Error
+		err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Where("student_id = ?", sid).Model(&model.Post{}).Count(&total).Error
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		err = pd.db.WithContext(ctx).Preload("Images").Where("student_id = ? and title like ?", sid, fmt.Sprintf("%%%s%%", keyword)).Limit(limit).Offset(offset).Find(&posts).Error
+		err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("student_id = ? and title like ?", sid, fmt.Sprintf("%%%s%%", keyword)).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 		if err != nil {
 			return nil, err
 		}
-		err = pd.db.WithContext(ctx).Where("student_id = ? and title like ?", sid, fmt.Sprintf("%%%s%%", keyword)).Model(&model.Post{}).Count(&total).Error
+		err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Where("student_id = ? and title like ?", sid, fmt.Sprintf("%%%s%%", keyword)).Model(&model.Post{}).Count(&total).Error
 		if err != nil {
 			return nil, err
 		}
@@ -152,11 +152,11 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Preload("Images").Where("student_id = ?", id).Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("student_id = ?", id).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
-	err = pd.db.WithContext(ctx).Where("student_id = ?", id).Model(&model.Post{}).Count(&total).Error
+	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Where("student_id = ?", id).Model(&model.Post{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
