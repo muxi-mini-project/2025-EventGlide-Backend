@@ -40,6 +40,7 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 		post.POST("/delete", ginx.WrapRequestWithClaims(ph.DeletePost))
 		post.GET("/load", ginx.WrapWithClaims(ph.LoadDraft))
 		post.POST("/own", ginx.WrapRequestWithClaims(ph.FindPostByOwnerID))
+		post.POST("/student/:studentId", ginx.WrapRequestWithClaims(ph.FindPostByStudentID))
 		post.GET("/:id", ginx.WrapRequestWithClaims(ph.FindPostById))
 	}
 }
@@ -169,6 +170,26 @@ func (ph *PostHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) 
 func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, req_ req.FindPostByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ph.ps.FindPostByOwnerID(ctx, claims.Subject, req_.Page, req_.Limit)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	details := ph.ps.EnrichForSearcher(ctx, paginated.Posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(paginated.Total, paginated.Page, paginated.Limit, details))
+}
+
+// FindPostByStudentID
+// @Tags Post
+// @Summary 通过学号获取帖子
+// @Produce json
+// @Accept json
+// @Param Authorization header string true "token"
+// @Param studentId path string true "学号"
+// @Param req body req.FindPostByStudentIDReq true "分页请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
+// @Router /post/student/{studentId} [post]
+func (ph *PostHandler) FindPostByStudentID(ctx *gin.Context, req_ req.FindPostByStudentIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ph.ps.FindPostByOwnerID(ctx, req_.StudentID, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

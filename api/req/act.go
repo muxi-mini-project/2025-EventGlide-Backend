@@ -35,9 +35,9 @@ type FindActByNameReq struct {
 }
 
 type FindActByDateReq struct {
-	Date string `json:"date" validate:"required"` // 02-01
-	Page int    `json:"page,omitempty"`
-	Limit int   `json:"limit,omitempty"`
+	Date  string `json:"date" validate:"required"` // 02-01
+	Page  int    `json:"page,omitempty"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 type FindActByIdReq struct {
@@ -58,6 +58,12 @@ type ListAllActsReq struct {
 type FindActByOwnerIDReq struct {
 	Page  int `json:"page"`
 	Limit int `json:"limit"`
+}
+
+type FindActByStudentIDReq struct {
+	StudentID string `json:"studentId" form:"studentId" uri:"studentId"`
+	Page      int    `json:"page"`
+	Limit     int    `json:"limit"`
 }
 
 type Signer struct {

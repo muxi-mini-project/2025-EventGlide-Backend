@@ -42,6 +42,7 @@ func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.Handler
 		act.POST("/date", ginx.WrapRequestWithClaims(ah.FindActByDate))
 		act.POST("/search", ginx.WrapRequestWithClaims(ah.FindActBySearches))
 		act.POST("/own", ginx.WrapRequestWithClaims(ah.FindActByOwnerID))
+		act.POST("/student/:studentId", ginx.WrapRequestWithClaims(ah.FindActByStudentID))
 		act.POST("/all", ginx.WrapRequestWithClaims(ah.ListAllActs))
 		act.GET("/:id", ginx.WrapRequestWithClaims(ah.FindActById))
 	}
@@ -194,6 +195,26 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwner
 func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
 	paginated, err := ah.as.ListAllActs(ctx, req_.Page, req_.Limit)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
+}
+
+// FindActByStudentID
+// @Tags Activity
+// @Summary 通过学号获取活动
+// @Produce json
+// @Accept json
+// @Param Authorization header string true "token"
+// @Param studentId path string true "学号"
+// @Param req body req.FindActByStudentIDReq true "分页请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
+// @Router /act/student/{studentId} [post]
+func (ah *ActHandler) FindActByStudentID(ctx *gin.Context, req_ req.FindActByStudentIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActByOwnerID(ctx, req_.StudentID, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
