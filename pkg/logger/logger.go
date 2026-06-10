@@ -7,16 +7,22 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
 	registry = make(map[string]*zap.Logger)
 	mu       sync.RWMutex
 	logDir   = "./log"
+	logConf  LogConf
 )
 
-func InitLogDir(dir string) {
-	logDir = dir
+type LogConf struct {
+	Path       string
+	MaxSize    int
+	MaxBackups int
+	MaxAge     int
+	Compress   bool
 }
 
 func GetLogger(serviceName string) *zap.Logger {
@@ -69,10 +75,12 @@ func NewLoggerSet() *LoggerSet {
 func newLogger(serviceName string) *zap.Logger {
 	_ = os.MkdirAll(logDir, 0755)
 
-	filePath := filepath.Join(logDir, serviceName+".log")
-	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return newZapLogger(os.Stdout, serviceName)
+	writer := &lumberjack.Logger{
+		Filename:   filepath.Join(logDir, serviceName+".log"),
+		MaxSize:    logConf.MaxSize,
+		MaxBackups: logConf.MaxBackups,
+		MaxAge:     logConf.MaxAge,
+		Compress:   logConf.Compress,
 	}
 
 	eConf := zap.NewProductionEncoderConfig()
@@ -80,21 +88,10 @@ func newLogger(serviceName string) *zap.Logger {
 
 	core := zapcore.NewCore(
 		zapcore.NewJSONEncoder(eConf),
-		zapcore.AddSync(file),
+		zapcore.AddSync(writer),
 		zapcore.InfoLevel,
 	)
 
 	return zap.New(core)
 }
 
-func newZapLogger(w *os.File, serviceName string) *zap.Logger {
-	eConf := zap.NewProductionEncoderConfig()
-	eConf.EncodeTime = zapcore.ISO8601TimeEncoder
-
-	core := zapcore.NewCore(
-		zapcore.NewJSONEncoder(eConf),
-		zapcore.AddSync(w),
-		zapcore.InfoLevel,
-	)
-	return zap.New(core)
-}
