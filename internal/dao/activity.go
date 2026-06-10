@@ -167,20 +167,20 @@ func (ad *ActDao) FindActByUser(c context.Context, s string, keyword string, pag
 
 	var err error
 	if keyword == "" {
-		err = ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ? ", s).Limit(limit).Offset(offset).Find(&as).Error
+		err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("student_id = ? ", s).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
 		if err != nil {
 			return nil, err
 		}
-		err = ad.db.WithContext(c).Where("student_id = ? ", s).Model(&model.Activity{}).Count(&total).Error
+		err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("student_id = ? ", s).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		err = ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Limit(limit).Offset(offset).Find(&as).Error
+		err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
 		if err != nil {
 			return nil, err
 		}
-		err = ad.db.WithContext(c).Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Model(&model.Activity{}).Count(&total).Error
+		err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("student_id = ? and title like ?", s, fmt.Sprintf("%%%s%%", keyword)).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
 		if err != nil {
 			return nil, err
 		}
@@ -199,11 +199,11 @@ func (ad *ActDao) FindActByName(c context.Context, n string, page, limit int) (*
 	var total int64
 	offset := (page - 1) * limit
 
-	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", n)).Limit(limit).Offset(offset).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", n)).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
-	err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", n)).Model(&model.Activity{}).Count(&total).Error
+	err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", n)).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
@@ -221,11 +221,11 @@ func (ad *ActDao) FindActByDate(c context.Context, d string, page, limit int) (*
 	var total int64
 	offset := (page - 1) * limit
 
-	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Limit(limit).Offset(offset).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
-	err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Model(&model.Activity{}).Count(&total).Error
+	err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("start_time like ?", fmt.Sprintf("%%%s%%", d)).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
@@ -243,11 +243,11 @@ func (ad *ActDao) FindActByOwnerID(c context.Context, s string, page, limit int)
 	var total int64
 	offset := (page - 1) * limit
 
-	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ?", s).Limit(limit).Offset(offset).Find(&as).Error
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("student_id = ?", s).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
 	if err != nil {
 		return nil, err
 	}
-	err = ad.db.WithContext(c).Where("student_id = ?", s).Model(&model.Activity{}).Count(&total).Error
+	err = ad.db.WithContext(c).Scopes(ad.SetEffect()).Where("student_id = ?", s).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
@@ -269,13 +269,13 @@ func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) (*mo
 
 	q := ad.db.WithContext(c)
 
-	listQ := buildActQuery(q, a).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Limit(limit).Offset(offset)
+	listQ := buildActQuery(q, a).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset)
 	if err := listQ.Find(&as).Error; err != nil {
 		ad.l.Error("Failed to find activities by searches", zap.Error(err))
 		return nil, err
 	}
 
-	countQ := buildActQuery(ad.db.WithContext(c), a).Scopes(ad.SetEffect()).Model(&model.Activity{})
+	countQ := buildActQuery(ad.db.WithContext(c), a).Scopes(ad.SetEffect()).Where("end_time > ?", time.Now()).Model(&model.Activity{})
 	if err := countQ.Count(&total).Error; err != nil {
 		ad.l.Error("Failed to count activities by searches", zap.Error(err))
 		return nil, err
