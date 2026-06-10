@@ -26,3 +26,10 @@ auditor:
   apiKey: apiKey
   webhookPath: /api/v1/auditor/webhook
   effect: slow # slow为先审后发，fast为先发后审
+
+log:
+  path: "./log"
+  maxSize: 100
+  maxBackups: 7
+  maxAge: 30
+  compress: true

@@ -24,6 +24,7 @@ type Conf struct {
 	Imgbed  ImgbedConf  `yaml:"imgbed"`
 	Auditor AuditorConf `yaml:"auditor"`
 	Kafka   KafkaConf   `yaml:"kafka"`
+	Log     LogConf     `yaml:"log"`
 }
 
 type MysqlConf struct {
@@ -60,6 +61,14 @@ type AuditorConf struct {
 
 type KafkaConf struct {
 	Addr string `yaml:"addr"`
+}
+
+type LogConf struct {
+	Path      string `yaml:"path"`
+	MaxSize   int    `yaml:"maxSize"`
+	MaxBackups int   `yaml:"maxBackups"`
+	MaxAge    int    `yaml:"maxAge"`
+	Compress  bool   `yaml:"compress"`
 }
 
 const (
