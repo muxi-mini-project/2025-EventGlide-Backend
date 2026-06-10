@@ -193,12 +193,30 @@ definitions:
       page:
         type: integer
     type: object
+  req.FindActByStudentIDReq:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      studentId:
+        type: string
+    type: object
   req.FindPostByOwnerIDReq:
     properties:
       limit:
         type: integer
       page:
         type: integer
+    type: object
+  req.FindPostByStudentIDReq:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      studentId:
+        type: string
     type: object
   req.FindPostReq:
     properties:
@@ -1040,6 +1058,42 @@ paths:
       summary: 通过搜索条件查找活动
       tags:
       - Activity
+  /act/student/{studentId}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 学号
+        in: path
+        name: studentId
+        required: true
+        type: string
+      - description: 分页请求
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.FindActByStudentIDReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/resp.Resp'
+            - properties:
+                data:
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
+              type: object
+      summary: 通过学号获取活动
+      tags:
+      - Activity
   /comment/answer:
     post:
       parameters:
@@ -1624,6 +1678,42 @@ paths:
                   $ref: '#/definitions/resp.PaginatedListPostsResp'
               type: object
       summary: 通过用户ID查找帖子
+      tags:
+      - Post
+  /post/student/{studentId}:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 学号
+        in: path
+        name: studentId
+        required: true
+        type: string
+      - description: 分页请求
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.FindPostByStudentIDReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/resp.Resp'
+            - properties:
+                data:
+                  $ref: '#/definitions/resp.PaginatedListPostsResp'
+              type: object
+      summary: 通过学号获取帖子
       tags:
       - Post
   /user/avatar:

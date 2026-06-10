@@ -48,3 +48,9 @@ type GetAllPostsReq struct {
 	Page  int `json:"page"`
 	Limit int `json:"limit"`
 }
+
+type FindPostByStudentIDReq struct {
+	StudentID string `json:"studentId" form:"studentId" uri:"studentId"`
+	Page      int    `json:"page"`
+	Limit     int    `json:"limit"`
+}
