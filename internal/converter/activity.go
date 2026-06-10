@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/utils"
 	"github.com/raiki02/EG/tools"
 )
 
@@ -146,7 +147,7 @@ func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 	res.CollectNum = act.CollectNum
 	res.IfRegister = act.IfRegister
 	res.ShowImg = ImagesToUrls(act.Images)
-	res.Id = act.Id
+	res.Id = utils.SnowflakeID(act.Id)
 
 	return res
 }
@@ -159,7 +160,7 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 	res.Introduce = act.Introduce
 	res.ShowImg = ImagesToUrls(act.Images)
 	res.Type = act.Type
-	res.Id = act.Id
+	res.Id = utils.SnowflakeID(act.Id)
 	res.ActiveForm = act.ActiveForm
 	res.Position = act.Position
 	res.IfRegister = act.IfRegister
@@ -180,7 +181,7 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 	res.Introduce = d.Introduce
 	res.ShowImg = ImagesToUrls(d.Images)
 	res.Type = d.Type
-	res.Id = d.Id
+	res.Id = utils.SnowflakeID(d.Id)
 	res.Position = d.Position
 	res.IfRegister = d.IfRegister
 	res.UserInfo.School = author.School

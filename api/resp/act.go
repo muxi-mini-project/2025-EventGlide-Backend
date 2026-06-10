@@ -1,7 +1,9 @@
 package resp
 
+import "github.com/raiki02/EG/pkg/utils"
+
 type CreateActivityResp struct {
-	Id         int64   `json:"id"`
+	Id         utils.SnowflakeID `json:"id"`
 	Title      string   `json:"title"`
 	Introduce  string   `json:"introduce"`
 	ShowImg    []string `json:"showImg"`
@@ -20,7 +22,7 @@ type ListActivitiesResp struct {
 	DetailTime DetailTime `json:"detailTime"`
 
 	Title      string   `json:"title"`
-	Id         int64   `json:"id"`
+	Id         utils.SnowflakeID `json:"id"`
 	Introduce  string   `json:"introduce"`
 	Position   string   `json:"position"`
 	Type       string   `json:"type"`

@@ -117,7 +117,7 @@ func (ph *PostHandler) FindPostByName(ctx *gin.Context, req_ req.FindPostReq, cl
 // @Success 200 {object} resp.Resp
 // @Router /post/delete [post]
 func (ph *PostHandler) DeletePost(ctx *gin.Context, req_ req.DeletePostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	if err := ph.ps.DeletePost(ctx, req_.TargetID, claims.Subject); err != nil {
+	if err := ph.ps.DeletePost(ctx, int64(req_.TargetID), claims.Subject); err != nil {
 		return ginx.ReturnError(err)
 	}
 	return ginx.ReturnSuccess(nil)
@@ -184,7 +184,7 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, req_ req.FindPostByOw
 // @Success 200 {object} resp.Resp{data=resp.ListPostsResp}
 // @Router /post/{id} [get]
 func (ph *PostHandler) FindPostById(ctx *gin.Context, req_ req.FindPostByIdReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostById(ctx, req_.Id)
+	posts, err := ph.ps.FindPostById(ctx, int64(req_.Id))
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

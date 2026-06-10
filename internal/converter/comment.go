@@ -6,17 +6,18 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/utils"
 	"github.com/raiki02/EG/tools"
 )
 
 func CommentFromReq(r req.CreateCommentReq, studentID string) *model.Comment {
 	id := tools.MustGenerateID()
 	return &model.Comment{
-		Id:        id,
+		Id:        int64(id),
 		StudentID: studentID,
 		Content:   r.Content,
-		ParentID:  r.ParentID,
-		RootID:    r.ParentID,
+		ParentID:  int64(r.ParentID),
+		RootID:    int64(r.ParentID),
 		CreatedAt: time.Now(),
 		Position:  "华中师范大学",
 		Subject:   r.Subject,
@@ -26,14 +27,14 @@ func CommentFromReq(r req.CreateCommentReq, studentID string) *model.Comment {
 func ToCommentResp(d model.CommentDetail) resp.CommentResp {
 	cmt := d.Comment
 	res := resp.CommentResp{
-		Id:           cmt.Id,
+		Id:            utils.SnowflakeID(cmt.Id),
 		CommentedTime: tools.ParseTime(cmt.CreatedAt),
 		CommentedPos:  cmt.Position,
 		Content:       cmt.Content,
 		LikeNum:       cmt.LikeNum,
 		ReplyNum:      cmt.ReplyNum,
-		ParentID:      cmt.ParentID,
-		RootID:        cmt.RootID,
+		ParentID:      utils.SnowflakeID(cmt.ParentID),
+		RootID:        utils.SnowflakeID(cmt.RootID),
 	}
 	if d.IsLike {
 		res.IsLike = "true"
@@ -60,15 +61,15 @@ func ToCommentResps(details []model.CommentDetail) []resp.CommentResp {
 func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 	cmt := d.Comment
 	res := resp.ReplyResp{
-		Id:            cmt.Id,
-		ReplyContent:   cmt.Content,
-		ReplyTime:      tools.ParseTime(cmt.CreatedAt),
-		ReplyPos:       cmt.Position,
-		ParentID:       cmt.ParentID,
-		RootID:         cmt.RootID,
+		Id:            utils.SnowflakeID(cmt.Id),
+		ReplyContent:  cmt.Content,
+		ReplyTime:     tools.ParseTime(cmt.CreatedAt),
+		ReplyPos:      cmt.Position,
+		ParentID:      utils.SnowflakeID(cmt.ParentID),
+		RootID:        utils.SnowflakeID(cmt.RootID),
 		ParentUserName: cmt.ReplyToUserName,
-		LikeNum:        cmt.LikeNum,
-		ReplyNum:       cmt.ReplyNum,
+		LikeNum:       cmt.LikeNum,
+		ReplyNum:      cmt.ReplyNum,
 	}
 	if d.IsLike {
 		res.IsLike = "true"

@@ -1,5 +1,7 @@
 package req
 
+import "github.com/raiki02/EG/pkg/utils"
+
 type ActSearchReq struct {
 	Type       []string `json:"type,omitempty"`
 	HolderType []string `json:"holderType,omitempty"`
@@ -39,7 +41,7 @@ type FindActByDateReq struct {
 }
 
 type FindActByIdReq struct {
-	Id int64 `json:"id" validate:"required" form:"id" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
 }
 
 type FindActByUserIDReq struct {

@@ -1,15 +1,17 @@
 package req
 
+import "github.com/raiki02/EG/pkg/utils"
+
 type DeleteCommentReq struct {
-	TargetID int64 `json:"targetId" validate:"required"`
+	TargetID utils.SnowflakeID `json:"targetId" validate:"required"`
 }
 
 type CreateCommentReq struct {
-	Content  string `json:"content" validate:"required"`
-	ParentID int64 `json:"parentId" validate:"required"`
-	Subject  string `json:"subject" validate:"required"`
+	Content  string            `json:"content" validate:"required"`
+	ParentID utils.SnowflakeID `json:"parentId" validate:"required"`
+	Subject  string            `json:"subject" validate:"required"`
 }
 
 type LoadCommentsReq struct {
-	Id int64 `json:"id" validate:"required" form:"id" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
 }

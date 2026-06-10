@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/utils"
 )
 
 func ToGetTotalCntResp(detail model.BriefFeedDetail) resp.BriefFeedResp {
@@ -31,11 +32,11 @@ func ToGetLikeFeedResp(feeds []model.FeedLikeDetail) []resp.FeedLikeResp {
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedLikeResp{
-			Id:          v.Id,
+			Id:          utils.SnowflakeID(v.Id),
 			Message:     v.Message,
 			PublishedAt: v.PublishedAt,
-			TargetId:    v.TargetId,
-			RootID:      v.RootID,
+			TargetId:    utils.SnowflakeID(v.TargetId),
+			RootID:      utils.SnowflakeID(v.RootID),
 			RootType:    v.RootType,
 			Subject:     v.Subject,
 			Status:      v.Status,
@@ -56,11 +57,11 @@ func ToGetCollectFeedResp(feeds []model.FeedCollectDetail) []resp.FeedCollectRes
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedCollectResp{
-			Id:          v.Id,
+			Id:          utils.SnowflakeID(v.Id),
 			Message:     v.Message,
 			PublishedAt: v.PublishedAt,
-			TargetId:    v.TargetId,
-			RootID:      v.RootID,
+			TargetId:    utils.SnowflakeID(v.TargetId),
+			RootID:      utils.SnowflakeID(v.RootID),
 			RootType:    v.RootType,
 			Subject:     v.Subject,
 			Status:      v.Status,
@@ -81,11 +82,11 @@ func ToGetCommentFeedResp(feeds []model.FeedCommentDetail) []resp.FeedCommentRes
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedCommentResp{
-			Id:          v.Id,
+			Id:          utils.SnowflakeID(v.Id),
 			Message:     v.Message,
 			PublishedAt: v.PublishedAt,
-			TargetId:    v.TargetId,
-			RootID:      v.RootID,
+			TargetId:    utils.SnowflakeID(v.TargetId),
+			RootID:      utils.SnowflakeID(v.RootID),
 			RootType:    v.RootType,
 			Subject:     v.Subject,
 			Status:      v.Status,
@@ -106,11 +107,11 @@ func ToGetAtFeedResp(feeds []model.FeedAtDetail) []resp.FeedAtResp {
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedAtResp{
-			Id:          v.Id,
+			Id:          utils.SnowflakeID(v.Id),
 			Message:     v.Message,
 			PublishedAt: v.PublishedAt,
-			TargetId:    v.TargetId,
-			RootID:      v.RootID,
+			TargetId:    utils.SnowflakeID(v.TargetId),
+			RootID:      utils.SnowflakeID(v.RootID),
 			RootType:    v.RootType,
 			Subject:     v.Subject,
 			Status:      v.Status,
@@ -131,11 +132,11 @@ func ToGetAuditorFeedListResp(feeds []model.FeedInvitationDetail) []resp.FeedInv
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedInvitationResp{
-			Id:          v.Id,
+			Id:          utils.SnowflakeID(v.Id),
 			Message:     v.Message,
 			PublishedAt: v.PublishedAt,
-			TargetId:    v.TargetId,
-			RootID:      v.RootID,
+			TargetId:    utils.SnowflakeID(v.TargetId),
+			RootID:      utils.SnowflakeID(v.RootID),
 			RootType:    v.RootType,
 			Subject:     v.Subject,
 			Status:      v.Status,
@@ -165,7 +166,7 @@ func GetFirstPic(pics string) string {
 
 func FeedFromInteractionReq(r *req.InteractionReq, action string, studentID string, receiver string) model.Feed {
 	return model.Feed{
-		TargetId: r.TargetID,
+		TargetId: int64(r.TargetID),
 		Object:   r.Subject,
 		StudentID: studentID,
 		Action:   action,

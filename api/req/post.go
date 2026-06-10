@@ -1,5 +1,7 @@
 package req
 
+import "github.com/raiki02/EG/pkg/utils"
+
 type CreatePostReq struct {
 	Title     string   `json:"title" validate:"required"`
 	Introduce string   `json:"introduce" validate:"required"`
@@ -19,11 +21,11 @@ type FindPostReq struct {
 }
 
 type DeletePostReq struct {
-	TargetID int64 `json:"targetId" validate:"required"`
+	TargetID utils.SnowflakeID `json:"targetId" validate:"required"`
 }
 
 type FindPostByIdReq struct {
-	Id int64 `json:"id" validate:"required" form:"id" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
 }
 
 type FindByUserIDReq struct {

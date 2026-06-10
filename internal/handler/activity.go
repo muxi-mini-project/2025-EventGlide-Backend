@@ -209,7 +209,7 @@ func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, cla
 // @Success 200 {object} resp.Resp{data=resp.ListActivitiesResp}
 // @Router /act/{id} [get]
 func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	act, err := ah.as.FindActById(ctx, req_.Id)
+	act, err := ah.as.FindActById(ctx, int64(req_.Id))
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
