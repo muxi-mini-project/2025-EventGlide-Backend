@@ -42,9 +42,9 @@ func NewInteractionService(id *repo.InteractionRepo, mq mq.MQHdl, sg SubjectGett
 }
 
 func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid string) error {
-	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
+	ap, err := is.sg.GetSubjectInfo(c, int64(r.TargetID), r.Subject)
 	if err != nil {
-		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", r.TargetID), zap.String("subject", r.Subject))
+		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
 	}
 	if sid != ap.StudentID {
@@ -59,11 +59,11 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 
 	switch r.Subject {
 	case SubjectActivity:
-		return is.id.LikeActivity(c, sid, r.TargetID)
+		return is.id.LikeActivity(c, sid, int64(r.TargetID))
 	case SubjectPost:
-		return is.id.LikePost(c, sid, r.TargetID)
+		return is.id.LikePost(c, sid, int64(r.TargetID))
 	case SubjectComment:
-		return is.id.LikeComment(c, sid, r.TargetID)
+		return is.id.LikeComment(c, sid, int64(r.TargetID))
 	default:
 		return errs.ErrInteractionSubjectInvalid
 	}
@@ -72,20 +72,20 @@ func (is *InteractionService) Like(c context.Context, r *req.InteractionReq, sid
 func (is *InteractionService) Dislike(c *gin.Context, r *req.InteractionReq, sid string) error {
 	switch r.Subject {
 	case SubjectActivity:
-		return is.id.DislikeActivity(c, sid, r.TargetID)
+		return is.id.DislikeActivity(c, sid, int64(r.TargetID))
 	case SubjectPost:
-		return is.id.DislikePost(c, sid, r.TargetID)
+		return is.id.DislikePost(c, sid, int64(r.TargetID))
 	case SubjectComment:
-		return is.id.DislikeComment(c, sid, r.TargetID)
+		return is.id.DislikeComment(c, sid, int64(r.TargetID))
 	default:
 		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
 func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid string) error {
-	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
+	ap, err := is.sg.GetSubjectInfo(c, int64(r.TargetID), r.Subject)
 	if err != nil {
-		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", r.TargetID), zap.String("subject", r.Subject))
+		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
 	}
 	if sid != ap.StudentID {
@@ -100,20 +100,20 @@ func (is *InteractionService) Comment(c *gin.Context, r *req.InteractionReq, sid
 
 	switch r.Subject {
 	case SubjectActivity:
-		return is.id.CommentActivity(c, sid, r.TargetID)
+		return is.id.CommentActivity(c, sid, int64(r.TargetID))
 	case SubjectPost:
-		return is.id.CommentPost(c, sid, r.TargetID)
+		return is.id.CommentPost(c, sid, int64(r.TargetID))
 	case SubjectComment:
-		return is.id.CommentComment(c, sid, r.TargetID)
+		return is.id.CommentComment(c, sid, int64(r.TargetID))
 	default:
 		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
 func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid string) error {
-	ap, err := is.sg.GetSubjectInfo(c, r.TargetID, r.Subject)
+	ap, err := is.sg.GetSubjectInfo(c, int64(r.TargetID), r.Subject)
 	if err != nil {
-		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", r.TargetID), zap.String("subject", r.Subject))
+		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
 	}
 	if sid != ap.StudentID {
@@ -128,9 +128,9 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 
 	switch r.Subject {
 	case SubjectActivity:
-		return is.id.CollectActivity(c, sid, r.TargetID)
+		return is.id.CollectActivity(c, sid, int64(r.TargetID))
 	case SubjectPost:
-		return is.id.CollectPost(c, sid, r.TargetID)
+		return is.id.CollectPost(c, sid, int64(r.TargetID))
 	default:
 		return errs.ErrInteractionSubjectInvalid
 	}
@@ -139,18 +139,18 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 func (is *InteractionService) DisCollect(c *gin.Context, r *req.InteractionReq, sid string) error {
 	switch r.Subject {
 	case SubjectActivity:
-		return is.id.DiscollectActivity(c, sid, r.TargetID)
+		return is.id.DiscollectActivity(c, sid, int64(r.TargetID))
 	case SubjectPost:
-		return is.id.DiscollectPost(c, sid, r.TargetID)
+		return is.id.DiscollectPost(c, sid, int64(r.TargetID))
 	default:
 		return errs.ErrInteractionSubjectInvalid
 	}
 }
 
 func (is *InteractionService) Approve(c *gin.Context, r *req.InteractionReq, studendId string) error {
-	return is.id.ApproveActivity(c, studendId, r.TargetID)
+	return is.id.ApproveActivity(c, studendId, int64(r.TargetID))
 }
 
 func (is *InteractionService) Reject(c *gin.Context, r *req.InteractionReq, studendId string) error {
-	return is.id.RejectActivity(c, studendId, r.TargetID)
+	return is.id.RejectActivity(c, studendId, int64(r.TargetID))
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/utils"
 	"github.com/raiki02/EG/tools"
 )
 
@@ -35,7 +36,7 @@ func CreatePostDraftFromReq(r *req.CreatePostReq, studentID string) *model.PostD
 
 func ToLoadPostDraftResp(d model.PostDraft) resp.LoadPostDraftResp {
 	return resp.LoadPostDraftResp{
-		Id:        d.Id,
+		Id:        utils.SnowflakeID(d.Id),
 		Title:     d.Title,
 		Introduce: d.Introduce,
 		ShowImg:   ImagesToUrls(d.Images),
@@ -88,7 +89,7 @@ func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 	res.LikeNum = post.LikeNum
 	res.CommentNum = post.CommentNum
 	res.CollectNum = post.CollectNum
-	res.Id = post.Id
+	res.Id = utils.SnowflakeID(post.Id)
 
 	return res
 }
@@ -96,7 +97,7 @@ func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 	post := d.Post
 	res := resp.CreatePostResp{
-		Id:          post.Id,
+		Id:          utils.SnowflakeID(post.Id),
 		StudentID:   d.Author.StudentID,
 		PublishTime: tools.ParseTime(post.CreatedAt),
 		Title:       post.Title,
@@ -113,7 +114,7 @@ func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 
 func ToCreatePostRespFromDraft(d model.PostDraft, author model.UserBrief) resp.CreatePostResp {
 	res := resp.CreatePostResp{
-		Id:          d.Id,
+		Id:          utils.SnowflakeID(d.Id),
 		StudentID:   author.StudentID,
 		PublishTime: tools.ParseTime(d.CreatedAt),
 		Title:       d.Title,

@@ -1,6 +1,8 @@
 package req
 
+import "github.com/raiki02/EG/pkg/utils"
+
 type InteractionReq struct {
-	TargetID int64 `json:"targetId" validate:"required"`
-	Subject  string `json:"subject" validate:"required"`
+	TargetID utils.SnowflakeID `json:"targetId" validate:"required"`
+	Subject  string            `json:"subject" validate:"required"`
 }

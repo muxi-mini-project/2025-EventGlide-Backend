@@ -84,7 +84,7 @@ func (ch *CommentHandler) AnswerComment(ctx *gin.Context, req_ req.CreateComment
 // @Success 200 {object} resp.Resp
 // @Router /comment/delete [post]
 func (ch *CommentHandler) DeleteComment(ctx *gin.Context, req_ req.DeleteCommentReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	err := ch.cs.DeleteComment(ctx, req_.TargetID, claims.Subject)
+	err := ch.cs.DeleteComment(ctx, int64(req_.TargetID), claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
@@ -100,7 +100,7 @@ func (ch *CommentHandler) DeleteComment(ctx *gin.Context, req_ req.DeleteComment
 // @Success 200 {object} resp.Resp{data=[]resp.CommentResp}
 // @Router /comment/load/{id} [get]
 func (ch *CommentHandler) LoadComments(ctx *gin.Context, req_ req.LoadCommentsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	cmts, err := ch.cs.LoadComments(ctx, req_.Id)
+	cmts, err := ch.cs.LoadComments(ctx, int64(req_.Id))
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

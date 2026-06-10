@@ -96,7 +96,7 @@ func (fh *FeedHandler) GetAuditorFeedList(ctx *gin.Context, claims jwt.Registere
 // @Success 200 {object} resp.Resp
 // @Router /feed/read/detail/{id} [get]
 func (fh *FeedHandler) ReadFeedDetail(ctx *gin.Context, req_ req.ReadFeedDetailReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	if err := fh.fs.ReadFeedDetail(ctx, claims.Subject, req_.Id); err != nil {
+	if err := fh.fs.ReadFeedDetail(ctx, claims.Subject, int64(req_.Id)); err != nil {
 		return ginx.ReturnError(err)
 	}
 
