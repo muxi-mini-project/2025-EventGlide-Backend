@@ -89,7 +89,7 @@ func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid st
 		return errs.ErrInternal.Wrap(err)
 	}
 
-	// 发送 MQ（如果 Redis 操作成功）
+	// 发送 MQ
 	if added {
 		event := mq.InteractionEvent{
 			Type:      "like",
@@ -109,7 +109,7 @@ func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid st
 		}
 	}
 
-	// 发送 feed（如果需要）
+	// 发送 feed
 	if added && sid != ap.StudentID {
 		jreq := converter.FeedFromInteractionReq(r, "like", sid, ap.StudentID)
 		err = is.mq.Publish(ctx, "feed_stream", jreq)
@@ -225,7 +225,7 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 		return errs.ErrInternal.Wrap(err)
 	}
 
-	// 发送 MQ（如果 Redis 操作成功）
+	// 发送 MQ
 	if added {
 		event := mq.InteractionEvent{
 			Type:      "collect",
@@ -245,8 +245,8 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 		}
 	}
 
-	// 发送 feed（如果需要）
-	if sid != ap.StudentID {
+	// 发送 feed
+	if added && sid != ap.StudentID {
 		jreq := converter.FeedFromInteractionReq(r, "collect", sid, ap.StudentID)
 		err = is.mq.Publish(c.Request.Context(), "feed_stream", jreq)
 		if err != nil {
