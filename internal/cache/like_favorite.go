@@ -129,23 +129,29 @@ func (l *LikeFavoriteRedis) IsCollected(ctx context.Context, subject Subject, su
 }
 
 // GetLikeCount 获取点赞数
-func (l *LikeFavoriteRedis) GetLikeCount(ctx context.Context, subject Subject, subjectID int64) (int64, error) {
+func (l *LikeFavoriteRedis) GetLikeCount(ctx context.Context, subject Subject, subjectID int64) (int64, bool, error) {
 	key := LikeCountKey(subject, subjectID)
 	count, err := l.rdb.Get(ctx, key).Int64()
 	if errors.Is(err, redis.Nil) {
-		return 0, nil // 0 也可能是合法值，通过额外标记区分
+		return 0, false, nil
 	}
-	return count, err
+	if err != nil {
+		return 0, false, err
+	}
+	return count, true, nil
 }
 
 // GetCollectCount 获取收藏数
-func (l *LikeFavoriteRedis) GetCollectCount(ctx context.Context, subject Subject, subjectID int64) (int64, error) {
+func (l *LikeFavoriteRedis) GetCollectCount(ctx context.Context, subject Subject, subjectID int64) (int64, bool, error) {
 	key := CollectCountKey(subject, subjectID)
 	count, err := l.rdb.Get(ctx, key).Int64()
 	if errors.Is(err, redis.Nil) {
-		return 0, nil
+		return 0, false, nil
 	}
-	return count, err
+	if err != nil {
+		return 0, false, err
+	}
+	return count, true, nil
 }
 
 // MGetLikeCounts 批量获取点赞数

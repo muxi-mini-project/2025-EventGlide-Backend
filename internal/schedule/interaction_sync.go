@@ -168,15 +168,21 @@ func (t *InteractionSyncTask) reconcileAll(ctx context.Context) {
 // reconcileActivity 对账单个活动
 func (t *InteractionSyncTask) reconcileActivity(ctx context.Context, activityId int64) {
 	// 获取 Redis 计数
-	redisLikeCount, err := t.lfr.GetLikeCount(ctx, cache.SubjectActivity, activityId)
+	redisLikeCount, exists, err := t.lfr.GetLikeCount(ctx, cache.SubjectActivity, activityId)
 	if err != nil {
 		t.l.Warn("GetLikeCount from Redis failed", zap.Error(err), zap.Int64("activityId", activityId))
 		return
 	}
+	if !exists {
+		return
+	}
 
-	redisCollectCount, err := t.lfr.GetCollectCount(ctx, cache.SubjectActivity, activityId)
+	redisCollectCount, exists, err := t.lfr.GetCollectCount(ctx, cache.SubjectActivity, activityId)
 	if err != nil {
 		t.l.Warn("GetCollectCount from Redis failed", zap.Error(err), zap.Int64("activityId", activityId))
+		return
+	}
+	if !exists {
 		return
 	}
 
@@ -220,15 +226,21 @@ func (t *InteractionSyncTask) reconcileActivity(ctx context.Context, activityId 
 // reconcilePost 对账单个帖子
 func (t *InteractionSyncTask) reconcilePost(ctx context.Context, postId int64) {
 	// 获取 Redis 计数
-	redisLikeCount, err := t.lfr.GetLikeCount(ctx, cache.SubjectPost, postId)
+	redisLikeCount, exists, err := t.lfr.GetLikeCount(ctx, cache.SubjectPost, postId)
 	if err != nil {
 		t.l.Warn("GetLikeCount from Redis failed", zap.Error(err), zap.Int64("postId", postId))
 		return
 	}
+	if !exists {
+		return
+	}
 
-	redisCollectCount, err := t.lfr.GetCollectCount(ctx, cache.SubjectPost, postId)
+	redisCollectCount, exists, err := t.lfr.GetCollectCount(ctx, cache.SubjectPost, postId)
 	if err != nil {
 		t.l.Warn("GetCollectCount from Redis failed", zap.Error(err), zap.Int64("postId", postId))
+		return
+	}
+	if !exists {
 		return
 	}
 
