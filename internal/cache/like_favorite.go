@@ -55,7 +55,10 @@ return added
 const unlikeScript = `
 local removed = redis.call("SREM", KEYS[1], ARGV[1])
 if removed == 1 then
-    redis.call("DECR", KEYS[2])
+    local v = redis.call("DECR", KEYS[2])
+    if v < 0 then
+        redis.call("SET", KEYS[2], 0)
+    end
 end
 return removed
 `
