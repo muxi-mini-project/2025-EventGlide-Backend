@@ -32,7 +32,7 @@ func ToCommentResp(d model.CommentDetail) resp.CommentResp {
 		CommentedPos:  cmt.Position,
 		Content:       cmt.Content,
 		LikeNum:       cmt.LikeNum,
-		ReplyNum:      cmt.ReplyNum,
+		ReplyNum:      len(d.Replies),
 		ParentID:      utils.SnowflakeID(cmt.ParentID),
 		RootID:        utils.SnowflakeID(cmt.RootID),
 	}
@@ -69,7 +69,7 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 		RootID:        utils.SnowflakeID(cmt.RootID),
 		ParentUserName: cmt.ReplyToUserName,
 		LikeNum:       cmt.LikeNum,
-		ReplyNum:      cmt.ReplyNum,
+		ReplyNum:      0, // 回复的回复数始终为0，无嵌套结构
 	}
 	if d.IsLike {
 		res.IsLike = "true"

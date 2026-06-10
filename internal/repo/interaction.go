@@ -85,10 +85,6 @@ func (r *InteractionRepo) CommentPost(ctx context.Context, studentID string, tar
 	return r.posts.Invalidate(ctx, targetID)
 }
 
-func (r *InteractionRepo) CommentComment(ctx context.Context, studentID string, targetID int64) error {
-	return r.dao.CommentComment(ctx, studentID, targetID)
-}
-
 func (r *InteractionRepo) CollectActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.CollectActivity(ctx, studentID, targetID); err != nil {
 		return err

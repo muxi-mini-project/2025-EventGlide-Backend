@@ -135,11 +135,6 @@ func (id *InteractionDao) CommentPost(c context.Context, studentID string, postI
 		Update("comment_num", gorm.Expr("comment_num + ?", 1)).Error
 }
 
-func (id *InteractionDao) CommentComment(c context.Context, studentID string, commentId int64) error {
-	return id.db.WithContext(c).Model(&model.Comment{}).Where("id = ?", commentId).
-		Update("reply_num", gorm.Expr("reply_num + ?", 1)).Error
-}
-
 func (id *InteractionDao) CollectActivity(c context.Context, studentID string, activityId int64) error {
 	var userId int64
 	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
