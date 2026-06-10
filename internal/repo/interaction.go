@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/model"
 )
 
 type InteractionRepo struct {
@@ -166,20 +167,28 @@ func (r *InteractionRepo) IsUserLikedComment(ctx context.Context, userId, commen
 	return r.dao.IsUserLikedComment(ctx, userId, commentId)
 }
 
-func (r *InteractionRepo) GetUserCollectedActivityIds(ctx context.Context, userId int64) ([]int64, error) {
-	return r.dao.GetUserCollectedActivityIds(ctx, userId)
+func (r *InteractionRepo) GetUserCollectedActivityIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
+	return r.dao.GetUserCollectedActivityIds(ctx, userId, page, limit)
 }
 
-func (r *InteractionRepo) GetUserLikedActivityIds(ctx context.Context, userId int64) ([]int64, error) {
-	return r.dao.GetUserLikedActivityIds(ctx, userId)
+func (r *InteractionRepo) GetUserLikedActivityIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
+	return r.dao.GetUserLikedActivityIds(ctx, userId, page, limit)
 }
 
-func (r *InteractionRepo) GetUserCollectedPostIds(ctx context.Context, userId int64) ([]int64, error) {
-	return r.dao.GetUserCollectedPostIds(ctx, userId)
+func (r *InteractionRepo) GetUserCollectedPostIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
+	return r.dao.GetUserCollectedPostIds(ctx, userId, page, limit)
 }
 
-func (r *InteractionRepo) GetUserLikedPostIds(ctx context.Context, userId int64) ([]int64, error) {
-	return r.dao.GetUserLikedPostIds(ctx, userId)
+func (r *InteractionRepo) GetUserLikedPostIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
+	return r.dao.GetUserLikedPostIds(ctx, userId, page, limit)
+}
+
+func (r *InteractionRepo) GetUserActivityInteractionStatuses(ctx context.Context, userId int64, activityIds []int64) ([]int64, []int64, error) {
+	return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
+}
+
+func (r *InteractionRepo) GetUserPostInteractionStatuses(ctx context.Context, userId int64, postIds []int64) ([]int64, []int64, error) {
+	return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
 }
 
 func joinErr(errs ...error) error {

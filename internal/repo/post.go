@@ -94,3 +94,7 @@ func (r *PostRepo) Invalidate(ctx context.Context, id int64) error {
 func (r *PostRepo) postByIdKey(id int64) string {
 	return r.kb.Build("id", fmt.Sprintf("%d", id))
 }
+
+func (r *PostRepo) FindPostsByIds(ctx context.Context, ids []int64) ([]model.Post, error) {
+	return r.dao.FindPostsByIds(ctx, ids)
+}

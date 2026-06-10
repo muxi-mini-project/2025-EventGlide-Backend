@@ -43,10 +43,10 @@ func (uh *UserHandler) RegisterUserHandlers(e *gin.Engine, handlerFunc gin.Handl
 			user.POST("/username", ginx.WrapRequestWithClaims(uh.UpdateUsername))
 			user.POST("/search/act", ginx.WrapRequestWithClaims(uh.SearchUserAct))
 			user.POST("/search/post", ginx.WrapRequestWithClaims(uh.SearchUserPost))
-			user.POST("/collect/act", ginx.WrapWithClaims(uh.LoadCollectAct))
-			user.POST("/collect/post", ginx.WrapWithClaims(uh.LoadCollectPost))
-			user.POST("/like/act", ginx.WrapWithClaims(uh.LoadLikeAct))
-			user.POST("/like/post", ginx.WrapWithClaims(uh.LoadLikePost))
+			user.POST("/collect/act", ginx.WrapRequestWithClaims(uh.LoadCollectAct))
+			user.POST("/collect/post", ginx.WrapRequestWithClaims(uh.LoadCollectPost))
+			user.POST("/like/act", ginx.WrapRequestWithClaims(uh.LoadLikeAct))
+			user.POST("/like/post", ginx.WrapRequestWithClaims(uh.LoadLikePost))
 			user.GET("/checking", ginx.WrapWithClaims(uh.Checking))
 			user.POST("/verify", ginx.WrapRequest(uh.VerifyUser))
 		}
@@ -181,15 +181,17 @@ func (uh *UserHandler) GenQiniuToken(ctx *gin.Context) (resp.Resp, error) {
 // @Summary 加载活动收藏
 // @Produce json
 // @Param Authorization header string true "token"
-// @Param cr body req.NumReq true "加载收藏请求"
+// @Param cr body req.UserSearchReq true "加载收藏请求"
 // @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
 // @Router /user/collect/act [post]
-func (uh *UserHandler) LoadCollectAct(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	details, err := uh.us.LoadCollectAct(ctx, claims.Subject)
+func (uh *UserHandler) LoadCollectAct(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	result, err := uh.us.LoadCollectAct(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := uh.us.EnrichActivitiesForResponse(ctx, result.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(result.Total, result.Page, result.Limit, details))
 }
 
 // LoadCollectPost
@@ -197,15 +199,17 @@ func (uh *UserHandler) LoadCollectAct(ctx *gin.Context, claims jwt.RegisteredCla
 // @Summary 加载帖子收藏
 // @Produce json
 // @Param Authorization header string true "token"
-// @Param cr body req.NumReq true "加载收藏请求"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Param cr body req.UserSearchReq true "加载收藏请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
 // @Router /user/collect/post [post]
-func (uh *UserHandler) LoadCollectPost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	details, err := uh.us.LoadCollectPost(ctx, claims.Subject)
+func (uh *UserHandler) LoadCollectPost(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	result, err := uh.us.LoadCollectPost(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
+	details := uh.us.EnrichPostsForResponse(ctx, result.Posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(result.Total, result.Page, result.Limit, details))
 }
 
 // LoadLikePost
@@ -213,15 +217,17 @@ func (uh *UserHandler) LoadCollectPost(ctx *gin.Context, claims jwt.RegisteredCl
 // @Summary 加载点赞过的帖子
 // @Produce json
 // @Param Authorization header string true "token"
-// @Param cr body req.NumReq true "点赞请求"
-// @Success 200 {object} resp.Resp{data=[]resp.ListPostsResp}
+// @Param cr body req.UserSearchReq true "点赞请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListPostsResp}
 // @Router /user/like/post [post]
-func (uh *UserHandler) LoadLikePost(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	details, err := uh.us.LoadLikePost(ctx, claims.Subject)
+func (uh *UserHandler) LoadLikePost(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	result, err := uh.us.LoadLikePost(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	return ginx.ReturnSuccess(converter.ToListPostsResp(details))
+	details := uh.us.EnrichPostsForResponse(ctx, result.Posts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListPostsResp(result.Total, result.Page, result.Limit, details))
 }
 
 // LoadLikeAct
@@ -229,15 +235,17 @@ func (uh *UserHandler) LoadLikePost(ctx *gin.Context, claims jwt.RegisteredClaim
 // @Summary 加载点赞过的活动
 // @Produce json
 // @Param Authorization header string true "token"
-// @Param cr body req.NumReq true "点赞请求"
-// @Success 200 {object} resp.Resp{data=[]resp.ListActivitiesResp}
+// @Param cr body req.UserSearchReq true "点赞请求"
+// @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /user/like/act [post]
-func (uh *UserHandler) LoadLikeAct(ctx *gin.Context, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	details, err := uh.us.LoadLikeAct(ctx, claims.Subject)
+func (uh *UserHandler) LoadLikeAct(ctx *gin.Context, req_ req.UserSearchReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
+	result, err := uh.us.LoadLikeAct(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	return ginx.ReturnSuccess(converter.ToListActivitiesResp(details))
+	details := uh.us.EnrichActivitiesForResponse(ctx, result.Acts, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(result.Total, result.Page, result.Limit, details))
 }
 
 // Checking

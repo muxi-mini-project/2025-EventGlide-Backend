@@ -179,6 +179,38 @@ func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Act
 	return details
 }
 
+func (as *ActivityService) EnrichForSearcherWithStatuses(c context.Context, acts []model.Activity, viewerID string, likedMap, collectedMap map[int64]bool) []model.ActivityDetail {
+	studentIDs := make([]string, 0, len(acts)+1)
+	studentIDs = append(studentIDs, viewerID)
+	for _, act := range acts {
+		studentIDs = append(studentIDs, act.StudentID)
+	}
+	usersMap, _ := as.ud.GetUsersByIDs(c, studentIDs)
+
+	details := make([]model.ActivityDetail, 0, len(acts))
+	for i := range acts {
+		act := &acts[i]
+		author := usersMap[act.StudentID]
+		if author == nil {
+			author = &model.User{}
+		}
+		details = append(details, model.ActivityDetail{
+			Activity: *act,
+			Author: model.UserBrief{
+				StudentID: author.StudentID,
+				Name:      author.Name,
+				Avatar:    author.Avatar,
+				School:    author.School,
+			},
+			Images:    act.Images,
+			Signers:   act.Signers,
+			IsLike:    likedMap[act.Id],
+			IsCollect: collectedMap[act.Id],
+		})
+	}
+	return details
+}
+
 func (as *ActivityService) EnrichOneForSearcher(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail {
 	return as.enrichOne(c, act, viewerID)
 }

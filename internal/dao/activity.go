@@ -364,3 +364,12 @@ func (ad *ActDao) FindPendingAuditorActivities(c context.Context) ([]model.Activ
 	}
 	return acts, nil
 }
+
+func (ad *ActDao) FindActsByIds(c context.Context, ids []int64) ([]model.Activity, error) {
+	if len(ids) == 0 {
+		return []model.Activity{}, nil
+	}
+	var acts []model.Activity
+	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("id IN ?", ids).Find(&acts).Error
+	return acts, err
+}

@@ -37,10 +37,10 @@ type UserServiceHdl interface {
 	SearchUserPost(context.Context, string, string, int, int) ([]model.PostDetail, error)
 	GenQINIUToken(context.Context) (string, string)
 	GetChecking(context.Context, string) ([]model.ActivityDetail, []model.PostDetail, error)
-	LoadCollectAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error)
-	LoadCollectPost(ctx context.Context, studentId string) ([]model.PostDetail, error)
-	LoadLikePost(ctx context.Context, studentId string) ([]model.PostDetail, error)
-	LoadLikeAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error)
+	LoadCollectAct(ctx context.Context, studentId string, page, limit int) (*model.PaginatedActivities, error)
+	LoadCollectPost(ctx context.Context, studentId string, page, limit int) (*model.PaginatedPosts, error)
+	LoadLikePost(ctx context.Context, studentId string, page, limit int) (*model.PaginatedPosts, error)
+	LoadLikeAct(ctx context.Context, studentId string, page, limit int) (*model.PaginatedActivities, error)
 	VerifyUser(ctx context.Context, studentId string, realName string) (bool, error)
 }
 
@@ -209,109 +209,220 @@ func (us *UserService) GetChecking(ctx context.Context, studentId string) ([]mod
 	return actDetails, postDetails, nil
 }
 
-//func genRandomAvatar(c context.Context) string {
-//	avatars := []string{
-//		viper.GetString("imgbed.defaultAvatar1"),
-//		viper.GetString("imgbed.defaultAvatar2"),
-//	}
-//	n := rand.Intn(10)
-//	if n == 9 {
-//		return avatars[1]
-//	} else {
-//		return avatars[0]
-//	}
-//}
-
 func (us *UserService) GenQINIUToken(ctx context.Context) (string, string) {
 	return us.iuh.GenQINIUToken(ctx), us.iuh.ImgUrl
 }
 
-func (us *UserService) LoadCollectAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error) {
+func (us *UserService) LoadCollectAct(ctx context.Context, studentId string, page, limit int) (*model.PaginatedActivities, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
-	actIds, err := us.idh.GetUserCollectedActivityIds(ctx, int64(user.Id))
+
+	paginatedIds, err := us.idh.GetUserCollectedActivityIds(ctx, int64(user.Id), page, limit)
 	if err != nil {
 		us.l.Error("Failed to get collected activity ids", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	var res []model.ActivityDetail
-	for _, id := range actIds {
-		acts, err := us.adh.FindActById(ctx, id)
-		if err != nil {
-			continue
-		}
-		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
+
+	if len(paginatedIds.Ids) == 0 {
+		return &model.PaginatedActivities{Total: paginatedIds.Total, Page: page, Limit: limit, Acts: []model.Activity{}}, nil
 	}
-	return res, nil
+
+	acts, err := us.adh.FindActsByIds(ctx, paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to find activities by ids", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+
+	actMap := make(map[int64]model.Activity)
+	for _, act := range acts {
+		actMap[act.Id] = act
+	}
+
+	var orderedActs []model.Activity
+	for _, id := range paginatedIds.Ids {
+		if act, ok := actMap[id]; ok {
+			orderedActs = append(orderedActs, act)
+		}
+	}
+
+	likedIds, collectedIds, _ := us.idh.GetUserActivityInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedMap := make(map[int64]bool)
+	collectedMap := make(map[int64]bool)
+	for _, id := range likedIds {
+		likedMap[id] = true
+	}
+	for _, id := range collectedIds {
+		collectedMap[id] = true
+	}
+
+	details := us.as.EnrichForSearcherWithStatuses(ctx, orderedActs, studentId, likedMap, collectedMap)
+	actsOut := make([]model.Activity, 0, len(details))
+	for _, d := range details {
+		actsOut = append(actsOut, d.Activity)
+	}
+	return &model.PaginatedActivities{Total: paginatedIds.Total, Page: page, Limit: limit, Acts: actsOut}, nil
 }
 
-func (us *UserService) LoadCollectPost(ctx context.Context, studentId string) ([]model.PostDetail, error) {
+func (us *UserService) LoadCollectPost(ctx context.Context, studentId string, page, limit int) (*model.PaginatedPosts, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
-	postIds, err := us.idh.GetUserCollectedPostIds(ctx, int64(user.Id))
+
+	paginatedIds, err := us.idh.GetUserCollectedPostIds(ctx, int64(user.Id), page, limit)
 	if err != nil {
 		us.l.Error("Failed to get collected post ids", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	var res []model.PostDetail
-	for _, id := range postIds {
-		posts, err := us.pdh.FindPostById(ctx, id)
-		if err != nil {
-			continue
-		}
-		res = append(res, us.ps.EnrichOneForSearcher(ctx, &posts, studentId))
+
+	if len(paginatedIds.Ids) == 0 {
+		return &model.PaginatedPosts{Total: paginatedIds.Total, Page: page, Limit: limit, Posts: []model.Post{}}, nil
 	}
-	return res, nil
+
+	posts, err := us.pdh.FindPostsByIds(ctx, paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to find posts by ids", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+
+	postMap := make(map[int64]model.Post)
+	for _, p := range posts {
+		postMap[p.Id] = p
+	}
+
+	var orderedPosts []model.Post
+	for _, id := range paginatedIds.Ids {
+		if post, ok := postMap[id]; ok {
+			orderedPosts = append(orderedPosts, post)
+		}
+	}
+
+	likedIds, collectedIds, _ := us.idh.GetUserPostInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedMap := make(map[int64]bool)
+	collectedMap := make(map[int64]bool)
+	for _, id := range likedIds {
+		likedMap[id] = true
+	}
+	for _, id := range collectedIds {
+		collectedMap[id] = true
+	}
+
+	details := us.ps.EnrichForSearcherWithStatuses(ctx, orderedPosts, studentId, likedMap, collectedMap)
+	postsOut := make([]model.Post, 0, len(details))
+	for _, d := range details {
+		postsOut = append(postsOut, d.Post)
+	}
+	return &model.PaginatedPosts{Total: paginatedIds.Total, Page: page, Limit: limit, Posts: postsOut}, nil
 }
 
-func (us *UserService) LoadLikePost(ctx context.Context, studentId string) ([]model.PostDetail, error) {
+func (us *UserService) LoadLikePost(ctx context.Context, studentId string, page, limit int) (*model.PaginatedPosts, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
-	postIds, err := us.idh.GetUserLikedPostIds(ctx, int64(user.Id))
+
+	paginatedIds, err := us.idh.GetUserLikedPostIds(ctx, int64(user.Id), page, limit)
 	if err != nil {
 		us.l.Error("Failed to get liked post ids", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	var res []model.PostDetail
-	for _, id := range postIds {
-		posts, err := us.pdh.FindPostById(ctx, id)
-		if err != nil {
-			continue
-		}
-		res = append(res, us.ps.EnrichOneForSearcher(ctx, &posts, studentId))
+
+	if len(paginatedIds.Ids) == 0 {
+		return &model.PaginatedPosts{Total: paginatedIds.Total, Page: page, Limit: limit, Posts: []model.Post{}}, nil
 	}
-	return res, nil
+
+	posts, err := us.pdh.FindPostsByIds(ctx, paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to find posts by ids", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+
+	postMap := make(map[int64]model.Post)
+	for _, p := range posts {
+		postMap[p.Id] = p
+	}
+
+	var orderedPosts []model.Post
+	for _, id := range paginatedIds.Ids {
+		if post, ok := postMap[id]; ok {
+			orderedPosts = append(orderedPosts, post)
+		}
+	}
+
+	likedIds, collectedIds, _ := us.idh.GetUserPostInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedMap := make(map[int64]bool)
+	collectedMap := make(map[int64]bool)
+	for _, id := range likedIds {
+		likedMap[id] = true
+	}
+	for _, id := range collectedIds {
+		collectedMap[id] = true
+	}
+
+	details := us.ps.EnrichForSearcherWithStatuses(ctx, orderedPosts, studentId, likedMap, collectedMap)
+	postsOut := make([]model.Post, 0, len(details))
+	for _, d := range details {
+		postsOut = append(postsOut, d.Post)
+	}
+	return &model.PaginatedPosts{Total: paginatedIds.Total, Page: page, Limit: limit, Posts: postsOut}, nil
 }
 
-func (us *UserService) LoadLikeAct(ctx context.Context, studentId string) ([]model.ActivityDetail, error) {
+func (us *UserService) LoadLikeAct(ctx context.Context, studentId string, page, limit int) (*model.PaginatedActivities, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
-	actIds, err := us.idh.GetUserLikedActivityIds(ctx, int64(user.Id))
+
+	paginatedIds, err := us.idh.GetUserLikedActivityIds(ctx, int64(user.Id), page, limit)
 	if err != nil {
 		us.l.Error("Failed to get liked activity ids", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	var res []model.ActivityDetail
-	for _, id := range actIds {
-		acts, err := us.adh.FindActById(ctx, id)
-		if err != nil {
-			continue
-		}
-		res = append(res, us.as.EnrichOneForSearcher(ctx, &acts, studentId))
+
+	if len(paginatedIds.Ids) == 0 {
+		return &model.PaginatedActivities{Total: paginatedIds.Total, Page: page, Limit: limit, Acts: []model.Activity{}}, nil
 	}
-	return res, nil
+
+	acts, err := us.adh.FindActsByIds(ctx, paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to find activities by ids", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+
+	actMap := make(map[int64]model.Activity)
+	for _, act := range acts {
+		actMap[act.Id] = act
+	}
+
+	var orderedActs []model.Activity
+	for _, id := range paginatedIds.Ids {
+		if act, ok := actMap[id]; ok {
+			orderedActs = append(orderedActs, act)
+		}
+	}
+
+	likedIds, collectedIds, _ := us.idh.GetUserActivityInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedMap := make(map[int64]bool)
+	collectedMap := make(map[int64]bool)
+	for _, id := range likedIds {
+		likedMap[id] = true
+	}
+	for _, id := range collectedIds {
+		collectedMap[id] = true
+	}
+
+	details := us.as.EnrichForSearcherWithStatuses(ctx, orderedActs, studentId, likedMap, collectedMap)
+	actsOut := make([]model.Activity, 0, len(details))
+	for _, d := range details {
+		actsOut = append(actsOut, d.Activity)
+	}
+	return &model.PaginatedActivities{Total: paginatedIds.Total, Page: page, Limit: limit, Acts: actsOut}, nil
 }
 
 func (us *UserService) VerifyUser(ctx context.Context, studentId string, realName string) (bool, error) {
@@ -323,6 +434,38 @@ func (us *UserService) VerifyUser(ctx context.Context, studentId string, realNam
 		return false, errs.ErrRealNameMismatch
 	}
 	return true, nil
+}
+
+func (us *UserService) EnrichPaginatedActivities(ctx context.Context, result *model.PaginatedActivities, studentId string) *model.PaginatedActivities {
+	if len(result.Acts) == 0 {
+		return &model.PaginatedActivities{Total: result.Total, Page: result.Page, Limit: result.Limit, Acts: []model.Activity{}}
+	}
+	details := us.as.EnrichForSearcher(ctx, result.Acts, studentId)
+	actsOut := make([]model.Activity, 0, len(details))
+	for _, d := range details {
+		actsOut = append(actsOut, d.Activity)
+	}
+	return &model.PaginatedActivities{Total: result.Total, Page: result.Page, Limit: result.Limit, Acts: actsOut}
+}
+
+func (us *UserService) EnrichPaginatedPosts(ctx context.Context, result *model.PaginatedPosts, studentId string) *model.PaginatedPosts {
+	if len(result.Posts) == 0 {
+		return &model.PaginatedPosts{Total: result.Total, Page: result.Page, Limit: result.Limit, Posts: []model.Post{}}
+	}
+	details := us.ps.EnrichForSearcher(ctx, result.Posts, studentId)
+	postsOut := make([]model.Post, 0, len(details))
+	for _, d := range details {
+		postsOut = append(postsOut, d.Post)
+	}
+	return &model.PaginatedPosts{Total: result.Total, Page: result.Page, Limit: result.Limit, Posts: postsOut}
+}
+
+func (us *UserService) EnrichActivitiesForResponse(ctx context.Context, acts []model.Activity, studentId string) []model.ActivityDetail {
+	return us.as.EnrichForSearcher(ctx, acts, studentId)
+}
+
+func (us *UserService) EnrichPostsForResponse(ctx context.Context, posts []model.Post, studentId string) []model.PostDetail {
+	return us.ps.EnrichForSearcher(ctx, posts, studentId)
 }
 
 //---一站式账号登录------------------------------------------------------------

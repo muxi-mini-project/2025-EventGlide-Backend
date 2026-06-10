@@ -23,3 +23,19 @@ type UserCommentInteraction struct {
 	CommentId int64 `gorm:"type:bigint;index;column:comment_id;not null"`
 	Type      string `gorm:"type:varchar(20);column:type;not null"` // like
 }
+
+// PaginatedActivityIds 用户收藏/点赞的活动 ID 分页结果
+type PaginatedActivityIds struct {
+	Total int64
+	Page  int
+	Limit int
+	Ids   []int64
+}
+
+// PaginatedPostIds 用户收藏/点赞的帖子 ID 分页结果
+type PaginatedPostIds struct {
+	Total int64
+	Page  int
+	Limit int
+	Ids   []int64
+}

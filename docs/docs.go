@@ -1510,7 +1510,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1562,7 +1562,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1578,10 +1578,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -1661,7 +1658,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1677,10 +1674,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -1713,7 +1707,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1729,10 +1723,7 @@ const docTemplate = `{
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -2401,20 +2392,6 @@ const docTemplate = `{
                 },
                 "studentId": {
                     "type": "string"
-                }
-            }
-        },
-        "req.NumReq": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string"
-                },
-                "object": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
                 }
             }
         },

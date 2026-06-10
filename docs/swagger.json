@@ -1502,7 +1502,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1554,7 +1554,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1570,10 +1570,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -1653,7 +1650,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1669,10 +1666,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListActivitiesResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListActivitiesResp"
                                         }
                                     }
                                 }
@@ -1705,7 +1699,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/req.NumReq"
+                            "$ref": "#/definitions/req.UserSearchReq"
                         }
                     }
                 ],
@@ -1721,10 +1715,7 @@
                                     "type": "object",
                                     "properties": {
                                         "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/resp.ListPostsResp"
-                                            }
+                                            "$ref": "#/definitions/resp.PaginatedListPostsResp"
                                         }
                                     }
                                 }
@@ -2393,20 +2384,6 @@
                 },
                 "studentId": {
                     "type": "string"
-                }
-            }
-        },
-        "req.NumReq": {
-            "type": "object",
-            "properties": {
-                "action": {
-                    "type": "string"
-                },
-                "object": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
                 }
             }
         },
