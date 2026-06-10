@@ -230,7 +230,10 @@ func (r *InteractionRepo) GetUserActivityInteractionStatuses(ctx context.Context
 	likedMap := make(map[int64]bool)
 	for _, aid := range activityIds {
 		liked, err := r.lfr.IsLiked(ctx, cache.SubjectActivity, aid, userId)
-		if err == nil && liked {
+		if err != nil {
+			return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
+		}
+		if liked {
 			likedMap[aid] = true
 		}
 	}
@@ -239,7 +242,10 @@ func (r *InteractionRepo) GetUserActivityInteractionStatuses(ctx context.Context
 	collectedMap := make(map[int64]bool)
 	for _, aid := range activityIds {
 		collected, err := r.lfr.IsCollected(ctx, cache.SubjectActivity, aid, userId)
-		if err == nil && collected {
+		if err != nil {
+			return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
+		}
+		if collected {
 			collectedMap[aid] = true
 		}
 	}
