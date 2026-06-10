@@ -166,6 +166,38 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 	return details
 }
 
+// EnrichForSearcherWithStatuses 批量 enrich 并注入互动状态（避免 N+1）
+func (ps *PostService) EnrichForSearcherWithStatuses(c context.Context, posts []model.Post, viewerID string, likedMap, collectedMap map[int64]bool) []model.PostDetail {
+	studentIDs := make([]string, 0, len(posts)+1)
+	studentIDs = append(studentIDs, viewerID)
+	for _, post := range posts {
+		studentIDs = append(studentIDs, post.StudentID)
+	}
+	usersMap, _ := ps.ud.GetUsersByIDs(c, studentIDs)
+
+	details := make([]model.PostDetail, 0, len(posts))
+	for i := range posts {
+		post := &posts[i]
+		author := usersMap[post.StudentID]
+		if author == nil {
+			author = &model.User{}
+		}
+		details = append(details, model.PostDetail{
+			Post:      *post,
+			Author: model.UserBrief{
+				StudentID: author.StudentID,
+				Name:      author.Name,
+				Avatar:    author.Avatar,
+				School:    author.School,
+			},
+			Images:    post.Images,
+			IsLike:    likedMap[post.Id],
+			IsCollect: collectedMap[post.Id],
+		})
+	}
+	return details
+}
+
 func (ps *PostService) EnrichOneForSearcher(c context.Context, post *model.Post, viewerID string) model.PostDetail {
 	return ps.enrichOne(c, post, viewerID)
 }

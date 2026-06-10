@@ -281,35 +281,146 @@ func (id *InteractionDao) IsUserLikedComment(c context.Context, userId, commentI
 	return count > 0
 }
 
-func (id *InteractionDao) GetUserCollectedActivityIds(c context.Context, userId int64) ([]int64, error) {
+func (id *InteractionDao) GetUserCollectedActivityIds(c context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
+	offset := (page - 1) * limit
 	var ids []int64
+	var total int64
+
 	err := id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
 		Where("user_id = ? AND type = ?", userId, "collect").
+		Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	err = id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
+		Where("user_id = ? AND type = ?", userId, "collect").
+		Order("id DESC").
+		Limit(limit).Offset(offset).
 		Pluck("activity_id", &ids).Error
-	return ids, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivityIds{Total: total, Page: page, Limit: limit, Ids: ids}, nil
 }
 
-// GetUserLikedActivityIds returns activity IDs liked by user
-func (id *InteractionDao) GetUserLikedActivityIds(c context.Context, userId int64) ([]int64, error) {
+func (id *InteractionDao) GetUserLikedActivityIds(c context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
+	offset := (page - 1) * limit
 	var ids []int64
+	var total int64
+
 	err := id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
 		Where("user_id = ? AND type = ?", userId, "like").
+		Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	err = id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
+		Where("user_id = ? AND type = ?", userId, "like").
+		Order("id DESC").
+		Limit(limit).Offset(offset).
 		Pluck("activity_id", &ids).Error
-	return ids, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivityIds{Total: total, Page: page, Limit: limit, Ids: ids}, nil
 }
 
-func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int64) ([]int64, error) {
+func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
+	offset := (page - 1) * limit
 	var ids []int64
+	var total int64
+
 	err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
 		Where("user_id = ? AND type = ?", userId, "collect").
+		Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	err = id.db.WithContext(c).Model(&model.UserPostInteraction{}).
+		Where("user_id = ? AND type = ?", userId, "collect").
+		Order("id DESC").
+		Limit(limit).Offset(offset).
 		Pluck("post_id", &ids).Error
-	return ids, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedPostIds{Total: total, Page: page, Limit: limit, Ids: ids}, nil
 }
 
-func (id *InteractionDao) GetUserLikedPostIds(c context.Context, userId int64) ([]int64, error) {
+func (id *InteractionDao) GetUserLikedPostIds(c context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
+	offset := (page - 1) * limit
 	var ids []int64
+	var total int64
+
 	err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
 		Where("user_id = ? AND type = ?", userId, "like").
+		Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	err = id.db.WithContext(c).Model(&model.UserPostInteraction{}).
+		Where("user_id = ? AND type = ?", userId, "like").
+		Order("id DESC").
+		Limit(limit).Offset(offset).
 		Pluck("post_id", &ids).Error
-	return ids, err
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedPostIds{Total: total, Page: page, Limit: limit, Ids: ids}, nil
+}
+
+func (id *InteractionDao) GetUserActivityInteractionStatuses(c context.Context, userId int64, activityIds []int64) ([]int64, []int64, error) {
+	if len(activityIds) == 0 {
+		return []int64{}, []int64{}, nil
+	}
+
+	var likedIds []int64
+	err := id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
+		Where("user_id = ? AND activity_id IN ? AND type = ?", userId, activityIds, "like").
+		Pluck("activity_id", &likedIds).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var collectedIds []int64
+	err = id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
+		Where("user_id = ? AND activity_id IN ? AND type = ?", userId, activityIds, "collect").
+		Pluck("activity_id", &collectedIds).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return likedIds, collectedIds, nil
+}
+
+func (id *InteractionDao) GetUserPostInteractionStatuses(c context.Context, userId int64, postIds []int64) ([]int64, []int64, error) {
+	if len(postIds) == 0 {
+		return []int64{}, []int64{}, nil
+	}
+
+	var likedIds []int64
+	err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
+		Where("user_id = ? AND post_id IN ? AND type = ?", userId, postIds, "like").
+		Pluck("post_id", &likedIds).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var collectedIds []int64
+	err = id.db.WithContext(c).Model(&model.UserPostInteraction{}).
+		Where("user_id = ? AND post_id IN ? AND type = ?", userId, postIds, "collect").
+		Pluck("post_id", &collectedIds).Error
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return likedIds, collectedIds, nil
 }

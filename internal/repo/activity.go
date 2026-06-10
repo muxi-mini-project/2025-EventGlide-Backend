@@ -190,3 +190,7 @@ func (r *ActivityRepo) actByIdKey(id int64) string {
 func (r *ActivityRepo) FindPendingAuditorActivities(ctx context.Context) ([]model.Activity, error) {
 	return r.dao.FindPendingAuditorActivities(ctx)
 }
+
+func (r *ActivityRepo) FindActsByIds(ctx context.Context, ids []int64) ([]model.Activity, error) {
+	return r.dao.FindActsByIds(ctx, ids)
+}

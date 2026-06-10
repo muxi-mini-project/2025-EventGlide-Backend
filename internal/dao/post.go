@@ -201,3 +201,12 @@ func (pd *PostDao) GetChecking(c context.Context, sid string) ([]model.Post, err
 	}
 	return posts, nil
 }
+
+func (pd *PostDao) FindPostsByIds(c context.Context, ids []int64) ([]model.Post, error) {
+	if len(ids) == 0 {
+		return []model.Post{}, nil
+	}
+	var posts []model.Post
+	err := pd.db.WithContext(c).Scopes(pd.SetEffect()).Preload("Images").Where("id IN ?", ids).Find(&posts).Error
+	return posts, err
+}

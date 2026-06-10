@@ -245,15 +245,6 @@ definitions:
     - password
     - studentId
     type: object
-  req.NumReq:
-    properties:
-      action:
-        type: string
-      object:
-        type: string
-      targetId:
-        type: integer
-    type: object
   req.Signer:
     properties:
       name:
@@ -1696,7 +1687,7 @@ paths:
         name: cr
         required: true
         schema:
-          $ref: '#/definitions/req.NumReq'
+          $ref: '#/definitions/req.UserSearchReq'
       produces:
       - application/json
       responses:
@@ -1727,7 +1718,7 @@ paths:
         name: cr
         required: true
         schema:
-          $ref: '#/definitions/req.NumReq'
+          $ref: '#/definitions/req.UserSearchReq'
       produces:
       - application/json
       responses:
@@ -1738,9 +1729,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/resp.ListPostsResp'
-                  type: array
+                  $ref: '#/definitions/resp.PaginatedListPostsResp'
               type: object
       summary: 加载帖子收藏
       tags:
@@ -1786,7 +1775,7 @@ paths:
         name: cr
         required: true
         schema:
-          $ref: '#/definitions/req.NumReq'
+          $ref: '#/definitions/req.UserSearchReq'
       produces:
       - application/json
       responses:
@@ -1797,9 +1786,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/resp.ListActivitiesResp'
-                  type: array
+                  $ref: '#/definitions/resp.PaginatedListActivitiesResp'
               type: object
       summary: 加载点赞过的活动
       tags:
@@ -1817,7 +1804,7 @@ paths:
         name: cr
         required: true
         schema:
-          $ref: '#/definitions/req.NumReq'
+          $ref: '#/definitions/req.UserSearchReq'
       produces:
       - application/json
       responses:
@@ -1828,9 +1815,7 @@ paths:
             - $ref: '#/definitions/resp.Resp'
             - properties:
                 data:
-                  items:
-                    $ref: '#/definitions/resp.ListPostsResp'
-                  type: array
+                  $ref: '#/definitions/resp.PaginatedListPostsResp'
               type: object
       summary: 加载点赞过的帖子
       tags:
