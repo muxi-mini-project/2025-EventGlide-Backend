@@ -18,13 +18,14 @@ import (
 )
 
 type Conf struct {
-	Mysql   MysqlConf   `yaml:"mysql"`
-	Redis   RedisConf   `yaml:"redis"`
-	JWT     JwtConf     `yaml:"jwt"`
-	Imgbed  ImgbedConf  `yaml:"imgbed"`
-	Auditor AuditorConf `yaml:"auditor"`
-	Kafka   KafkaConf   `yaml:"kafka"`
-	Log     LogConf     `yaml:"log"`
+	Mysql        MysqlConf    `yaml:"mysql"`
+	Redis        RedisConf    `yaml:"redis"`
+	JWT          JwtConf      `yaml:"jwt"`
+	Imgbed       ImgbedConf   `yaml:"imgbed"`
+	Auditor      AuditorConf  `yaml:"auditor"`
+	Kafka        KafkaConf    `yaml:"kafka"`
+	Log          LogConf      `yaml:"log"`
+	ShenlongConf ShenlongConf `yaml:"shenlongConf"`
 }
 
 type MysqlConf struct {
@@ -64,11 +65,19 @@ type KafkaConf struct {
 }
 
 type LogConf struct {
-	Path      string `yaml:"path"`
-	MaxSize   int    `yaml:"maxSize"`
-	MaxBackups int   `yaml:"maxBackups"`
-	MaxAge    int    `yaml:"maxAge"`
-	Compress  bool   `yaml:"compress"`
+	Path       string `yaml:"path"`
+	MaxSize    int    `yaml:"maxSize"`
+	MaxBackups int    `yaml:"maxBackups"`
+	MaxAge     int    `yaml:"maxAge"`
+	Compress   bool   `yaml:"compress"`
+}
+
+type ShenlongConf struct {
+	API      string `yaml:"api"`
+	Interval int    `yaml:"interval"`
+	Retry    int    `yaml:"retry"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
 }
 
 const (

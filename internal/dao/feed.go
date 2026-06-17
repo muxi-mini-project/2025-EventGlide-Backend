@@ -15,6 +15,7 @@ const (
 	TableNameActivity = "activity"
 	TableNamePost     = "post"
 	TableNameComment  = "comment"
+	TableNameImage    = "image"
 )
 
 type FeedTotalCnt struct {
@@ -116,26 +117,14 @@ func (fd *FeedDao) ReadAllFeed(ctx context.Context, sid string) error {
 }
 
 func (fd *FeedDao) GetPictureFromObj(ctx context.Context, targetId int64, object string) (string, error) {
-	type Result struct {
-		ShowImg string `gorm:"column:show_img"`
-	}
-	var tableName string
 	switch object {
 	case TableNameActivity:
-		tableName = TableNameActivity
+		return fd.GetFirstImageByOwner(ctx, targetId, TableNameActivity)
 	case TableNamePost:
-		tableName = TableNamePost
+		return fd.GetFirstImageByOwner(ctx, targetId, TableNamePost)
 	default:
 		return "", errors.New("invalid object type")
 	}
-	var res Result
-	err := fd.db.WithContext(ctx).Table(tableName).Where("id = ?", targetId).Select("show_img").Find(&res).Error
-	if err != nil {
-		fd.l.Error("Get First Pic Failed", zap.Error(err))
-		return "", err
-	}
-
-	return res.ShowImg, nil
 }
 
 func (fd *FeedDao) ResolveRootIDByCommentID(ctx context.Context, commentId int64) (int64, error) {
@@ -180,13 +169,13 @@ func int64ToString(id int64) string {
 }
 
 func (fd *FeedDao) GetPictureFromRootID(ctx context.Context, rootId int64) (string, error) {
-	if pic, ok, err := fd.findShowImgByTable(ctx, TableNamePost, rootId); err != nil {
+	if pic, ok, err := fd.findImageByOwner(ctx, TableNamePost, rootId); err != nil {
 		return "", err
 	} else if ok {
 		return pic, nil
 	}
 
-	if pic, ok, err := fd.findShowImgByTable(ctx, TableNameActivity, rootId); err != nil {
+	if pic, ok, err := fd.findImageByOwner(ctx, TableNameActivity, rootId); err != nil {
 		return "", err
 	} else if ok {
 		return pic, nil
@@ -211,20 +200,36 @@ func (fd *FeedDao) ResolveRootSubjectByID(ctx context.Context, rootId int64) (st
 	return "", gorm.ErrRecordNotFound
 }
 
-func (fd *FeedDao) findShowImgByTable(ctx context.Context, tableName string, id int64) (string, bool, error) {
+func (fd *FeedDao) GetFirstImageByOwner(ctx context.Context, ownerId int64, ownerType string) (string, error) {
+	pic, ok, err := fd.findImageByOwner(ctx, ownerType, ownerId)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", nil
+	}
+	return pic, nil
+}
+
+func (fd *FeedDao) findImageByOwner(ctx context.Context, ownerType string, ownerId int64) (string, bool, error) {
 	type Result struct {
-		ShowImg string `gorm:"column:show_img"`
+		URL string `gorm:"column:url"`
 	}
 	var res Result
-	err := fd.db.WithContext(ctx).Table(tableName).Where("id = ?", id).Select("show_img").Take(&res).Error
+	err := fd.db.WithContext(ctx).
+		Table(TableNameImage).
+		Where("owner_id = ? AND owner_type = ?", ownerId, ownerType).
+		Order("id ASC").
+		Select("url").
+		Take(&res).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", false, nil
 	}
 	if err != nil {
-		fd.l.Error("Get First Pic Failed", zap.Error(err), zap.String("table", tableName), zap.Int64("id", id))
+		fd.l.Error("Get First Pic Failed", zap.Error(err), zap.String("ownerType", ownerType), zap.Int64("ownerId", ownerId))
 		return "", false, err
 	}
-	return res.ShowImg, true, nil
+	return res.URL, true, nil
 }
 
 func (fd *FeedDao) existsByTableAndId(ctx context.Context, tableName string, id int64) (bool, error) {

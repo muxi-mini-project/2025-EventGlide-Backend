@@ -199,7 +199,7 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
-		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
+		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID, resolvedRootType)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get like feed Failed", zap.Error(err))
 		}
@@ -274,7 +274,7 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
-		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
+		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID, resolvedRootType)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get comment feed Failed", zap.Error(err))
 		}
@@ -312,7 +312,7 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
 		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
-		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID)
+		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID, resolvedRootType)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get at feed Failed", zap.Error(err))
 		}
@@ -393,9 +393,9 @@ func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (int6
 	return rootID, rootType
 }
 
-func (fs *FeedService) loadFeedPicture(ctx context.Context, f *model.Feed, resolvedRootID int64) (string, error) {
-	if f.Object == SubjectComment && resolvedRootID != 0 {
-		return fs.fd.GetPictureFromRootID(ctx, resolvedRootID)
+func (fs *FeedService) loadFeedPicture(ctx context.Context, f *model.Feed, resolvedRootID int64, resolvedRootType string) (string, error) {
+	if f.Object == SubjectComment && resolvedRootID != 0 && resolvedRootType != "" {
+		return fs.fd.GetPictureFromObj(ctx, resolvedRootID, resolvedRootType)
 	}
 	return fs.fd.GetPictureFromObj(ctx, f.TargetId, f.Object)
 }

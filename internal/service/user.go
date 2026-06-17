@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
@@ -472,11 +474,15 @@ func (us *UserService) EnrichPostsForResponse(ctx context.Context, posts []model
 
 type ccnuService struct {
 	timeout time.Duration
+	proxy   *shenlongProxyProvider
+	l       *zap.Logger
 }
 
-func NewCCNUService() *ccnuService {
+func NewCCNUService(cfg *config.Conf, l *logger.LoggerSet) *ccnuService {
 	return &ccnuService{
 		timeout: time.Second * 15,
+		proxy:   newShenlongProxyProvider(cfg.ShenlongConf),
+		l:       l.User.Named("ccnu"),
 	}
 }
 
@@ -493,20 +499,34 @@ func (c *ccnuService) Login(ctx context.Context, studentId string, password stri
 	return client, nil
 }
 
-func (c *ccnuService) client() *http.Client {
+func (c *ccnuService) client(ctx context.Context) (*http.Client, error) {
 	j, _ := cookiejar.New(&cookiejar.Options{})
+	transport := &http.Transport{
+		MaxIdleConnsPerHost:   10,
+		ResponseHeaderTimeout: 5 * time.Second,
+	}
+	if c.proxy != nil {
+		proxyURL, err := c.proxy.proxyURL(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if proxyURL != nil {
+			transport.Proxy = http.ProxyURL(proxyURL)
+		}
+	}
+
 	return &http.Client{
-		Transport: nil,
+		Transport: transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return nil
 		},
 		Jar:     j,
 		Timeout: c.timeout,
-	}
+	}, nil
 }
 
 func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId string, password string) (*http.Client, error) {
-	client, params, err := c.makeAccountPreflightRequest()
+	client, params, err := c.makeAccountPreflightRequest(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -523,7 +543,7 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	v.Set("visitorId1", id)
 	v.Set("visitorId", id)
 
-	request, err := http.NewRequest("POST", "https://account.ccnu.edu.cn/cas/login;jsessionid="+params.JSESSIONID, strings.NewReader(v.Encode()))
+	request, err := http.NewRequestWithContext(ctx, "POST", "https://account.ccnu.edu.cn/cas/login;jsessionid="+params.JSESSIONID, strings.NewReader(v.Encode()))
 	if err != nil {
 		return nil, err
 	}
@@ -591,17 +611,19 @@ type accountRequestParams struct {
 	JSESSIONID string
 }
 
-func (c *ccnuService) makeAccountPreflightRequest() (*http.Client, *accountRequestParams, error) {
+func (c *ccnuService) makeAccountPreflightRequest(ctx context.Context) (*http.Client, *accountRequestParams, error) {
 	var JSESSIONID string
 	var lt string
 	var execution string
 	var _eventId string
-	client := c.client()
-
 	params := &accountRequestParams{}
+	client, err := c.client(ctx)
+	if err != nil {
+		return nil, params, err
+	}
 
 	// 初始化 http request
-	request, err := http.NewRequest("GET", "https://account.ccnu.edu.cn/cas/login", nil)
+	request, err := http.NewRequestWithContext(ctx, "GET", "https://account.ccnu.edu.cn/cas/login", nil)
 	if err != nil {
 		return client, params, err
 	}
@@ -722,7 +744,138 @@ func parseInfo(html string) (name, department string, err error) {
 				department = strings.TrimSpace(text[pos+len("："):])
 			}
 		}
+		if department == "" && isDepartmentText(text) {
+			department = detailValue(text)
+		}
 	})
 
 	return
+}
+
+func isDepartmentText(text string) bool {
+	return strings.Contains(text, "学院") ||
+		strings.Contains(text, "院系") ||
+		strings.Contains(text, "院：") ||
+		strings.Contains(text, "院:")
+}
+
+func detailValue(text string) string {
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\u00a0", ""))
+	if pos := strings.Index(text, "："); pos >= 0 {
+		return strings.TrimSpace(text[pos+len("："):])
+	}
+	if pos := strings.Index(text, ":"); pos >= 0 {
+		return strings.TrimSpace(text[pos+1:])
+	}
+	return ""
+}
+
+type shenlongProxyProvider struct {
+	conf      config.ShenlongConf
+	mu        sync.Mutex
+	proxyAddr string
+	expiresAt time.Time
+}
+
+func newShenlongProxyProvider(conf config.ShenlongConf) *shenlongProxyProvider {
+	if strings.TrimSpace(conf.API) == "" {
+		return nil
+	}
+	return &shenlongProxyProvider{conf: conf}
+}
+
+func (p *shenlongProxyProvider) proxyURL(ctx context.Context) (*url.URL, error) {
+	now := time.Now()
+
+	p.mu.Lock()
+	if p.proxyAddr != "" && now.Before(p.expiresAt) {
+		addr := p.proxyAddr
+		p.mu.Unlock()
+		return url.Parse(addr)
+	}
+	p.mu.Unlock()
+
+	addr, err := p.fetchProxy(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	interval := p.conf.Interval
+	if interval <= 0 {
+		interval = 60
+	}
+
+	p.mu.Lock()
+	p.proxyAddr = addr
+	p.expiresAt = time.Now().Add(time.Duration(interval) * time.Second)
+	p.mu.Unlock()
+
+	return url.Parse(addr)
+}
+
+func (p *shenlongProxyProvider) fetchProxy(ctx context.Context) (string, error) {
+	retry := p.conf.Retry
+	if retry <= 0 {
+		retry = 1
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	var lastErr error
+	for i := 0; i < retry; i++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.conf.API, nil)
+		if err != nil {
+			return "", err
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("shenlong proxy api status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+			continue
+		}
+
+		proxyAddr, err := p.formatProxyAddr(string(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return proxyAddr, nil
+	}
+
+	if lastErr == nil {
+		lastErr = errors.New("shenlong proxy api returned no proxy")
+	}
+	return "", lastErr
+}
+
+func (p *shenlongProxyProvider) formatProxyAddr(raw string) (string, error) {
+	fields := strings.Fields(strings.TrimSpace(raw))
+	if len(fields) == 0 {
+		return "", errors.New("empty proxy address")
+	}
+
+	addr := fields[0]
+	if !strings.Contains(addr, "://") {
+		addr = "http://" + addr
+	}
+
+	proxyURL, err := url.Parse(addr)
+	if err != nil {
+		return "", err
+	}
+	if p.conf.Username != "" || p.conf.Password != "" {
+		proxyURL.User = url.UserPassword(p.conf.Username, p.conf.Password)
+	}
+
+	return proxyURL.String(), nil
 }

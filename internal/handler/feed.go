@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
@@ -52,7 +53,7 @@ func (fh *FeedHandler) GetTotalCnt(ctx *gin.Context, claims jwt.RegisteredClaims
 		return ginx.ReturnError(err)
 	}
 
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToGetTotalCntResp(res))
 }
 
 // GetFeedList
@@ -68,7 +69,7 @@ func (fh *FeedHandler) GetFeedList(ctx *gin.Context, claims jwt.RegisteredClaims
 		return ginx.ReturnError(err)
 	}
 
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToGetFeedListResp(res))
 }
 
 // GetAuditorFeedList
@@ -84,7 +85,7 @@ func (fh *FeedHandler) GetAuditorFeedList(ctx *gin.Context, claims jwt.Registere
 		return ginx.ReturnError(err)
 	}
 
-	return ginx.ReturnSuccess(res)
+	return ginx.ReturnSuccess(converter.ToGetFeedListResp(res))
 }
 
 // ReadFeedDetail
