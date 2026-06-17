@@ -33,3 +33,10 @@ log:
   maxBackups: 7
   maxAge: 30
   compress: true
+
+shenlongConf:
+  api: ""
+  interval: 67 # 单位: s
+  retry: 3
+  username: ""
+  password: ""

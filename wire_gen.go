@@ -44,7 +44,7 @@ func InitApp() *server.Server {
 	likeFavoriteRedis := ioc.NewLikeFavoriteRedis(client)
 	interactionRepo := repo.NewInteractionRepo(interactionDao, userRepo, activityRepo, postRepo, likeFavoriteRedis)
 	jwt := middleware.NewJwt(client, conf)
-	ccnuService := service.NewCCNUService()
+	ccnuService := service.NewCCNUService(conf, loggerSet)
 	imgUploader := service.NewImgUploader(conf)
 	mqHdl := mq.NewMQ(client)
 	auditorRepository := dao.NewAuditorRepo(db, loggerSet)
