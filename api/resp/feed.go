@@ -32,7 +32,7 @@ type FeedLikeResp struct {
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
 	Subject     string            `json:"subject"`
-	FirstPic    string            `json:"firstPic,omitempty"`
+	FirstPic    string            `json:"FirstPic,omitempty"`
 	Status      string            `json:"status"`
 }
 
@@ -46,7 +46,7 @@ type FeedCommentResp struct {
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
 	Subject     string            `json:"subject"`
-	FirstPic    string            `json:"firstPic,omitempty"`
+	FirstPic    string            `json:"FirstPic,omitempty"`
 	Status      string            `json:"status"`
 }
 
@@ -60,7 +60,7 @@ type FeedAtResp struct {
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
 	Subject     string            `json:"subject"`
-	FirstPic    string            `json:"firstPic,omitempty"`
+	FirstPic    string            `json:"FirstPic,omitempty"`
 	Status      string            `json:"status"`
 }
 
@@ -70,7 +70,7 @@ type FeedCollectResp struct {
 	Id          utils.SnowflakeID `json:"id"`
 	Message     string            `json:"Message"`
 	PublishedAt string            `json:"PublishedAt"`
-	FirstPic    string            `json:"firstPic,omitempty"`
+	FirstPic    string            `json:"FirstPic,omitempty"`
 	TargetId    utils.SnowflakeID `json:"targetId"`
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
@@ -88,6 +88,6 @@ type FeedInvitationResp struct {
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
 	Subject     string            `json:"subject"`
-	FirstPic    string            `json:"firstPic,omitempty"`
+	FirstPic    string            `json:"FirstPic,omitempty"`
 	Status      string            `json:"status"`
 }
