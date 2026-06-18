@@ -17,13 +17,13 @@ type FeedResp struct {
 }
 
 type FeedUserInfo struct {
-	StudentID string `json:"StudentId"`
+	StudentID string `json:"StudentID"`
 	Avatar    string `json:"Avatar"`
 	Username  string `json:"Username"`
 }
 
 type FeedLikeResp struct {
-	Userinfo FeedUserInfo `json:"UserInfo"`
+	Userinfo FeedUserInfo `json:"Userinfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
 	Message     string            `json:"Message"`
@@ -37,7 +37,7 @@ type FeedLikeResp struct {
 }
 
 type FeedCommentResp struct {
-	Userinfo FeedUserInfo `json:"UserInfo"`
+	Userinfo FeedUserInfo `json:"Userinfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
 	Message     string            `json:"Message"`
@@ -51,7 +51,7 @@ type FeedCommentResp struct {
 }
 
 type FeedAtResp struct {
-	Userinfo FeedUserInfo `json:"UserInfo"`
+	Userinfo FeedUserInfo `json:"Userinfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
 	Message     string            `json:"Message"`
@@ -65,7 +65,7 @@ type FeedAtResp struct {
 }
 
 type FeedCollectResp struct {
-	Userinfo FeedUserInfo `json:"UserInfo"`
+	Userinfo FeedUserInfo `json:"Userinfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
 	Message     string            `json:"Message"`
@@ -79,7 +79,7 @@ type FeedCollectResp struct {
 }
 
 type FeedInvitationResp struct {
-	Userinfo FeedUserInfo `json:"UserInfo"`
+	Userinfo FeedUserInfo `json:"Userinfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
 	Message     string            `json:"Message"`
