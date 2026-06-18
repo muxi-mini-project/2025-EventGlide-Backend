@@ -17,17 +17,17 @@ type FeedResp struct {
 }
 
 type FeedUserInfo struct {
-	StudentID string `json:"studentId"`
-	Avatar    string `json:"avatar"`
-	Username  string `json:"username"`
+	StudentID string `json:"StudentId"`
+	Avatar    string `json:"Avatar"`
+	Username  string `json:"Username"`
 }
 
 type FeedLikeResp struct {
-	Userinfo FeedUserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"UserInfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"message"`
-	PublishedAt string            `json:"publishedAt"`
+	Message     string            `json:"Message"`
+	PublishedAt string            `json:"PublishedAt"`
 	TargetId    utils.SnowflakeID `json:"targetId"`
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
@@ -37,11 +37,11 @@ type FeedLikeResp struct {
 }
 
 type FeedCommentResp struct {
-	Userinfo FeedUserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"UserInfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"message"`
-	PublishedAt string            `json:"publishedAt"`
+	Message     string            `json:"Message"`
+	PublishedAt string            `json:"PublishedAt"`
 	TargetId    utils.SnowflakeID `json:"targetId"`
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
@@ -51,11 +51,11 @@ type FeedCommentResp struct {
 }
 
 type FeedAtResp struct {
-	Userinfo FeedUserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"UserInfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"message"`
-	PublishedAt string            `json:"publishedAt"`
+	Message     string            `json:"Message"`
+	PublishedAt string            `json:"PublishedAt"`
 	TargetId    utils.SnowflakeID `json:"targetId"`
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
@@ -65,11 +65,11 @@ type FeedAtResp struct {
 }
 
 type FeedCollectResp struct {
-	Userinfo FeedUserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"UserInfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"message"`
-	PublishedAt string            `json:"publishedAt"`
+	Message     string            `json:"Message"`
+	PublishedAt string            `json:"PublishedAt"`
 	FirstPic    string            `json:"firstPic,omitempty"`
 	TargetId    utils.SnowflakeID `json:"targetId"`
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
@@ -79,11 +79,11 @@ type FeedCollectResp struct {
 }
 
 type FeedInvitationResp struct {
-	Userinfo FeedUserInfo `json:"userInfo"`
+	Userinfo FeedUserInfo `json:"UserInfo"`
 
 	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"message"`
-	PublishedAt string            `json:"publishedAt"`
+	Message     string            `json:"Message"`
+	PublishedAt string            `json:"PublishedAt"`
 	TargetId    utils.SnowflakeID `json:"targetId"`
 	RootID      utils.SnowflakeID `json:"rootId,omitempty"`
 	RootType    string            `json:"rootType,omitempty"`
