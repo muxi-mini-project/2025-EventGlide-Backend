@@ -96,6 +96,15 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 	client, err := us.cSvc.Login(ctx, studentId, password)
 	if err != nil {
 		us.l.Error("Login failed", zap.Error(err), zap.String("studentId", studentId))
+		if errors.Is(err, errs.ErrLoginFailed) {
+			return nil, "", errs.ErrLoginFailed
+		}
+		if errors.Is(err, errs.ErrNetworkError) {
+			return nil, "", errs.ErrNetworkError
+		}
+		if errors.Is(err, errs.ErrLoginInfoInvalid) {
+			return nil, "", errs.ErrLoginInfoInvalid
+		}
 		return nil, "", errs.ErrInternal.Wrap(err)
 	}
 	if client == nil {
@@ -478,6 +487,20 @@ type ccnuService struct {
 	l       *zap.Logger
 }
 
+const ccnuAccountHost = "account.ccnu.edu.cn"
+
+type loginProxyError struct {
+	err error
+}
+
+func (e *loginProxyError) Error() string {
+	return fmt.Sprintf("login proxy failed: %v", e.err)
+}
+
+func (e *loginProxyError) Unwrap() error {
+	return e.err
+}
+
 func NewCCNUService(cfg *config.Conf, l *logger.LoggerSet) *ccnuService {
 	return &ccnuService{
 		timeout: time.Second * 15,
@@ -487,36 +510,33 @@ func NewCCNUService(cfg *config.Conf, l *logger.LoggerSet) *ccnuService {
 }
 
 func (c *ccnuService) Login(ctx context.Context, studentId string, password string) (*http.Client, error) {
-	var (
-		client *http.Client
-		err    error
-	)
-	client, err = c.loginUndergraduateClient(ctx, studentId, password)
-	if err != nil {
+	client, err := c.loginUndergraduateClient(ctx, studentId, password, true)
+	if err == nil {
+		return client, nil
+	}
+
+	if c.proxy == nil || !shouldRetryLoginDirect(err) {
 		return nil, err
 	}
 
-	return client, nil
+	c.proxy.invalidate()
+	c.l.Warn("proxy login failed, retrying directly", zap.Error(err))
+	return c.loginUndergraduateClient(ctx, studentId, password, false)
 }
 
-func (c *ccnuService) client(ctx context.Context) (*http.Client, error) {
+func (c *ccnuService) client(ctx context.Context, useProxy bool) (*http.Client, error) {
 	j, _ := cookiejar.New(&cookiejar.Options{})
-	transport := &http.Transport{
-		MaxIdleConnsPerHost:   10,
-		ResponseHeaderTimeout: 5 * time.Second,
-	}
-	if c.proxy != nil {
-		proxyURL, err := c.proxy.proxyURL(ctx)
+	var proxyURL *url.URL
+	if useProxy && c.proxy != nil {
+		var err error
+		proxyURL, err = c.proxy.proxyURL(ctx)
 		if err != nil {
-			return nil, err
-		}
-		if proxyURL != nil {
-			transport.Proxy = http.ProxyURL(proxyURL)
+			return nil, &loginProxyError{err: err}
 		}
 	}
 
 	return &http.Client{
-		Transport: transport,
+		Transport: newCCNUTransport(proxyURL),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return nil
 		},
@@ -525,8 +545,36 @@ func (c *ccnuService) client(ctx context.Context) (*http.Client, error) {
 	}, nil
 }
 
-func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId string, password string) (*http.Client, error) {
-	client, params, err := c.makeAccountPreflightRequest(ctx)
+func newCCNUTransport(proxyURL *url.URL) *http.Transport {
+	transport := &http.Transport{
+		MaxIdleConnsPerHost:   10,
+		ResponseHeaderTimeout: 5 * time.Second,
+	}
+	if proxyURL == nil {
+		return transport
+	}
+
+	transport.Proxy = func(req *http.Request) (*url.URL, error) {
+		if strings.EqualFold(req.URL.Hostname(), ccnuAccountHost) {
+			return proxyURL, nil
+		}
+		return nil, nil
+	}
+	return transport
+}
+
+func shouldRetryLoginDirect(err error) bool {
+	var proxyErr *loginProxyError
+	var netErr net.Error
+	return errors.As(err, &proxyErr) ||
+		errors.As(err, &netErr) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, errs.ErrNetworkError) ||
+		errors.Is(err, errs.ErrLoginInfoInvalid)
+}
+
+func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId string, password string, useProxy bool) (*http.Client, error) {
+	client, params, err := c.makeAccountPreflightRequest(ctx, useProxy)
 	if err != nil {
 		return nil, err
 	}
@@ -611,13 +659,13 @@ type accountRequestParams struct {
 	JSESSIONID string
 }
 
-func (c *ccnuService) makeAccountPreflightRequest(ctx context.Context) (*http.Client, *accountRequestParams, error) {
+func (c *ccnuService) makeAccountPreflightRequest(ctx context.Context, useProxy bool) (*http.Client, *accountRequestParams, error) {
 	var JSESSIONID string
 	var lt string
 	var execution string
 	var _eventId string
 	params := &accountRequestParams{}
-	client, err := c.client(ctx)
+	client, err := c.client(ctx, useProxy)
 	if err != nil {
 		return nil, params, err
 	}
@@ -775,6 +823,16 @@ type shenlongProxyProvider struct {
 	mu        sync.Mutex
 	proxyAddr string
 	expiresAt time.Time
+}
+
+func (p *shenlongProxyProvider) invalidate() {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.proxyAddr = ""
+	p.expiresAt = time.Time{}
+	p.mu.Unlock()
 }
 
 func newShenlongProxyProvider(conf config.ShenlongConf) *shenlongProxyProvider {
