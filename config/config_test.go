@@ -89,6 +89,7 @@ shenlongConf:
   api: "http://shenlong"
   interval: 67
   retry: 3
+piiKey: "test-pii-key"
 `
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -118,6 +119,9 @@ shenlongConf:
 	}
 	if c.ShenlongConf.Interval != 67 || c.ShenlongConf.Retry != 3 {
 		t.Fatalf("shenlong = %d/%d", c.ShenlongConf.Interval, c.ShenlongConf.Retry)
+	}
+	if c.PIIKey != "test-pii-key" {
+		t.Fatalf("piiKey = %q", c.PIIKey)
 	}
 }
 

@@ -27,6 +27,7 @@ type Conf struct {
 	Kafka        KafkaConf    `yaml:"kafka"`
 	Log          LogConf      `yaml:"log"`
 	ShenlongConf ShenlongConf `yaml:"shenlongConf"`
+	PIIKey       string       `yaml:"piiKey"`
 }
 
 type MysqlConf struct {
@@ -113,6 +114,7 @@ func InitConf() *Conf {
 		return nil
 	}
 
+	encrypt.SetKey(eg.PIIKey)
 	if err := encrypt.ValidateKey(); err != nil {
 		log.Fatalf("PII 加密密钥校验失败: %v", err)
 		return nil

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 )
 
 const (
@@ -17,10 +18,27 @@ const (
 	EnvKey = "EG_PII_KEY"
 )
 
-var errKeyMissing = fmt.Errorf("环境变量 %s 未设置", EnvKey)
+var errKeyMissing = fmt.Errorf("配置 %s 未设置", EnvKey)
 
 // ErrDecrypt 加密字段解密失败的哨兵错误，供上层 errors.Is 区分"数据损坏"与其他错误。
 var ErrDecrypt = errors.New("encrypt: decrypt failed")
+
+var (
+	mu        sync.RWMutex
+	globalKey []byte
+)
+
+// SetKey 设置全局加密密钥（从 Nacos 配置注入）。空值清除，回退到环境变量。
+func SetKey(k string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if k == "" {
+		globalKey = nil
+		return
+	}
+	h := sha256.Sum256([]byte(k))
+	globalKey = h[:]
+}
 
 func Encrypt(plain string) (string, error) {
 	if plain == "" {
@@ -80,6 +98,12 @@ func Decrypt(s string) (string, error) {
 }
 
 func loadKey() ([]byte, error) {
+	mu.RLock()
+	gk := globalKey
+	mu.RUnlock()
+	if len(gk) == 32 {
+		return gk, nil
+	}
 	k := os.Getenv(EnvKey)
 	if k == "" {
 		return nil, errKeyMissing

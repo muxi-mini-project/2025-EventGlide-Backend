@@ -68,6 +68,53 @@ func TestAnyLengthKey(t *testing.T) {
 	}
 }
 
+func TestSetKeyTakesPrecedenceOverEnv(t *testing.T) {
+	t.Setenv(EnvKey, "env-key")
+	SetKey("nacos-key")
+	defer SetKey("")
+
+	enc, err := Encrypt("张三")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec, err := Decrypt(enc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dec != "张三" {
+		t.Fatalf("round trip = %q", dec)
+	}
+}
+
+func TestSetKeyEmptyFallsBackToEnv(t *testing.T) {
+	t.Setenv(EnvKey, "env-key")
+	SetKey("nacos-key")
+
+	SetKey("")
+	enc, err := Encrypt("张三")
+	if err != nil {
+		t.Fatalf("Encrypt after clearing SetKey error: %v", err)
+	}
+	dec, err := Decrypt(enc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dec != "张三" {
+		t.Fatalf("round trip = %q", dec)
+	}
+}
+
+func TestSetKeyThenEnvKeyChangeBreaksDecrypt(t *testing.T) {
+	SetKey("key-a")
+	defer SetKey("")
+	enc, _ := Encrypt("张三")
+
+	SetKey("key-b")
+	if _, err := Decrypt(enc); err == nil {
+		t.Fatal("Decrypt with different injected key should error")
+	}
+}
+
 func TestEncryptEmpty(t *testing.T) {
 	t.Setenv(EnvKey, testKey)
 	enc, err := Encrypt("")
