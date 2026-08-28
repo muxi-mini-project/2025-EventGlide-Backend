@@ -201,7 +201,7 @@ func (id *InteractionDao) ApproveActivity(c context.Context, studentID string, a
 	var approvement model.Approvement
 	if err := id.db.WithContext(c).Model(&model.Approvement{}).
 		Where("student_id = ? AND activity_id = ?", studentID, activityId).First(&approvement).Error; err != nil {
-		id.l.Error("Failed to find approvement", zap.Error(err), zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
+		id.l.Error("Failed to load approvement", zap.Error(err), zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
 		return err
 	}
 	approvement.Stance = "pass"
@@ -216,7 +216,7 @@ func (id *InteractionDao) RejectActivity(c context.Context, studentID string, ac
 	var approvement model.Approvement
 	if err := id.db.WithContext(c).Model(&model.Approvement{}).
 		Where("student_id = ? AND activity_id = ?", studentID, activityId).First(&approvement).Error; err != nil {
-		id.l.Error("Failed to find approvement", zap.Error(err))
+		id.l.Error("Failed to load approvement", zap.Error(err))
 		return err
 	}
 	approvement.Stance = "reject"

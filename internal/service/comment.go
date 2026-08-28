@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/encrypt"
 	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
@@ -56,7 +58,14 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	var rootID int64
 	var rootType string
 	if cmt.Subject == SubjectComment {
-		parent := cs.cd.FindCmtByID(c, cmt.ParentID)
+		parent, err := cs.cd.FindCmtByID(c, cmt.ParentID)
+		if err != nil {
+			if errors.Is(err, encrypt.ErrDecrypt) {
+				cs.l.Error("CreateComment: parent comment decrypt failed", zap.Error(err), zap.Int64("parentId", cmt.ParentID))
+				return nil, errs.ErrInternal.Wrap(err)
+			}
+			return nil, errs.ErrCommentParentNotFound
+		}
 		if parent == nil {
 			return nil, errs.ErrCommentParentNotFound
 		}
@@ -137,7 +146,14 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	cmt.CreatorName = model.EncryptedString(creator.Name)
 	cmt.CreatorAvatar = creator.Avatar
 
-	parentCmt := cs.cd.FindCmtByID(c, cmt.ParentID)
+	parentCmt, err := cs.cd.FindCmtByID(c, cmt.ParentID)
+	if err != nil {
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			cs.l.Error("AnswerComment: parent comment decrypt failed", zap.Error(err), zap.Int64("parentId", cmt.ParentID))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		return nil, errs.ErrCommentParentNotFound
+	}
 	if parentCmt == nil {
 		return nil, errs.ErrCommentParentNotFound
 	}

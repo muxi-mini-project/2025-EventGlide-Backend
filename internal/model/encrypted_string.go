@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql/driver"
+	"fmt"
 	"log"
 	"strings"
 
@@ -58,9 +59,9 @@ func (e *EncryptedString) Scan(value interface{}) error {
 	dec, err := encrypt.Decrypt(s)
 	if err != nil {
 		decryptErrorLog("encrypted_string: decrypt failed (len=%d): %v", len(s), err)
-		// 保留原值：可能是损坏的密文（保留排查线索），也可能是恰好以 v1: 开头的明文
-		*e = EncryptedString(s)
-		return nil
+		// 返回错误中止读取，避免密文进入业务值后被读后写（Save）双重加密造成数据损坏。
+		// wrap ErrDecrypt 供上层 errors.Is 识别"数据损坏"，避免误报为"记录不存在"。
+		return fmt.Errorf("%w (len=%d): %v", encrypt.ErrDecrypt, len(s), err)
 	}
 	*e = EncryptedString(dec)
 	return nil

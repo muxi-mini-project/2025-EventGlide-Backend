@@ -1,8 +1,11 @@
 package model
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/raiki02/EG/pkg/encrypt"
 )
 
 const testKey = "0123456789abcdef0123456789abcdef"
@@ -87,23 +90,17 @@ func TestEncryptedStringScanBytes(t *testing.T) {
 
 func TestEncryptedStringScanCorrupted(t *testing.T) {
 	t.Setenv("EG_PII_KEY", testKey)
-	var out EncryptedString
-	if err := out.Scan("v1:AAA"); err != nil {
-		t.Fatalf("Scan(corrupted) should not error, got %v", err)
-	}
-	if string(out) != "v1:AAA" {
-		t.Fatalf("Scan(corrupted) = %q, want original value preserved", string(out))
-	}
-}
-
-func TestEncryptedStringScanPlaintextWithPrefix(t *testing.T) {
-	t.Setenv("EG_PII_KEY", testKey)
-	var out EncryptedString
-	plain := "v1:恰好以前缀开头的明文"
-	if err := out.Scan(plain); err != nil {
-		t.Fatalf("Scan(plaintext with prefix) error: %v", err)
-	}
-	if string(out) != plain {
-		t.Fatalf("Scan(plaintext with prefix) = %q, want pass through", string(out))
+	for _, s := range []string{"v1:AAA", "v1:恰好以前缀开头的非密文"} {
+		var out EncryptedString
+		err := out.Scan(s)
+		if err == nil {
+			t.Fatalf("Scan(%q) should error", s)
+		}
+		if !errors.Is(err, encrypt.ErrDecrypt) {
+			t.Fatalf("Scan(%q) error = %v, want sentinel %v", s, err, encrypt.ErrDecrypt)
+		}
+		if string(out) != "" {
+			t.Fatalf("Scan(%q) out = %q, want unchanged zero value", s, string(out))
+		}
 	}
 }

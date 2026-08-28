@@ -21,6 +21,7 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/encrypt"
 	"github.com/raiki02/EG/pkg/logger"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
@@ -140,6 +141,9 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Get user info failed", zap.Error(err), zap.String("studentId", studentId))
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			return nil, "", errs.ErrInternal.Wrap(err)
+		}
 		return nil, "", errs.ErrUserNotFound.Wrap(err)
 	}
 
@@ -163,6 +167,9 @@ func (us *UserService) GetUserInfo(ctx context.Context, studentId string) (*mode
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			return nil, errs.ErrInternal.Wrap(err)
+		}
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	return &user, nil
@@ -439,6 +446,10 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string, page, 
 func (us *UserService) VerifyUser(ctx context.Context, studentId string, realName string) (bool, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			us.l.Error("VerifyUser: real_name decrypt failed, data corruption", zap.Error(err), zap.String("studentId", studentId))
+			return false, errs.ErrInternal.Wrap(err)
+		}
 		return false, errs.ErrUserNotFound
 	}
 	if string(user.RealName) != realName {

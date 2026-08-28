@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/repo"
+	"gorm.io/gorm"
 )
 
 const (
@@ -65,9 +67,12 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string
 		}, nil
 
 	case SubjectComment:
-		cmt := g.cd.FindCmtByID(ctx, id)
-		if cmt == nil {
-			return SubjectInfo{}, errs.ErrCommentNotFound
+		cmt, err := g.cd.FindCmtByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return SubjectInfo{}, errs.ErrCommentNotFound
+			}
+			return SubjectInfo{}, err
 		}
 
 		return SubjectInfo{
