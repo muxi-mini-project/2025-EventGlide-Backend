@@ -1,9 +1,10 @@
 // PII 存量数据加密迁移工具（一次性 CLI）。
 // 将历史明文真名/姓名快照加密为 v1: 密文；已有 v1: 前缀的行跳过（幂等，可重跑）。
 // 用法：
+//   export EG_PII_KEY="<与 Nacos piiKey 一致>"
 //   go run ./tools/migrate_pii -dsn "user:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true" -dry-run   # 预览
 //   go run ./tools/migrate_pii -dsn "user:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true"          # 执行
-// key 来自环境变量 EG_PII_KEY 或 -key 参数，需与运行时的 Nacos piiKey 一致。
+// key 从环境变量 EG_PII_KEY 读取（避免出现在进程参数中），需与运行时的 Nacos piiKey 一致。
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -33,23 +35,19 @@ var targets = []target{
 const batchSize = 500
 
 type change struct {
-	col  string
-	enc  string
-	from string
+	col string
+	enc string
 }
 
 func main() {
 	dsn := flag.String("dsn", "", "MySQL DSN")
-	key := flag.String("key", "", "PII 加密密钥（留空则用环境变量 EG_PII_KEY）")
 	dryRun := flag.Bool("dry-run", false, "只统计不更新")
 	flag.Parse()
 
 	if *dsn == "" {
 		log.Fatal("需提供 -dsn")
 	}
-	if *key != "" {
-		encrypt.SetKey(*key)
-	}
+	// key 仅从环境变量 EG_PII_KEY 读取（避免密钥出现在进程参数/ps 中），需与运行时 Nacos piiKey 一致
 	if err := encrypt.ValidateKey(); err != nil {
 		log.Fatalf("PII 密钥校验失败: %v", err)
 	}
@@ -61,17 +59,23 @@ func main() {
 	defer db.Close()
 	db.SetMaxOpenConns(10)
 
+	failed := false
 	for _, t := range targets {
 		if err := migrateTable(db, t, *dryRun); err != nil {
+			failed = true
 			log.Printf("[%s] 迁移失败: %v", t.table, err)
 		}
+	}
+	if failed {
+		os.Exit(1)
 	}
 }
 
 func migrateTable(db *sql.DB, t target, dryRun bool) error {
+	var lastID int64
 	var processed, skipped, failed int
 	for {
-		rows, err := loadBatch(db, t, batchSize)
+		rows, err := loadBatch(db, t, lastID, batchSize)
 		if err != nil {
 			return err
 		}
@@ -91,7 +95,7 @@ func migrateTable(db *sql.DB, t target, dryRun bool) error {
 					failed++
 					continue
 				}
-				changes = append(changes, change{col: col, enc: enc, from: raw})
+				changes = append(changes, change{col: col, enc: enc})
 			}
 			if len(changes) == 0 {
 				skipped++
@@ -99,14 +103,16 @@ func migrateTable(db *sql.DB, t target, dryRun bool) error {
 			}
 			if dryRun {
 				for _, c := range changes {
-					log.Printf("[dry-run] %s id=%d %s: %q -> 将加密", t.table, r.id, c.col, c.from)
+					log.Printf("[dry-run] %s id=%d %s: 将加密（不输出明文值）", t.table, r.id, c.col)
 				}
 			} else if err := updateRow(db, t, r.id, changes); err != nil {
 				log.Printf("[%s] id=%d 更新失败: %v", t.table, r.id, err)
 				failed++
+				continue
 			}
 			processed++
 		}
+		lastID = rows[len(rows)-1].id
 		log.Printf("[%s] 进度 %d（跳过 %d，失败 %d）", t.table, processed, skipped, failed)
 	}
 	log.Printf("[%s] 完成：处理 %d 行，跳过 %d，失败 %d", t.table, processed, skipped, failed)
@@ -118,16 +124,16 @@ type dbRow struct {
 	values map[string]string
 }
 
-func loadBatch(db *sql.DB, t target, limit int) ([]dbRow, error) {
+func loadBatch(db *sql.DB, t target, afterID int64, limit int) ([]dbRow, error) {
 	var conds []string
 	for _, col := range t.columns {
 		conds = append(conds, fmt.Sprintf("%s NOT LIKE 'v1:%%'", col))
 	}
 	cols := strings.Join(t.columns, ", ")
-	q := fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s LIMIT %d",
-		t.idCol, cols, t.table, strings.Join(conds, " OR "), limit)
+	q := fmt.Sprintf("SELECT %s, %s FROM %s WHERE %s > ? AND (%s) ORDER BY %s LIMIT ?",
+		t.idCol, cols, t.table, t.idCol, strings.Join(conds, " OR "), t.idCol)
 
-	rows, err := db.Query(q)
+	rows, err := db.Query(q, afterID, limit)
 	if err != nil {
 		return nil, err
 	}
