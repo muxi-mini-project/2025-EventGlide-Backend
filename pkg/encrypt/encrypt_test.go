@@ -77,6 +77,14 @@ func TestSetKeyTakesPrecedenceOverEnv(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// 清空注入后走 env-key，必须解不开 nacos-key 的密文，证明加密用的是注入的 key
+	SetKey("")
+	if _, err := Decrypt(enc); err == nil {
+		t.Fatal("ciphertext from injected key should not decrypt with env key")
+	}
+
+	SetKey("nacos-key")
 	dec, err := Decrypt(enc)
 	if err != nil {
 		t.Fatal(err)
@@ -89,8 +97,8 @@ func TestSetKeyTakesPrecedenceOverEnv(t *testing.T) {
 func TestSetKeyEmptyFallsBackToEnv(t *testing.T) {
 	t.Setenv(EnvKey, "env-key")
 	SetKey("nacos-key")
-
 	SetKey("")
+
 	enc, err := Encrypt("张三")
 	if err != nil {
 		t.Fatalf("Encrypt after clearing SetKey error: %v", err)
@@ -102,12 +110,21 @@ func TestSetKeyEmptyFallsBackToEnv(t *testing.T) {
 	if dec != "张三" {
 		t.Fatalf("round trip = %q", dec)
 	}
+
+	// 换成其他注入 key 后必须解不开 env-key 的密文，证明清空后走的是 env-key
+	SetKey("other-key")
+	if _, err := Decrypt(enc); err == nil {
+		t.Fatal("ciphertext from env key should not decrypt with different injected key")
+	}
 }
 
 func TestSetKeyThenEnvKeyChangeBreaksDecrypt(t *testing.T) {
 	SetKey("key-a")
 	defer SetKey("")
-	enc, _ := Encrypt("张三")
+	enc, err := Encrypt("张三")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	SetKey("key-b")
 	if _, err := Decrypt(enc); err == nil {

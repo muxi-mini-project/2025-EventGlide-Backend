@@ -18,7 +18,7 @@ const (
 	EnvKey = "EG_PII_KEY"
 )
 
-var errKeyMissing = fmt.Errorf("配置 %s 未设置", EnvKey)
+var errKeyMissing = fmt.Errorf("PII 密钥未配置（Nacos piiKey 或环境变量 %s）", EnvKey)
 
 // ErrDecrypt 加密字段解密失败的哨兵错误，供上层 errors.Is 区分"数据损坏"与其他错误。
 var ErrDecrypt = errors.New("encrypt: decrypt failed")
