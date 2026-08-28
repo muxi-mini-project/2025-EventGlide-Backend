@@ -80,7 +80,7 @@ func (us *UserService) CreateUser(ctx context.Context, sid string, name string, 
 	user := &model.User{
 		StudentID: sid,
 		Name:      tools.GenRandomUsername(sid),
-		RealName:  name,
+		RealName:  model.EncryptedString(name),
 		Avatar:    us.cfg.Imgbed.DefaultAvatar1,
 		School:    "华中师范大学",
 		College:   department,
@@ -441,7 +441,7 @@ func (us *UserService) VerifyUser(ctx context.Context, studentId string, realNam
 	if err != nil {
 		return false, errs.ErrUserNotFound
 	}
-	if user.RealName != realName {
+	if string(user.RealName) != realName {
 		return false, errs.ErrRealNameMismatch
 	}
 	return true, nil
@@ -758,7 +758,7 @@ func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) 
 			}
 
 			if updated {
-				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("realName", realName), zap.String("college", college))
+				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("college", college))
 				return
 			}
 		}

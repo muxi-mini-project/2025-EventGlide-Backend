@@ -209,7 +209,7 @@ func SignersFromReqToActivitySigner(signers []req.Signer, activityId int64) []mo
 			Id:         tools.MustGenerateID(),
 			ActivityId: activityId,
 			StudentID:  s.StudentID,
-			Name:       s.Name,
+			Name:       model.EncryptedString(s.Name),
 		}
 	}
 	return out
@@ -218,7 +218,7 @@ func SignersFromReqToActivitySigner(signers []req.Signer, activityId int64) []mo
 func ActivitySignersToResp(signers []model.ActivitySigner) []resp.Signer {
 	out := make([]resp.Signer, len(signers))
 	for i, s := range signers {
-		out[i] = resp.Signer{StudentID: s.StudentID, Name: s.Name}
+		out[i] = resp.Signer{StudentID: s.StudentID, Name: string(s.Name)}
 	}
 	return out
 }

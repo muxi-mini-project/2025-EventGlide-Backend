@@ -231,7 +231,7 @@ func (id *InteractionDao) InsertApprovement(c context.Context, studentID, studen
 	approvement := &model.Approvement{
 		Id:          tools.MustGenerateID(),
 		StudentId:   studentID,
-		StudentName: studentName,
+		StudentName: model.EncryptedString(studentName),
 		ActivityId:  activityId,
 	}
 	if err := id.db.WithContext(c).Create(approvement).Error; err != nil {

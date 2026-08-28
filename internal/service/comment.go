@@ -50,7 +50,7 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		cs.l.Error("Error get user info failed", zap.Error(err), zap.String("studentID", studentID))
 		return nil, err
 	}
-	cmt.CreatorName = creator.Name
+	cmt.CreatorName = model.EncryptedString(creator.Name)
 	cmt.CreatorAvatar = creator.Avatar
 
 	var rootID int64
@@ -134,7 +134,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		cs.l.Error("Error get user info failed", zap.Error(err), zap.String("studentID", studentID))
 		return nil, err
 	}
-	cmt.CreatorName = creator.Name
+	cmt.CreatorName = model.EncryptedString(creator.Name)
 	cmt.CreatorAvatar = creator.Avatar
 
 	parentCmt := cs.cd.FindCmtByID(c, cmt.ParentID)
@@ -308,7 +308,7 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 
 	return model.ReplyDetail{
 		Comment:        *cmt,
-		ParentUserName: cmt.ReplyToUserName,
+		ParentUserName: string(cmt.ReplyToUserName),
 		IsLike:         isLike,
 	}
 }

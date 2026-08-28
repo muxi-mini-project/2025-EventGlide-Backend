@@ -14,6 +14,7 @@ import (
 	"github.com/nacos-group/nacos-sdk-go/clients"
 	"github.com/nacos-group/nacos-sdk-go/common/constant"
 	"github.com/nacos-group/nacos-sdk-go/vo"
+	"github.com/raiki02/EG/pkg/encrypt"
 	"github.com/spf13/viper"
 )
 
@@ -109,6 +110,11 @@ func InitConf() *Conf {
 	err = v.Unmarshal(&eg)
 	if err != nil {
 		log.Fatal(err)
+		return nil
+	}
+
+	if err := encrypt.ValidateKey(); err != nil {
+		log.Fatalf("PII 加密密钥校验失败: %v", err)
 		return nil
 	}
 

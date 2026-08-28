@@ -68,7 +68,7 @@ type FindActByStudentIDReq struct {
 
 type Signer struct {
 	StudentID string `json:"studentId" validate:"len=10"`
-	Name      string `json:"name"`
+	Name      string `json:"name" validate:"max=30"`
 }
 
 type CreateActLabel struct {

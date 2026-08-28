@@ -16,7 +16,7 @@ type Approvement struct {
 	Id          int64     `gorm:"primaryKey;type:bigint;column:id"`
 	ActivityId  int64     `gorm:"type:bigint;column:activity_id;not null"`
 	StudentId   string    `gorm:"type:varchar(255);not null;column:student_id"`
-	StudentName string    `gorm:"type:varchar(255);not null;column:student_name"`
+	StudentName EncryptedString `gorm:"type:varchar(255);not null;column:student_name"`
 	Stance      string    `gorm:"type:enum('pass','reject','pending');default:'pending';column:stance;not null"`
 	UpdatedAt   time.Time `gorm:"type:datetime;column:updated_at;not null"`
 	CreatedAt   time.Time `gorm:"type:datetime;column:created_at;not null"`

@@ -361,7 +361,7 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 			},
 			Message: processMsg(&model.Feed{
 				Action: "invitation",
-			}, v.StudentName),
+			}, string(v.StudentName)),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetId:    v.ActivityId,
 			RootID:      0,

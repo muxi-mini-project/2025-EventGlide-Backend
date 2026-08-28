@@ -3,6 +3,7 @@ module github.com/raiki02/EG
 go 1.26.1
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/IBM/sarama v1.46.3
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/dgraph-io/ristretto/v2 v2.4.0
@@ -18,6 +19,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/muxi-Infra/auditor-Backend/sdk v0.0.0-20251218062019-590a7f87e9f7
 	github.com/nacos-group/nacos-sdk-go v1.1.6
+	github.com/pkg/errors v0.9.1
 	github.com/qiniu/go-sdk/v7 v7.25.5
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/sony/sonyflake v1.1.0
@@ -27,6 +29,7 @@ require (
 	github.com/swaggo/swag v1.16.6
 	go.uber.org/zap v1.27.1
 	golang.org/x/sync v0.20.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gorm.io/driver/mysql v1.6.0
 	gorm.io/gorm v1.31.1
 )
@@ -92,7 +95,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.23 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.57.1 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
@@ -115,6 +117,5 @@ require (
 	golang.org/x/tools v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/ini.v1 v1.42.0 // indirect
-	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	modernc.org/fileutil v1.3.40 // indirect
 )
