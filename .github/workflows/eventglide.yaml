@@ -61,6 +61,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          # 阿里云 ACR 不兼容 OCI attestation manifest（unknown manifest class），需禁用
+          provenance: false
           tags: ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ secrets.ALIYUN_REGISTRY_NAME }}:${{ needs.test.outputs.id }}
 
   deploy:
