@@ -1,17 +1,23 @@
 package ioc
 
 import (
+	"fmt"
 	"log"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
 func InitDB(cfg *config.Conf) *gorm.DB {
+	model.SetDecryptErrorLogf(func(format string, args ...interface{}) {
+		logger.GetLogger("bff").Warn(fmt.Sprintf(format, args...))
+	})
+
 	db, err := gorm.Open(mysql.Open(cfg.Mysql.DSN), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{
 			SingularTable: true,

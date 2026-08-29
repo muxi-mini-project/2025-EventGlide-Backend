@@ -40,3 +40,5 @@ shenlongConf:
   retry: 3
   username: ""
   password: ""
+
+piiKey: "your-pii-encryption-key" # PII 加密密钥（真名等敏感字段 AES 加密用），部署前替换为任意长度密钥

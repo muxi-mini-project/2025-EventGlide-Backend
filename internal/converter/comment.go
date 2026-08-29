@@ -42,7 +42,7 @@ func ToCommentResp(d model.CommentDetail) resp.CommentResp {
 		res.IsLike = "false"
 	}
 	res.Creator.StudentID = cmt.StudentID
-	res.Creator.Username = cmt.CreatorName
+	res.Creator.Username = string(cmt.CreatorName)
 	res.Creator.Avatar = cmt.CreatorAvatar
 	for _, reply := range d.Replies {
 		res.Reply = append(res.Reply, ToReplyResp(reply))
@@ -67,7 +67,7 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 		ReplyPos:      cmt.Position,
 		ParentID:      utils.SnowflakeID(cmt.ParentID),
 		RootID:        utils.SnowflakeID(cmt.RootID),
-		ParentUserName: cmt.ReplyToUserName,
+		ParentUserName: string(cmt.ReplyToUserName),
 		LikeNum:       cmt.LikeNum,
 		ReplyNum:      0, // 回复的回复数始终为0，无嵌套结构
 	}
@@ -77,7 +77,7 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 		res.IsLike = "false"
 	}
 	res.ReplyCreator.StudentID = cmt.StudentID
-	res.ReplyCreator.Username = cmt.CreatorName
+	res.ReplyCreator.Username = string(cmt.CreatorName)
 	res.ReplyCreator.Avatar = cmt.CreatorAvatar
 	return res
 }

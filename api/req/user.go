@@ -1,7 +1,7 @@
 package req
 
 type UpdateNameReq struct {
-	Name string `json:"newName" validate:"required"`
+	Name string `json:"newName" validate:"required,max=30"`
 }
 type LoginReq struct {
 	StudentID string `json:"studentId" validate:"required,len=10"`

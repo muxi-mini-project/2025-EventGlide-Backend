@@ -197,7 +197,7 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 func SignersFromReq(signers []req.Signer) []model.Signer {
 	out := make([]model.Signer, len(signers))
 	for i, s := range signers {
-		out[i] = model.Signer{StudentID: s.StudentID, Name: s.Name}
+		out[i] = model.Signer{StudentID: s.StudentID, Name: truncateName(s.Name)}
 	}
 	return out
 }
@@ -209,16 +209,26 @@ func SignersFromReqToActivitySigner(signers []req.Signer, activityId int64) []mo
 			Id:         tools.MustGenerateID(),
 			ActivityId: activityId,
 			StudentID:  s.StudentID,
-			Name:       s.Name,
+			Name:       model.EncryptedString(truncateName(s.Name)),
 		}
 	}
 	return out
 }
 
+// truncateName 截断姓名到 30 字符，避免加密后超出 varchar(255) 列宽。
+// 主路径已有 validator 拦截，此处兜底草稿等无校验路径。
+func truncateName(s string) string {
+	r := []rune(s)
+	if len(r) > 30 {
+		return string(r[:30])
+	}
+	return s
+}
+
 func ActivitySignersToResp(signers []model.ActivitySigner) []resp.Signer {
 	out := make([]resp.Signer, len(signers))
 	for i, s := range signers {
-		out[i] = resp.Signer{StudentID: s.StudentID, Name: s.Name}
+		out[i] = resp.Signer{StudentID: s.StudentID, Name: string(s.Name)}
 	}
 	return out
 }

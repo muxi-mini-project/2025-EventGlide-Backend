@@ -21,6 +21,7 @@ import (
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
+	"github.com/raiki02/EG/pkg/encrypt"
 	"github.com/raiki02/EG/pkg/logger"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
@@ -80,7 +81,7 @@ func (us *UserService) CreateUser(ctx context.Context, sid string, name string, 
 	user := &model.User{
 		StudentID: sid,
 		Name:      tools.GenRandomUsername(sid),
-		RealName:  name,
+		RealName:  model.EncryptedString(name),
 		Avatar:    us.cfg.Imgbed.DefaultAvatar1,
 		School:    "华中师范大学",
 		College:   department,
@@ -140,6 +141,9 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Get user info failed", zap.Error(err), zap.String("studentId", studentId))
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			return nil, "", errs.ErrInternal.Wrap(err)
+		}
 		return nil, "", errs.ErrUserNotFound.Wrap(err)
 	}
 
@@ -163,6 +167,9 @@ func (us *UserService) GetUserInfo(ctx context.Context, studentId string) (*mode
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
 		us.l.Error("Failed to get user info", zap.Error(err), zap.String("studentId", studentId))
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			return nil, errs.ErrInternal.Wrap(err)
+		}
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 	return &user, nil
@@ -439,9 +446,13 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string, page, 
 func (us *UserService) VerifyUser(ctx context.Context, studentId string, realName string) (bool, error) {
 	user, err := us.udh.GetUserInfo(ctx, studentId)
 	if err != nil {
+		if errors.Is(err, encrypt.ErrDecrypt) {
+			us.l.Error("VerifyUser: real_name decrypt failed, data corruption", zap.Error(err), zap.String("studentId", studentId))
+			return false, errs.ErrInternal.Wrap(err)
+		}
 		return false, errs.ErrUserNotFound
 	}
-	if user.RealName != realName {
+	if string(user.RealName) != realName {
 		return false, errs.ErrRealNameMismatch
 	}
 	return true, nil
@@ -758,7 +769,7 @@ func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) 
 			}
 
 			if updated {
-				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("realName", realName), zap.String("college", college))
+				us.l.Info("user info updated", zap.String("student_id", studentID), zap.String("college", college))
 				return
 			}
 		}

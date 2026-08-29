@@ -57,7 +57,7 @@ func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *mod
 			Id:         id,
 			ActivityId: act.Id,
 			StudentID:  s.StudentID,
-			Name:       s.Name,
+			Name:       model.EncryptedString(s.Name),
 		})
 	}
 	if len(activitySigners) > 0 {
@@ -74,7 +74,7 @@ func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *mod
 		approvements = append(approvements, model.Approvement{
 			Id:          tools.MustGenerateID(),
 			StudentId:   s.StudentID,
-			StudentName: s.Name,
+			StudentName: model.EncryptedString(s.Name),
 			ActivityId:  act.Id,
 		})
 	}

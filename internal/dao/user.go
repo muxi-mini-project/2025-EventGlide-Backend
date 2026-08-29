@@ -70,7 +70,7 @@ func (ud *UserDao) UpdateCollege(ctx context.Context, studentID string, college 
 }
 
 func (ud *UserDao) UpdateRealName(ctx context.Context, studentID string, realName string) error {
-	return ud.db.WithContext(ctx).Model(&model.User{}).Where("student_id = ?", studentID).Update("real_name", realName).Error
+	return ud.db.WithContext(ctx).Model(&model.User{}).Where("student_id = ?", studentID).Update("real_name", model.EncryptedString(realName)).Error
 }
 
 func (ud *UserDao) GetUsersByIDs(ctx context.Context, ids []string) ([]model.User, error) {

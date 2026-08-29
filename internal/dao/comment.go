@@ -16,7 +16,7 @@ type CommentDaoHdl interface {
 	LoadComments(context.Context, int64) ([]model.Comment, error)
 	LoadAnswers(context.Context, int64) ([]model.Comment, error)
 	LoadAnswersBatch(context.Context, []int64) ([]model.Comment, error)
-	FindCmtByID(context.Context, int64) *model.Comment
+	FindCmtByID(context.Context, int64) (*model.Comment, error)
 }
 
 type CommentDao struct {
@@ -55,12 +55,12 @@ func (cd *CommentDao) LoadAnswers(c context.Context, rootId int64) ([]model.Comm
 	return cmts, err
 }
 
-func (cd *CommentDao) FindCmtByID(c context.Context, id int64) *model.Comment {
+func (cd *CommentDao) FindCmtByID(c context.Context, id int64) (*model.Comment, error) {
 	var cmt model.Comment
-	if cd.db.WithContext(c).Where("id = ?", id).First(&cmt).Error != nil {
-		return nil
+	if err := cd.db.WithContext(c).Where("id = ?", id).First(&cmt).Error; err != nil {
+		return nil, err
 	}
-	return &cmt
+	return &cmt, nil
 }
 
 func (cd *CommentDao) LoadAnswersBatch(c context.Context, rootIDs []int64) ([]model.Comment, error) {
