@@ -71,4 +71,3 @@ func (cd *CommentDao) LoadAnswersBatch(c context.Context, rootIDs []int64) ([]mo
 	err := cd.db.WithContext(c).Where("root_id IN ? AND subject = 'comment'", rootIDs).Find(&cmts).Error
 	return cmts, err
 }
-

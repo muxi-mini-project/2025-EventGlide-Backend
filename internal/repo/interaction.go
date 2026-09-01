@@ -205,6 +205,58 @@ func (r *InteractionRepo) IsUserLikedComment(ctx context.Context, userId, commen
 	return r.dao.IsUserLikedComment(ctx, userId, commentId)
 }
 
+// GetUserPostInteractionMaps 批量获取用户对多个帖子的点赞+收藏状态（Redis 单次 pipeline，异常降级一次批量 SQL）
+func (r *InteractionRepo) GetUserPostInteractionMaps(ctx context.Context, userId int64, postIds []int64) (likedMap, collectedMap map[int64]bool, err error) {
+	if len(postIds) == 0 {
+		return make(map[int64]bool), make(map[int64]bool), nil
+	}
+	likedMap, collectedMap, err = r.lfr.MGetUserInteractionStatus(ctx, cache.SubjectPost, postIds, userId)
+	if err == nil {
+		return likedMap, collectedMap, nil
+	}
+	likedIds, collectedIds, err := r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
+	if err != nil {
+		return nil, nil, err
+	}
+	likedMap = make(map[int64]bool, len(postIds))
+	collectedMap = make(map[int64]bool, len(postIds))
+	for _, id := range postIds {
+		likedMap[id] = false
+		collectedMap[id] = false
+	}
+	for _, id := range likedIds {
+		likedMap[id] = true
+	}
+	for _, id := range collectedIds {
+		collectedMap[id] = true
+	}
+	return likedMap, collectedMap, nil
+}
+
+// GetUserLikedCommentMap 批量获取用户对多条评论的点赞状态（Redis 单次 pipeline，异常降级批量 SQL）
+func (r *InteractionRepo) GetUserLikedCommentMap(ctx context.Context, userId int64, commentIds []int64) (map[int64]bool, error) {
+	if len(commentIds) == 0 {
+		return make(map[int64]bool), nil
+	}
+	likedMap, err := r.lfr.MGetUserLikedStatusBySubject(ctx, cache.SubjectComment, commentIds, userId)
+	if err == nil {
+		return likedMap, nil
+	}
+	// Redis 异常降级：MySQL 批量查
+	likedIds, err := r.dao.GetUserLikedCommentIds(ctx, userId, commentIds)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[int64]bool, len(commentIds))
+	for _, id := range commentIds {
+		result[id] = false
+	}
+	for _, id := range likedIds {
+		result[id] = true
+	}
+	return result, nil
+}
+
 func (r *InteractionRepo) GetUserCollectedActivityIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
 	return r.dao.GetUserCollectedActivityIds(ctx, userId, page, limit)
 }
@@ -226,28 +278,13 @@ func (r *InteractionRepo) GetUserActivityInteractionStatuses(ctx context.Context
 		return []int64{}, []int64{}, nil
 	}
 
-	// 批量查询点赞状态
-	likedMap := make(map[int64]bool)
-	for _, aid := range activityIds {
-		liked, err := r.lfr.IsLiked(ctx, cache.SubjectActivity, aid, userId)
-		if err != nil {
-			return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
-		}
-		if liked {
-			likedMap[aid] = true
-		}
+	likedMap, err := r.lfr.MGetUserLikedStatusBySubject(ctx, cache.SubjectActivity, activityIds, userId)
+	if err != nil {
+		return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
 	}
-
-	// 批量查询收藏状态
-	collectedMap := make(map[int64]bool)
-	for _, aid := range activityIds {
-		collected, err := r.lfr.IsCollected(ctx, cache.SubjectActivity, aid, userId)
-		if err != nil {
-			return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
-		}
-		if collected {
-			collectedMap[aid] = true
-		}
+	collectedMap, err := r.lfr.MGetUserCollectedStatusBySubject(ctx, cache.SubjectActivity, activityIds, userId)
+	if err != nil {
+		return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
 	}
 
 	likedIds := make([]int64, 0)
@@ -269,28 +306,13 @@ func (r *InteractionRepo) GetUserPostInteractionStatuses(ctx context.Context, us
 		return []int64{}, []int64{}, nil
 	}
 
-	// 批量查询点赞状态
-	likedMap := make(map[int64]bool)
-	for _, pid := range postIds {
-		liked, err := r.lfr.IsLiked(ctx, cache.SubjectPost, pid, userId)
-		if err != nil {
-			return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
-		}
-		if liked {
-			likedMap[pid] = true
-		}
+	likedMap, err := r.lfr.MGetUserLikedStatusBySubject(ctx, cache.SubjectPost, postIds, userId)
+	if err != nil {
+		return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
 	}
-
-	// 批量查询收藏状态
-	collectedMap := make(map[int64]bool)
-	for _, pid := range postIds {
-		collected, err := r.lfr.IsCollected(ctx, cache.SubjectPost, pid, userId)
-		if err != nil {
-			return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
-		}
-		if collected {
-			collectedMap[pid] = true
-		}
+	collectedMap, err := r.lfr.MGetUserCollectedStatusBySubject(ctx, cache.SubjectPost, postIds, userId)
+	if err != nil {
+		return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
 	}
 
 	likedIds := make([]int64, 0)

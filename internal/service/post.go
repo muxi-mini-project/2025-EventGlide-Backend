@@ -130,6 +130,10 @@ func (ps *PostService) FindPostById(c context.Context, id int64) (model.Post, er
 }
 
 func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, viewerID string) []model.PostDetail {
+	if len(posts) == 0 {
+		return nil
+	}
+
 	studentIDs := make([]string, 0, len(posts)+1)
 	studentIDs = append(studentIDs, viewerID)
 	for _, post := range posts {
@@ -141,6 +145,18 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 	viewerUserId := int64(0)
 	if searcher != nil {
 		viewerUserId = int64(searcher.Id)
+	}
+
+	postIds := make([]int64, len(posts))
+	for i := range posts {
+		postIds[i] = posts[i].Id
+	}
+	// 批量查询互动状态（单次 Redis pipeline，避免 N+1）
+	likedMap, collectedMap, err := ps.id.GetUserPostInteractionMaps(c, viewerUserId, postIds)
+	if err != nil {
+		ps.l.Error("Failed to batch get post interaction status", zap.Error(err))
+		likedMap = make(map[int64]bool)
+		collectedMap = make(map[int64]bool)
 	}
 
 	details := make([]model.PostDetail, 0, len(posts))
@@ -159,8 +175,8 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 				School:    author.School,
 			},
 			Images:    post.Images,
-			IsLike:    ps.id.IsUserLikedPost(c, viewerUserId, post.Id),
-			IsCollect: ps.id.IsUserCollectedPost(c, viewerUserId, post.Id),
+			IsLike:    likedMap[post.Id],
+			IsCollect: collectedMap[post.Id],
 		})
 	}
 	return details
@@ -183,7 +199,7 @@ func (ps *PostService) EnrichForSearcherWithStatuses(c context.Context, posts []
 			author = &model.User{}
 		}
 		details = append(details, model.PostDetail{
-			Post:      *post,
+			Post: *post,
 			Author: model.UserBrief{
 				StudentID: author.StudentID,
 				Name:      author.Name,

@@ -276,6 +276,15 @@ func (id *InteractionDao) IsUserLikedComment(c context.Context, userId, commentI
 	return count > 0
 }
 
+// GetUserLikedCommentIds 批量查询用户点赞的评论 ID
+func (id *InteractionDao) GetUserLikedCommentIds(c context.Context, userId int64, commentIds []int64) ([]int64, error) {
+	var ids []int64
+	err := id.db.WithContext(c).Model(&model.UserCommentInteraction{}).
+		Where("user_id = ? AND comment_id IN ? AND type = ?", userId, commentIds, "like").
+		Pluck("comment_id", &ids).Error
+	return ids, err
+}
+
 func (id *InteractionDao) GetUserCollectedActivityIds(c context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
 	offset := (page - 1) * limit
 	var ids []int64
