@@ -12,8 +12,10 @@ import (
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/pkg/ginx"
+	"github.com/raiki02/EG/pkg/logger"
 	"github.com/raiki02/EG/tools"
 	"github.com/redis/go-redis/v9"
+	"go.uber.org/zap"
 )
 
 type JwtHdl interface {
@@ -70,6 +72,10 @@ func (c *Jwt) CheckToken(ctx context.Context, token string) error {
 	_, err := c.rdb.Get(ctx, id).Result()
 	if err != nil {
 		return errs.ErrJWTExpired.Wrap(err)
+	}
+	// 滑动续期：每次有效请求重置 TTL，活跃用户不掉线
+	if err := c.rdb.Expire(ctx, id, setTTL(c.cfg)).Err(); err != nil {
+		logger.GetLogger("bff").Warn("sliding expiry failed", zap.Error(err))
 	}
 	return nil
 }
