@@ -71,6 +71,8 @@ func (c *Jwt) CheckToken(ctx context.Context, token string) error {
 	if err != nil {
 		return errs.ErrJWTExpired.Wrap(err)
 	}
+	// 滑动续期：每次有效请求重置 TTL，活跃用户不掉线
+	_ = c.rdb.Expire(ctx, id, setTTL(c.cfg)).Err()
 	return nil
 }
 
