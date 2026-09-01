@@ -131,7 +131,7 @@ func (ps *PostService) FindPostById(c context.Context, id int64) (model.Post, er
 
 func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, viewerID string) []model.PostDetail {
 	if len(posts) == 0 {
-		return nil
+		return []model.PostDetail{}
 	}
 
 	studentIDs := make([]string, 0, len(posts)+1)
