@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestCheckTokenExpired(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := j.CheckToken(ctx, token); err == nil {
-		t.Fatal("CheckToken 应返回过期错误")
+	if err := j.CheckToken(ctx, token); !errors.Is(err, redis.Nil) {
+		t.Fatalf("CheckToken 应因 key 不存在返回过期错误（底层 redis.Nil），got: %v", err)
 	}
 }
