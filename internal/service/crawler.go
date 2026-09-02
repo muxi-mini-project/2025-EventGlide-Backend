@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,11 +60,16 @@ func ParseStudentType(studentID string) StudentType {
 
 type StudentCrawler interface {
 	Login(ctx context.Context, studentID, password string) (*http.Client, error)
+	SupportsUserInfo(studentID string) bool
+	GetNameAndDepartment(ctx context.Context, studentID string, client *http.Client) (string, string, error)
 }
 
 var _ StudentCrawler = (*ccnuService)(nil)
 
-const ccnuAccountHost = "account.ccnu.edu.cn"
+const (
+	ccnuAccountHost      = "account.ccnu.edu.cn"
+	ccnuPostgraduateHost = "grd.ccnu.edu.cn"
+)
 
 type loginProxyError struct {
 	err error
@@ -112,6 +116,16 @@ func (c *ccnuService) Login(ctx context.Context, studentId string, password stri
 	return login(ctx, studentId, password, false)
 }
 
+// SupportsUserInfo reports whether the student type has a matching user-info crawler.
+func (c *ccnuService) SupportsUserInfo(studentID string) bool {
+	switch ParseStudentType(studentID) {
+	case UnderGraduate, PostGraduate:
+		return true
+	default:
+		return false
+	}
+}
+
 func (c *ccnuService) client(ctx context.Context, useProxy bool) (*http.Client, error) {
 	j, _ := cookiejar.New(&cookiejar.Options{})
 	var proxyURL *url.URL
@@ -143,7 +157,8 @@ func newCCNUTransport(proxyURL *url.URL) *http.Transport {
 	}
 
 	transport.Proxy = func(req *http.Request) (*url.URL, error) {
-		if strings.EqualFold(req.URL.Hostname(), ccnuAccountHost) {
+		host := req.URL.Hostname()
+		if strings.EqualFold(host, ccnuAccountHost) || strings.EqualFold(host, ccnuPostgraduateHost) {
 			return proxyURL, nil
 		}
 		return nil, nil
@@ -203,10 +218,21 @@ func (c *ccnuService) loginUndergraduateClient(ctx context.Context, studentId st
 	return client, nil
 }
 
-func (c *ccnuService) getNameAndDepartment(client *http.Client) (string, string, error) {
+func (c *ccnuService) GetNameAndDepartment(ctx context.Context, studentID string, client *http.Client) (string, string, error) {
+	switch ParseStudentType(studentID) {
+	case UnderGraduate:
+		return c.getUndergraduateNameAndDepartment(ctx, client)
+	case PostGraduate:
+		return newPostgraduateCrawler(client).GetNameAndDepartment(ctx)
+	default:
+		return "", "", errs.ErrLoginInfoInvalid
+	}
+}
+
+func (c *ccnuService) getUndergraduateNameAndDepartment(ctx context.Context, client *http.Client) (string, string, error) {
 	url1 := "https://account.ccnu.edu.cn/cas/login?service=" + url.QueryEscape("https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV_new_10511.htmlx?t1=1")
 
-	req1, err := http.NewRequest("GET", url1, nil)
+	req1, err := http.NewRequestWithContext(ctx, http.MethodGet, url1, nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -219,7 +245,7 @@ func (c *ccnuService) getNameAndDepartment(client *http.Client) (string, string,
 
 	url2 := "https://account.ccnu.edu.cn/cas/login?service=" + url.QueryEscape("https://bkzhjw.ccnu.edu.cn/jsxsd/framework/xsMainV_new_10511.htmlx?t1=1")
 
-	req2, err := http.NewRequest("GET", url2, nil)
+	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, url2, nil)
 	if err != nil {
 		return "", "", err
 	}
@@ -329,7 +355,7 @@ func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) 
 	ctx := context.Background()
 
 	for i := 0; i < 3; i++ {
-		realName, college, err := us.cSvc.getNameAndDepartment(client)
+		realName, college, err := us.cSvc.GetNameAndDepartment(ctx, studentID, client)
 
 		if err == nil {
 			updated := false
@@ -409,9 +435,11 @@ func detailValue(text string) string {
 
 // 研究生登录
 const (
-	postgraduateURL      = "https://grd.ccnu.edu.cn"
-	publicKeyURL         = postgraduateURL + "/yjsxt/xtgl/login_getPublicKey.html"
-	loginPostgraduateURL = postgraduateURL + "/yjsxt/xtgl/login_slogin.html"
+	postgraduateURL         = "https://grd.ccnu.edu.cn"
+	publicKeyURL            = postgraduateURL + "/yjsxt/xtgl/login_getPublicKey.html"
+	loginPostgraduateURL    = postgraduateURL + "/yjsxt/xtgl/login_slogin.html"
+	postgraduateUserInfoURL = postgraduateURL + "/yjsxt/xtgl/index_cxUserInfo.html?gnmkdm=index"
+	postgraduateMenuReferer = postgraduateURL + "/yjsxt/xtgl/index_initMenu.html"
 )
 
 type postgraduateCrawler struct {
@@ -420,6 +448,61 @@ type postgraduateCrawler struct {
 
 func newPostgraduateCrawler(client *http.Client) *postgraduateCrawler {
 	return &postgraduateCrawler{client: client}
+}
+
+func (c *postgraduateCrawler) GetNameAndDepartment(ctx context.Context) (string, string, error) {
+	form := url.Values{}
+	form.Set("localeKey", "zh_CN")
+
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodPost,
+		postgraduateUserInfoURL,
+		strings.NewReader(form.Encode()),
+	)
+	if err != nil {
+		return "", "", fmt.Errorf("postgraduate: create user info request failed: %w", err)
+	}
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8")
+	req.Header.Set("Origin", postgraduateURL)
+	req.Header.Set("Referer", postgraduateMenuReferer)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("postgraduate: send user info request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := readResponse(resp)
+	if err != nil {
+		return "", "", fmt.Errorf("postgraduate: read user info response failed: %w", err)
+	}
+
+	var data postgraduateUserInfoResponse
+	if err := json.Unmarshal(body, &data); err != nil {
+		return "", "", fmt.Errorf("postgraduate: decode user info response failed: %w", err)
+	}
+	if data.StatusCode != http.StatusOK {
+		return "", "", fmt.Errorf("postgraduate: user info status code %d", data.StatusCode)
+	}
+
+	name := strings.TrimSpace(data.Data.Name)
+	department := strings.TrimSpace(data.Data.Department)
+	if name == "" || department == "" {
+		return "", "", errors.New("postgraduate: name or department missing")
+	}
+	return name, department, nil
+}
+
+type postgraduateUserInfoResponse struct {
+	Data struct {
+		Name       string `json:"xm"`
+		Department string `json:"jgmc"`
+	} `json:"data"`
+	StatusCode int `json:"statusCode"`
 }
 
 // 1. 获取 RSA 公钥
@@ -495,79 +578,36 @@ func (c *postgraduateCrawler) LoginPostgraduateSystem(
 	}
 	defer resp.Body.Close()
 
-	body, err := readResponse(resp)
-	if err != nil {
+	if _, err := readResponse(resp); err != nil {
 		return fmt.Errorf("postgraduate: read login response failed: %w", err)
 	}
-
-	if strings.Contains(string(body), "用户名或密码不正确") {
+	if !hasPostgraduateSession(c.client) {
 		return errs.ErrLoginFailed
 	}
 
 	return nil
 }
 
-// 3. 登录并获取 Cookie
-func (c *postgraduateCrawler) GetCookie(
-	ctx context.Context,
-	stuId,
-	password string,
-	pubKey *rsa.PublicKey,
-) (string, error) {
+func hasPostgraduateSession(client *http.Client) bool {
+	if client == nil || client.Jar == nil {
+		return false
+	}
 
-	encPwd, err := encryptPasswordJSStyle(password, pubKey)
+	loginURL, err := url.Parse(loginPostgraduateURL)
 	if err != nil {
-		return "", fmt.Errorf("postgraduate: encrypt password failed: %w", err)
+		return false
 	}
 
-	form := url.Values{}
-	form.Set("csrftoken", "")
-	form.Set("yhm", stuId)
-	form.Set("mm", encPwd)
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		"POST",
-		loginPostgraduateURL,
-		bytes.NewBufferString(form.Encode()),
-	)
-	if err != nil {
-		return "", fmt.Errorf("postgraduate: create cookie request failed: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", "Mozilla/5.0")
-	req.Header.Set("Referer", postgraduateURL+"/yjsxt/")
-	req.Header.Set("Origin", postgraduateURL)
-	req.Header.Set("Host", "grd.ccnu.edu.cn")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("postgraduate: send cookie request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("postgraduate: unexpected status code %d", resp.StatusCode)
-	}
-
-	var JSESSIONID, route string
-	rootURL, _ := url.Parse("https://grd.ccnu.edu.cn/yjsxt")
-
-	for _, cookie := range c.client.Jar.Cookies(rootURL) {
+	var hasJSESSIONID, hasRoute bool
+	for _, cookie := range client.Jar.Cookies(loginURL) {
 		switch cookie.Name {
 		case "JSESSIONID":
-			JSESSIONID = cookie.Value
+			hasJSESSIONID = cookie.Value != ""
 		case "route":
-			route = cookie.Value
+			hasRoute = cookie.Value != ""
 		}
 	}
-
-	if JSESSIONID == "" || route == "" {
-		return "", errors.New("postgraduate: required cookie missing")
-	}
-
-	return fmt.Sprintf("JSESSIONID=%s;route=%s", JSESSIONID, route), nil
+	return hasJSESSIONID && hasRoute
 }
 
 type rsaPublicKeyResponse struct {
@@ -601,13 +641,7 @@ func encryptPasswordJSStyle(password string, pubKey *rsa.PublicKey) (string, err
 		return "", fmt.Errorf("rsa: encrypt password failed: %w", err)
 	}
 
-	hexStr := hex.EncodeToString(encrypted)
-	hexBytes, err := hex.DecodeString(hexStr)
-	if err != nil {
-		return "", fmt.Errorf("rsa: hex decode failed: %w", err)
-	}
-
-	return base64.StdEncoding.EncodeToString(hexBytes), nil
+	return base64.StdEncoding.EncodeToString(encrypted), nil
 }
 
 func (c *ccnuService) loginPostgraduateClient(ctx context.Context, studentID string, password string, useProxy bool) (*http.Client, error) {

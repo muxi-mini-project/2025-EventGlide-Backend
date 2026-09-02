@@ -42,7 +42,7 @@ type UserService struct {
 	pdh  *repo.PostRepo
 	idh  *repo.InteractionRepo
 	jwth *middleware.Jwt
-	cSvc *ccnuService
+	cSvc StudentCrawler
 	iuh  *ImgUploader
 	as   *ActivityService
 	ps   *PostService
@@ -50,7 +50,7 @@ type UserService struct {
 	cfg  *config.Conf
 }
 
-func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, ih *repo.InteractionRepo, jwth *middleware.Jwt, cSvc *ccnuService, iuh *ImgUploader, as *ActivityService, ps *PostService, l *logger.LoggerSet, cfg *config.Conf) *UserService {
+func NewUserService(udh *repo.UserRepo, adh *repo.ActivityRepo, pdh *repo.PostRepo, ih *repo.InteractionRepo, jwth *middleware.Jwt, cSvc StudentCrawler, iuh *ImgUploader, as *ActivityService, ps *PostService, l *logger.LoggerSet, cfg *config.Conf) *UserService {
 	return &UserService{
 		udh:  udh,
 		adh:  adh,
@@ -101,18 +101,18 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", errs.ErrLoginFailed
 	}
 
-	name, department, err := us.cSvc.getNameAndDepartment(client)
-	if err != nil {
-		us.l.Warn("get user info failed", zap.Error(err))
-		name = ""
-		department = ""
+	var name, department string
+	supportsUserInfo := us.cSvc.SupportsUserInfo(studentId)
+	if supportsUserInfo {
+		name, department, err = us.cSvc.GetNameAndDepartment(ctx, studentId, client)
+		if err != nil {
+			us.l.Warn("get user info failed", zap.Error(err))
+			name = ""
+			department = ""
+		}
 	}
 
 	if !us.udh.CheckUserExist(ctx, studentId) {
-		if name == "" || department == "" {
-			go us.loadUserInfoAsync(client, studentId)
-		}
-
 		err = us.CreateUser(ctx, studentId, name, department)
 		if err != nil {
 			us.l.Error("Create user failed", zap.Error(err), zap.String("studentId", studentId))
@@ -136,7 +136,7 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		return nil, "", errs.ErrUserNotFound.Wrap(err)
 	}
 
-	if user.RealName == "" || user.College == "" {
+	if supportsUserInfo && (user.RealName == "" || user.College == "") {
 		go us.loadUserInfoAsync(client, studentId)
 	}
 

@@ -11,7 +11,7 @@ import (
 	"github.com/raiki02/EG/internal/errs"
 )
 
-func TestCCNUTransportOnlyProxiesAccountHost(t *testing.T) {
+func TestCCNUTransportProxiesLoginHosts(t *testing.T) {
 	proxyURL, err := url.Parse("http://127.0.0.1:18080")
 	if err != nil {
 		t.Fatal(err)
@@ -24,6 +24,7 @@ func TestCCNUTransportOnlyProxiesAccountHost(t *testing.T) {
 		wantProxy bool
 	}{
 		{name: "account service uses proxy", targetURL: "https://account.ccnu.edu.cn/cas/login", wantProxy: true},
+		{name: "postgraduate service uses proxy", targetURL: "https://grd.ccnu.edu.cn/yjsxt/", wantProxy: true},
 		{name: "academic service connects directly", targetURL: "https://bkzhjw.ccnu.edu.cn/jsxsd/", wantProxy: false},
 		{name: "unrelated host connects directly", targetURL: "https://example.com/", wantProxy: false},
 	}
