@@ -14,6 +14,7 @@ var Provider = wire.NewSet(
 	NewPostService,
 	NewInteractionService,
 	NewUserService,
+	wire.Bind(new(StudentCrawler), new(*ccnuService)),
 
 	NewSubjectGetter,
 )
