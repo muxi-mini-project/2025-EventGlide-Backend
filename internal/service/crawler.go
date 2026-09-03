@@ -352,7 +352,8 @@ func (c *ccnuService) makeAccountPreflightRequest(ctx context.Context, useProxy 
 }
 
 func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
 	for i := 0; i < 3; i++ {
 		realName, college, err := us.cSvc.GetNameAndDepartment(ctx, studentID, client)
@@ -379,7 +380,11 @@ func (us *UserService) loadUserInfoAsync(client *http.Client, studentID string) 
 		}
 
 		us.l.Warn("load user info failed", zap.String("student_id", studentID), zap.Int("retry", i+1), zap.Error(err))
-		time.Sleep(30 * time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(30 * time.Second):
+		}
 	}
 }
 
