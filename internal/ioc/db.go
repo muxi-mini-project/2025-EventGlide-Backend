@@ -3,6 +3,7 @@ package ioc
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -122,13 +123,25 @@ func dedupInteractions(db *gorm.DB) error {
 	return nil
 }
 
-// zapWriter 将 GORM 日志转发给 zap 结构化日志，替代标准库 stdout 输出
+// zapWriter 将 GORM 日志转发给 zap 结构化日志，替代标准库 stdout 输出。
+// 分流规则依赖 LogLevel=Warn 的配置（InitDB 中 gormlogger.Config）：
+// 在该级别下 GORM 只会输出四类消息——
+//   - Error()/Warn() 方法：带 "[error] " / "[warn] " 前缀
+//   - Trace 慢 SQL：带 "SLOW SQL >=" 字样
+//   - Trace 错误 SQL：无级别前缀
+// 故带 "[warn] " 或 "SLOW SQL" 判为 Warn，其余（含 "[error] " 与无前缀的错误 trace）判为 Error。
+// 若将来调整 LogLevel 为 Info，需同步修正此处（普通 trace 无前缀会被误判 Error）。
 type zapWriter struct {
 	l *zap.Logger
 }
 
 func (w zapWriter) Printf(format string, args ...interface{}) {
-	w.l.Warn(fmt.Sprintf(format, args...))
+	msg := fmt.Sprintf(format, args...)
+	if strings.Contains(msg, "[warn] ") || strings.Contains(msg, "SLOW SQL") {
+		w.l.Warn(msg)
+		return
+	}
+	w.l.Error(msg)
 }
 
 // dedupTarget 描述一张互动表及其计数同步目标
