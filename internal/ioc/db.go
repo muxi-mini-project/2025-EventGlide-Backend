@@ -35,6 +35,7 @@ func InitDB(cfg *config.Conf) *gorm.DB {
 			SingularTable: true,
 		},
 		DisableForeignKeyConstraintWhenMigrating: true,
+		TranslateError:                           true,
 		Logger:                                   gormLogger,
 	})
 	if err != nil {
