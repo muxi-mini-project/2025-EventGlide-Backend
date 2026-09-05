@@ -261,9 +261,26 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 		cs.l.Error("Error batch get users", zap.Error(err))
 	}
 
+	// 批量查 viewer 对所有评论（含回复）的点赞状态，避免 N+1
+	likedMap := make(map[int64]bool)
+	commentIds := make([]int64, 0, len(cmts)+len(allReplies))
+	for i := range cmts {
+		commentIds = append(commentIds, cmts[i].Id)
+	}
+	for i := range allReplies {
+		commentIds = append(commentIds, allReplies[i].Id)
+	}
+	if viewer, ok := userMap[viewerID]; ok {
+		likedMap, err = cs.id.GetUserLikedCommentMap(c, int64(viewer.Id), commentIds)
+		if err != nil {
+			cs.l.Error("Error batch get comment like status", zap.Error(err))
+			likedMap = make(map[int64]bool)
+		}
+	}
+
 	details := make([]model.CommentDetail, 0, len(cmts))
 	for i := range cmts {
-		details = append(details, cs.enrichCommentWithCache(c, &cmts[i], viewerID, userMap, replyMap))
+		details = append(details, cs.enrichCommentWithCache(c, &cmts[i], viewerID, userMap, replyMap, likedMap))
 	}
 	return details
 }
@@ -271,16 +288,32 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
 	idList := []string{viewerID, cmt.StudentID}
 	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
-	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap, nil)
+	likedMap := cs.viewerLikedComments(c, viewerID, userMap, []int64{cmt.Id})
+	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap, nil, likedMap)
 }
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
 	idList := []string{viewerID, cmt.StudentID}
 	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
-	return cs.enrichReplyWithCache(c, cmt, viewerID, userMap)
+	likedMap := cs.viewerLikedComments(c, viewerID, userMap, []int64{cmt.Id})
+	return cs.enrichReplyWithCache(c, cmt, viewerID, userMap, likedMap)
 }
 
-func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User, replyMap map[int64][]model.Comment) model.CommentDetail {
+// viewerLikedComments 批量获取 viewer 对指定评论的点赞状态
+func (cs *CommentService) viewerLikedComments(c context.Context, viewerID string, userMap map[string]*model.User, commentIds []int64) map[int64]bool {
+	likedMap := make(map[int64]bool)
+	if viewer, ok := userMap[viewerID]; ok {
+		m, err := cs.id.GetUserLikedCommentMap(c, int64(viewer.Id), commentIds)
+		if err != nil {
+			cs.l.Error("Error batch get comment like status", zap.Error(err))
+			return make(map[int64]bool)
+		}
+		likedMap = m
+	}
+	return likedMap
+}
+
+func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User, replyMap map[int64][]model.Comment, likedMap map[int64]bool) model.CommentDetail {
 	creator := userMap[cmt.StudentID]
 	viewer := userMap[viewerID]
 
@@ -306,22 +339,22 @@ func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.C
 		}
 	}
 	if viewer != nil {
-		detail.IsLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
+		detail.IsLike = likedMap[cmt.Id]
 	}
 	for _, reply := range replies {
-		detail.Replies = append(detail.Replies, cs.enrichReplyWithCache(c, &reply, viewerID, userMap))
+		detail.Replies = append(detail.Replies, cs.enrichReplyWithCache(c, &reply, viewerID, userMap, likedMap))
 	}
 	return detail
 }
 
-func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User) model.ReplyDetail {
-	viewer := userMap[viewerID]
-
+func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Comment, viewerID string, userMap map[string]*model.User, likedMap map[int64]bool) model.ReplyDetail {
 	isLike := false
-	if viewer != nil {
+	if liked, ok := likedMap[cmt.Id]; ok {
+		isLike = liked
+	} else if viewer := userMap[viewerID]; viewer != nil {
+		// 批量 map 未覆盖（如单条 enrich 路径新加载的回复），回退单条查询
 		isLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
 	}
-
 	return model.ReplyDetail{
 		Comment:        *cmt,
 		ParentUserName: string(cmt.ReplyToUserName),

@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // InteractionEvent 互动事件
@@ -25,18 +25,18 @@ type InteractionEvent struct {
 
 const (
 	StreamKey     = "interaction_stream"
-	DLQKey = "interaction_dlq"
+	DLQKey        = "interaction_dlq"
 	ConsumeCount  = 100
 	ConsumeBlock  = 5 * time.Second
 	MaxRetryCount = 3
-	RecoverIdle = 2 * time.Minute
+	RecoverIdle   = 2 * time.Minute
 )
 
 // InteractionConsumer MQ 消费者，处理互动事件
 type InteractionConsumer struct {
 	mq       MQHdl
 	dao      *dao.InteractionDao
-	l *zap.Logger
+	l        *zap.Logger
 	consumer string
 	group    string
 }
@@ -157,9 +157,7 @@ func (c *InteractionConsumer) processRecoveredMessages(ctx context.Context, msgs
 
 		// 未超限，正常处理
 		if err := c.handleEvent(ctx, &event); err != nil {
-			if strings.Contains(err.Error(), "unknown interaction type") ||
-				strings.Contains(err.Error(), "unknown") ||
-				strings.Contains(err.Error(), "invalid") {
+			if isNonRetryable(err) {
 				c.l.Warn("Non-retryable error, ack and skip",
 					zap.String("msg_id", msg.ID),
 					zap.Error(err),
@@ -196,9 +194,7 @@ func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.
 
 		if err := c.handleEvent(ctx, &event); err != nil {
 			//不可重试错误：直接 ACK丢弃
-			if strings.Contains(err.Error(), "unknown interaction type") ||
-				strings.Contains(err.Error(), "unknown") ||
-				strings.Contains(err.Error(), "invalid") {
+			if isNonRetryable(err) {
 				c.l.Warn("Non-retryable error, ack and skip",
 					zap.String("msg_id", msg.ID),
 					zap.Error(err),
@@ -218,6 +214,26 @@ func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.
 	}
 }
 
+// 事件分发层的哨兵错误：消息内容不合法，属于永久性错误，重试无意义
+var (
+	ErrUnknownType          = errors.New("unknown interaction type")
+	ErrUnknownLikeAction    = errors.New("unknown like action")
+	ErrUnknownCollectAction = errors.New("unknown collect action")
+)
+
+// isNonRetryable 判断错误是否不可重试：不可重试的直接 Ack 丢弃，
+// 可重试的留在 PEL 由 recoverLoop 的 XAUTOCLAIM 重新消费。
+// duplicate key 表示事件实际已成功（唯一索引封堵并发/重投插入），视为幂等成功。
+// 必须精确匹配哨兵错误，不能用子串匹配：
+// MySQL 驱动的临时性错误如 "invalid connection" 含 "invalid"，误判会导致 ACK 丢事件。
+func isNonRetryable(err error) bool {
+	return errors.Is(err, gorm.ErrDuplicatedKey) ||
+		errors.Is(err, dao.ErrInvalidSubject) ||
+		errors.Is(err, ErrUnknownType) ||
+		errors.Is(err, ErrUnknownLikeAction) ||
+		errors.Is(err, ErrUnknownCollectAction)
+}
+
 // handleEvent 根据事件类型分发处理
 func (c *InteractionConsumer) handleEvent(ctx context.Context, event *InteractionEvent) error {
 	switch event.Type {
@@ -227,7 +243,7 @@ func (c *InteractionConsumer) handleEvent(ctx context.Context, event *Interactio
 		return c.handleCollect(ctx, event)
 	default:
 		c.l.Warn("Unknown type", zap.String("type", event.Type))
-		return fmt.Errorf("unknown interaction type: %s", event.Type)
+		return fmt.Errorf("%w: %s", ErrUnknownType, event.Type)
 	}
 }
 
@@ -239,7 +255,7 @@ func (c *InteractionConsumer) handleLike(ctx context.Context, event *Interaction
 	case "remove":
 		return c.dao.DeleteLike(ctx, event.Subject, event.SubjectID, event.UserID)
 	default:
-		return fmt.Errorf("unknown like action: %s", event.Action)
+		return fmt.Errorf("%w: %s", ErrUnknownLikeAction, event.Action)
 	}
 }
 
@@ -251,6 +267,6 @@ func (c *InteractionConsumer) handleCollect(ctx context.Context, event *Interact
 	case "remove":
 		return c.dao.DeleteCollect(ctx, event.Subject, event.SubjectID, event.UserID)
 	default:
-		return fmt.Errorf("unknown collect action: %s", event.Action)
+		return fmt.Errorf("%w: %s", ErrUnknownCollectAction, event.Action)
 	}
 }

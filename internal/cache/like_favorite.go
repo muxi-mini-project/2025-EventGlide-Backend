@@ -128,6 +128,88 @@ func (l *LikeFavoriteRedis) IsCollected(ctx context.Context, subject Subject, su
 	return l.rdb.SIsMember(ctx, key, userID).Result()
 }
 
+// MGetLikedStatusesForUser 批量检查同一用户是否点赞多个目标（单次 pipeline）
+func (l *LikeFavoriteRedis) MGetLikedStatusesForUser(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (map[int64]bool, error) {
+	if len(subjectIDs) == 0 {
+		return make(map[int64]bool), nil
+	}
+	pipe := l.rdb.Pipeline()
+	cmds := make([]*redis.BoolCmd, len(subjectIDs))
+	for i, id := range subjectIDs {
+		cmds[i] = pipe.SIsMember(ctx, LikeSetKey(subject, id), userID)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, err
+	}
+	result := make(map[int64]bool, len(subjectIDs))
+	for i, cmd := range cmds {
+		liked, err := cmd.Result()
+		if err != nil {
+			return nil, fmt.Errorf("SIsMember(like) for subjectID %d failed: %w", subjectIDs[i], err)
+		}
+		result[subjectIDs[i]] = liked
+	}
+	return result, nil
+}
+
+// MGetCollectedStatusesForUser 批量检查同一用户是否收藏多个目标（单次 pipeline）
+func (l *LikeFavoriteRedis) MGetCollectedStatusesForUser(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (map[int64]bool, error) {
+	if len(subjectIDs) == 0 {
+		return make(map[int64]bool), nil
+	}
+	pipe := l.rdb.Pipeline()
+	cmds := make([]*redis.BoolCmd, len(subjectIDs))
+	for i, id := range subjectIDs {
+		cmds[i] = pipe.SIsMember(ctx, CollectSetKey(subject, id), userID)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, err
+	}
+	result := make(map[int64]bool, len(subjectIDs))
+	for i, cmd := range cmds {
+		collected, err := cmd.Result()
+		if err != nil {
+			return nil, fmt.Errorf("SIsMember(collect) for subjectID %d failed: %w", subjectIDs[i], err)
+		}
+		result[subjectIDs[i]] = collected
+	}
+	return result, nil
+}
+
+// MGetUserInteractionStatus 批量检查同一用户对多个目标的点赞+收藏状态（单次 pipeline，2N 条命令合并 1 次往返）
+func (l *LikeFavoriteRedis) MGetUserInteractionStatus(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (likedMap, collectedMap map[int64]bool, err error) {
+	if len(subjectIDs) == 0 {
+		return make(map[int64]bool), make(map[int64]bool), nil
+	}
+	pipe := l.rdb.Pipeline()
+	likedCmds := make([]*redis.BoolCmd, len(subjectIDs))
+	collectedCmds := make([]*redis.BoolCmd, len(subjectIDs))
+	for i, id := range subjectIDs {
+		likedCmds[i] = pipe.SIsMember(ctx, LikeSetKey(subject, id), userID)
+		collectedCmds[i] = pipe.SIsMember(ctx, CollectSetKey(subject, id), userID)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, nil, err
+	}
+	likedMap = make(map[int64]bool, len(subjectIDs))
+	collectedMap = make(map[int64]bool, len(subjectIDs))
+	for i, cmd := range likedCmds {
+		liked, err := cmd.Result()
+		if err != nil {
+			return nil, nil, fmt.Errorf("SIsMember(like) for subjectID %d failed: %w", subjectIDs[i], err)
+		}
+		likedMap[subjectIDs[i]] = liked
+	}
+	for i, cmd := range collectedCmds {
+		collected, err := cmd.Result()
+		if err != nil {
+			return nil, nil, fmt.Errorf("SIsMember(collect) for subjectID %d failed: %w", subjectIDs[i], err)
+		}
+		collectedMap[subjectIDs[i]] = collected
+	}
+	return likedMap, collectedMap, nil
+}
+
 // GetLikeCount 获取点赞数
 func (l *LikeFavoriteRedis) GetLikeCount(ctx context.Context, subject Subject, subjectID int64) (int64, bool, error) {
 	key := LikeCountKey(subject, subjectID)

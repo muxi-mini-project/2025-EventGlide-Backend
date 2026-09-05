@@ -16,6 +16,9 @@ type InteractionDao struct {
 	l  *zap.Logger
 }
 
+// ErrInvalidSubject 事件 subject 不在支持范围内，属于永久性错误，消费端可直接丢弃
+var ErrInvalidSubject = errors.New("invalid subject")
+
 func NewInteractionDao(db *gorm.DB, l *logger.LoggerSet) *InteractionDao {
 	return &InteractionDao{
 		db: db,
@@ -276,6 +279,15 @@ func (id *InteractionDao) IsUserLikedComment(c context.Context, userId, commentI
 	return count > 0
 }
 
+// GetUserLikedCommentIds 批量查询用户点赞的评论 ID
+func (id *InteractionDao) GetUserLikedCommentIds(c context.Context, userId int64, commentIds []int64) ([]int64, error) {
+	var ids []int64
+	err := id.db.WithContext(c).Model(&model.UserCommentInteraction{}).
+		Where("user_id = ? AND comment_id IN ? AND type = ?", userId, commentIds, "like").
+		Pluck("comment_id", &ids).Error
+	return ids, err
+}
+
 func (id *InteractionDao) GetUserCollectedActivityIds(c context.Context, userId int64, page, limit int) (*model.PaginatedActivityIds, error) {
 	offset := (page - 1) * limit
 	var ids []int64
@@ -485,7 +497,7 @@ func (id *InteractionDao) InsertLike(ctx context.Context, subject string, subjec
 			return tx.Model(&model.Comment{}).Where("id = ?", subjectID).
 				Update("like_num", gorm.Expr("like_num + ?", 1)).Error
 		default:
-			return errors.New("invalid subject")
+			return ErrInvalidSubject
 		}
 	})
 }
@@ -528,7 +540,7 @@ func (id *InteractionDao) DeleteLike(ctx context.Context, subject string, subjec
 			return tx.Model(&model.Comment{}).Where("id = ?", subjectID).
 				Update("like_num", gorm.Expr("like_num - ?", 1)).Error
 		default:
-			return errors.New("invalid subject")
+			return ErrInvalidSubject
 		}
 	})
 }
@@ -582,7 +594,7 @@ func (id *InteractionDao) InsertCollect(ctx context.Context, subject string, sub
 			return tx.Model(&model.Post{}).Where("id = ?", subjectID).
 				Update("collect_num", gorm.Expr("collect_num + ?", 1)).Error
 		default:
-			return errors.New("invalid subject")
+			return ErrInvalidSubject
 		}
 	})
 }
@@ -614,7 +626,7 @@ func (id *InteractionDao) DeleteCollect(ctx context.Context, subject string, sub
 			return tx.Model(&model.Post{}).Where("id = ?", subjectID).
 				Update("collect_num", gorm.Expr("collect_num - ?", 1)).Error
 		default:
-			return errors.New("invalid subject")
+			return ErrInvalidSubject
 		}
 	})
 }
@@ -641,7 +653,7 @@ func (id *InteractionDao) GetLikeNumFromDB(ctx context.Context, subject string, 
 		}
 		return int64(m.LikeNum), nil
 	default:
-		return 0, errors.New("invalid subject")
+		return 0, ErrInvalidSubject
 	}
 }
 
@@ -661,7 +673,7 @@ func (id *InteractionDao) GetCollectNumFromDB(ctx context.Context, subject strin
 		}
 		return int64(m.CollectNum), nil
 	default:
-		return 0, errors.New("invalid subject")
+		return 0, ErrInvalidSubject
 	}
 }
 
@@ -684,7 +696,7 @@ func (id *InteractionDao) CountAllLikesFromDB(ctx context.Context, subject strin
 			Where("comment_id = ? AND type = ?", subjectID, "like").Count(&count).Error
 		return count, err
 	default:
-		return 0, errors.New("invalid subject")
+		return 0, ErrInvalidSubject
 	}
 }
 
@@ -702,7 +714,7 @@ func (id *InteractionDao) CountAllCollectsFromDB(ctx context.Context, subject st
 			Where("post_id = ? AND type = ?", subjectID, "collect").Count(&count).Error
 		return count, err
 	default:
-		return 0, errors.New("invalid subject")
+		return 0, ErrInvalidSubject
 	}
 }
 
