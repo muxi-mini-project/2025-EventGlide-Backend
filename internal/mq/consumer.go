@@ -216,9 +216,9 @@ func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.
 
 // 事件分发层的哨兵错误：消息内容不合法，属于永久性错误，重试无意义
 var (
-	ErrUnknownType          = fmt.Errorf("unknown interaction type")
-	ErrUnknownLikeAction    = fmt.Errorf("unknown like action")
-	ErrUnknownCollectAction = fmt.Errorf("unknown collect action")
+	ErrUnknownType          = errors.New("unknown interaction type")
+	ErrUnknownLikeAction    = errors.New("unknown like action")
+	ErrUnknownCollectAction = errors.New("unknown collect action")
 )
 
 // isNonRetryable 判断错误是否不可重试：不可重试的直接 Ack 丢弃，

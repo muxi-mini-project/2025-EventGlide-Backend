@@ -129,6 +129,7 @@ func dedupInteractions(db *gorm.DB) error {
 //   - Error()/Warn() 方法：带 "[error] " / "[warn] " 前缀
 //   - Trace 慢 SQL：带 "SLOW SQL >=" 字样
 //   - Trace 错误 SQL：无级别前缀
+//
 // 故带 "[warn] " 或 "SLOW SQL" 判为 Warn，其余（含 "[error] " 与无前缀的错误 trace）判为 Error。
 // 若将来调整 LogLevel 为 Info，需同步修正此处（普通 trace 无前缀会被误判 Error）。
 type zapWriter struct {
