@@ -238,7 +238,7 @@ func (r *InteractionRepo) GetUserLikedCommentMap(ctx context.Context, userId int
 	if len(commentIds) == 0 {
 		return make(map[int64]bool), nil
 	}
-	likedMap, err := r.lfr.MGetUserLikedStatusBySubject(ctx, cache.SubjectComment, commentIds, userId)
+	likedMap, err := r.lfr.MGetLikedStatusesForUser(ctx, cache.SubjectComment, commentIds, userId)
 	if err == nil {
 		return likedMap, nil
 	}
@@ -278,11 +278,11 @@ func (r *InteractionRepo) GetUserActivityInteractionStatuses(ctx context.Context
 		return []int64{}, []int64{}, nil
 	}
 
-	likedMap, err := r.lfr.MGetUserLikedStatusBySubject(ctx, cache.SubjectActivity, activityIds, userId)
+	likedMap, err := r.lfr.MGetLikedStatusesForUser(ctx, cache.SubjectActivity, activityIds, userId)
 	if err != nil {
 		return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
 	}
-	collectedMap, err := r.lfr.MGetUserCollectedStatusBySubject(ctx, cache.SubjectActivity, activityIds, userId)
+	collectedMap, err := r.lfr.MGetCollectedStatusesForUser(ctx, cache.SubjectActivity, activityIds, userId)
 	if err != nil {
 		return r.dao.GetUserActivityInteractionStatuses(ctx, userId, activityIds)
 	}
@@ -306,11 +306,11 @@ func (r *InteractionRepo) GetUserPostInteractionStatuses(ctx context.Context, us
 		return []int64{}, []int64{}, nil
 	}
 
-	likedMap, err := r.lfr.MGetUserLikedStatusBySubject(ctx, cache.SubjectPost, postIds, userId)
+	likedMap, err := r.lfr.MGetLikedStatusesForUser(ctx, cache.SubjectPost, postIds, userId)
 	if err != nil {
 		return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
 	}
-	collectedMap, err := r.lfr.MGetUserCollectedStatusBySubject(ctx, cache.SubjectPost, postIds, userId)
+	collectedMap, err := r.lfr.MGetCollectedStatusesForUser(ctx, cache.SubjectPost, postIds, userId)
 	if err != nil {
 		return r.dao.GetUserPostInteractionStatuses(ctx, userId, postIds)
 	}

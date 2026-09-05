@@ -128,8 +128,8 @@ func (l *LikeFavoriteRedis) IsCollected(ctx context.Context, subject Subject, su
 	return l.rdb.SIsMember(ctx, key, userID).Result()
 }
 
-// MGetUserLikedStatusBySubject 批量检查同一用户是否点赞多个目标（单次 pipeline）
-func (l *LikeFavoriteRedis) MGetUserLikedStatusBySubject(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (map[int64]bool, error) {
+// MGetLikedStatusesForUser 批量检查同一用户是否点赞多个目标（单次 pipeline）
+func (l *LikeFavoriteRedis) MGetLikedStatusesForUser(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (map[int64]bool, error) {
 	if len(subjectIDs) == 0 {
 		return make(map[int64]bool), nil
 	}
@@ -152,8 +152,8 @@ func (l *LikeFavoriteRedis) MGetUserLikedStatusBySubject(ctx context.Context, su
 	return result, nil
 }
 
-// MGetUserCollectedStatusBySubject 批量检查同一用户是否收藏多个目标（单次 pipeline）
-func (l *LikeFavoriteRedis) MGetUserCollectedStatusBySubject(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (map[int64]bool, error) {
+// MGetCollectedStatusesForUser 批量检查同一用户是否收藏多个目标（单次 pipeline）
+func (l *LikeFavoriteRedis) MGetCollectedStatusesForUser(ctx context.Context, subject Subject, subjectIDs []int64, userID int64) (map[int64]bool, error) {
 	if len(subjectIDs) == 0 {
 		return make(map[int64]bool), nil
 	}

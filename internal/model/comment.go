@@ -10,7 +10,7 @@ type Comment struct {
 	Content   string `gorm:"not null;type:text;comment:评论内容;column:content"`
 	ParentID  int64  `gorm:"type:bigint;index;comment:父评论ID;column:parent_id"`
 	Position  string `gorm:"not null;type:varchar(255);comment:位置;column:position"`
-	Subject   string `gorm:"not null;index:idx_comment_root_subject,priority:2;comment:评论类型;column:subject"` // activity/post/comment
+	Subject   string `gorm:"not null;type:varchar(20);index:idx_comment_root_subject,priority:2;comment:评论类型;column:subject"` // activity/post/comment
 	RootID    int64  `gorm:"type:bigint;index:idx_comment_root_subject,priority:1;comment:根评论ID;column:root_id"`
 
 	LikeNum int `gorm:"not null;default:0;comment:点赞数;column:like_num"`

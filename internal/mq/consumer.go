@@ -11,6 +11,7 @@ import (
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 // InteractionEvent 互动事件
@@ -157,9 +158,7 @@ func (c *InteractionConsumer) processRecoveredMessages(ctx context.Context, msgs
 
 		// 未超限，正常处理
 		if err := c.handleEvent(ctx, &event); err != nil {
-			if strings.Contains(err.Error(), "unknown interaction type") ||
-				strings.Contains(err.Error(), "unknown") ||
-				strings.Contains(err.Error(), "invalid") {
+			if isNonRetryable(err) {
 				c.l.Warn("Non-retryable error, ack and skip",
 					zap.String("msg_id", msg.ID),
 					zap.Error(err),
@@ -196,9 +195,7 @@ func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.
 
 		if err := c.handleEvent(ctx, &event); err != nil {
 			//不可重试错误：直接 ACK丢弃
-			if strings.Contains(err.Error(), "unknown interaction type") ||
-				strings.Contains(err.Error(), "unknown") ||
-				strings.Contains(err.Error(), "invalid") {
+			if isNonRetryable(err) {
 				c.l.Warn("Non-retryable error, ack and skip",
 					zap.String("msg_id", msg.ID),
 					zap.Error(err),
@@ -216,6 +213,19 @@ func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.
 
 		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
 	}
+}
+
+// isNonRetryable 判断错误是否不可重试：不可重试的直接 Ack 丢弃，
+// 可重试的留在 PEL 由 recoverLoop 的 XAUTOCLAIM 重新消费。
+// duplicate key 表示事件实际已成功（唯一索引封堵并发/重投插入），视为幂等成功。
+func isNonRetryable(err error) bool {
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "unknown interaction type") ||
+		strings.Contains(msg, "unknown") ||
+		strings.Contains(msg, "invalid")
 }
 
 // handleEvent 根据事件类型分发处理
