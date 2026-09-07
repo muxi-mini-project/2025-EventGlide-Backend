@@ -3,9 +3,9 @@ package req
 import "github.com/raiki02/EG/pkg/utils"
 
 type CreatePostReq struct {
-	Title     string   `json:"title" validate:"required"`
-	Introduce string   `json:"introduce" validate:"required"`
-	ShowImg   []string `json:"showImg" validate:"required,min=1"`
+	Title     string   `json:"title"`
+	Introduce string   `json:"introduce"`
+	ShowImg   []string `json:"showImg"`
 }
 
 type CreatePostDraftReq struct {
