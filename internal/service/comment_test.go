@@ -108,18 +108,14 @@ func TestAnswerCommentReplyToTopSetsRootToTop(t *testing.T) {
 	ctx := context.Background()
 	mockGetUserInfo(mock, userB, "Bob")
 
-	// 查父评论（A，一级）
 	top := seedTopComment()
 	rows := sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type", "creator_name"}).
 		AddRow(top.Id, top.StudentID, top.ParentID, top.RootID, top.Subject, top.RootObjectID, top.RootObjectType, string(top.CreatorName))
 	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE id = \\?").
 		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(rows)
-	// 根对象（活动）存在性校验
 	mockActivityPreloads(mock)
-	// 入库
 	mock.ExpectExec("INSERT INTO `comment`").WillReturnResult(sqlmock.NewResult(2, 1))
-	// 计数 +1
 	mock.ExpectExec("UPDATE `activity` SET `comment_num`").WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// C 端参数：回复 A，subject 传了脏值验证强制覆盖
@@ -155,17 +151,13 @@ func TestAnswerCommentReplyToChildInheritsTopRootID(t *testing.T) {
 	ctx := context.Background()
 	mockGetUserInfo(mock, userC, "Carol")
 
-	// 查父评论（B，二级：parent=A，root=A）
 	rows := sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type", "creator_name"}).
 		AddRow(2, userB, 1, 1, "comment", actID, "activity", "Bob")
 	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE id = \\?").
 		WithArgs(int64(2), sqlmock.AnyArg()).
 		WillReturnRows(rows)
-	// 根对象校验
 	mockActivityPreloads(mock)
-	// 入库
 	mock.ExpectExec("INSERT INTO `comment`").WillReturnResult(sqlmock.NewResult(3, 1))
-	// 计数 +1
 	mock.ExpectExec("UPDATE `activity` SET `comment_num`").WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// C 回复 B（三级）
@@ -201,21 +193,16 @@ func TestCreateCommentSubjectCommentInheritsTopRootID(t *testing.T) {
 	ctx := context.Background()
 	mockGetUserInfo(mock, userC, "Carol")
 
-	// 查父评论（B，二级）
 	rows := sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type", "creator_name"}).
 		AddRow(2, userB, 1, 1, "comment", actID, "activity", "Bob")
 	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE id = \\?").
 		WithArgs(int64(2), sqlmock.AnyArg()).
 		WillReturnRows(rows)
-	// 被回复评论存在性（subject=comment -> FindCmtByID）
 	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE id = \\?").
 		WithArgs(int64(2), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id"}).AddRow(2, userB))
-	// 根对象（活动）存在性
 	mockActivityPreloads(mock)
-	// 入库
 	mock.ExpectExec("INSERT INTO `comment`").WillReturnResult(sqlmock.NewResult(4, 1))
-	// 计数 +1
 	mock.ExpectExec("UPDATE `activity` SET `comment_num`").WillReturnResult(sqlmock.NewResult(0, 1))
 
 	cmt := &model.Comment{
@@ -249,7 +236,6 @@ func TestAnswerCommentRootNotFoundRejectsBeforeInsert(t *testing.T) {
 	ctx := context.Background()
 	mockGetUserInfo(mock, userC, "Carol")
 
-	// 父评论（B，二级）存在
 	rows := sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type", "creator_name"}).
 		AddRow(2, userB, 1, 1, "comment", actID, "activity", "Bob")
 	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE id = \\?").
@@ -281,7 +267,6 @@ func TestDeleteTopCommentCascadeAndDecreaseNum(t *testing.T) {
 	cs, mock := newCommentServiceForTest(t)
 	ctx := context.Background()
 
-	// 查归属（非加密列）
 	mock.ExpectQuery("SELECT `id`,`student_id`,`parent_id`,`root_id`,`subject`,`root_object_id`,`root_object_type` FROM `comment`").
 		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type"}).
@@ -295,9 +280,9 @@ func TestDeleteTopCommentCascadeAndDecreaseNum(t *testing.T) {
 		WithArgs(int64(1)).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
-	// 计数回减 3（一级 + B + C）
+	// 计数回减 3（一级 + B + C），CASE WHEN 表达式的 n 出现两次 + WHERE id
 	mock.ExpectExec("UPDATE `activity` SET `comment_num`").
-		WithArgs(int64(3), actID).
+		WithArgs(int64(3), int64(3), actID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	err := cs.DeleteComment(ctx, 1, userA)
@@ -328,9 +313,9 @@ func TestDeleteChildCommentOnlyDeletesSelf(t *testing.T) {
 		WithArgs(int64(2)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
-	// 只删 B 一条 = 回减 1
+	// 只删 B 一条 = 回减 1，CASE WHEN 表达式的 n 出现两次 + WHERE id
 	mock.ExpectExec("UPDATE `activity` SET `comment_num`").
-		WithArgs(int64(1), actID).
+		WithArgs(int64(1), int64(1), actID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	err := cs.DeleteComment(ctx, 2, userB)
@@ -342,26 +327,37 @@ func TestDeleteChildCommentOnlyDeletesSelf(t *testing.T) {
 	}
 }
 
-// 删除他人评论：无权删除，返回错误且无任何 DELETE
-func TestDeleteOthersCommentRejected(t *testing.T) {
+// 删除他人评论：静默 no-op 返回成功，与"不存在"表现一致，且不发任何 DELETE
+func TestDeleteOthersCommentIgnored(t *testing.T) {
 	cs, mock := newCommentServiceForTest(t)
 	ctx := context.Background()
 
-	// 评论存在但作者是 A，操作者是 C
+	// 评论存在但作者是 A，操作者是 C：service 层越权校验即拦截，不发 DELETE
 	mock.ExpectQuery("SELECT `id`,`student_id`,`parent_id`,`root_id`,`subject`,`root_object_id`,`root_object_type` FROM `comment`").
 		WithArgs(int64(1), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type"}).
 			AddRow(1, userA, actID, actID, "activity", actID, "activity"))
-	mock.ExpectBegin()
-	mock.ExpectExec("DELETE FROM `comment` WHERE student_id = \\? and id = \\?").
-		WithArgs(userC, int64(1)).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	// RowsAffected==0 时事务回调正常返回，GORM 走 Commit（无错误需回滚）
-	mock.ExpectCommit()
 
-	err := cs.DeleteComment(ctx, 1, userC)
-	if err == nil {
-		t.Fatal("want error when deleting others' comment")
+	if err := cs.DeleteComment(ctx, 1, userC); err != nil {
+		t.Fatalf("want nil (silent no-op) when deleting others' comment, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// 删除不存在的评论：幂等成功（不视为错误），无任何 DELETE
+func TestDeleteNonExistentCommentIdempotent(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	mock.ExpectQuery("SELECT `id`,`student_id`,`parent_id`,`root_id`,`subject`,`root_object_id`,`root_object_type` FROM `comment`").
+		WithArgs(int64(999), sqlmock.AnyArg()).
+		WillReturnError(gorm.ErrRecordNotFound)
+
+	err := cs.DeleteComment(ctx, 999, userC)
+	if err != nil {
+		t.Fatalf("want nil when deleting non-existent comment, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
@@ -375,9 +371,7 @@ func TestCreateSelfCommentStillCounts(t *testing.T) {
 
 	// A 评论自己的活动（subject=activity，parent=actID，作者=A）
 	mockGetUserInfo(mock, userA, "Alice")
-	// 根对象（活动）作者 = A
 	mockActivityPreloads(mock)
-	// 入库
 	mock.ExpectExec("INSERT INTO `comment`").WillReturnResult(sqlmock.NewResult(10, 1))
 	// 计数 +1（自评也要计）
 	mock.ExpectExec("UPDATE `activity` SET `comment_num`").

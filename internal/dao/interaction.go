@@ -133,9 +133,13 @@ func (id *InteractionDao) CommentActivity(c context.Context, studentID string, a
 		Update("comment_num", gorm.Expr("comment_num + ?", 1)).Error
 }
 
+// DecreaseActivityCommentNum 回减活动评论数；comment_num 为 int unsigned，
+// 用 CASE 保证不为负，避免减过头触发 MySQL UNSIGNED 下溢。
 func (id *InteractionDao) DecreaseActivityCommentNum(c context.Context, activityId int64, n int64) error {
 	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
-		Update("comment_num", gorm.Expr("comment_num - ?", n)).Error
+		Update("comment_num", gorm.Expr(
+			"CASE WHEN comment_num >= ? THEN comment_num - ? ELSE 0 END", n, n,
+		)).Error
 }
 
 func (id *InteractionDao) CommentPost(c context.Context, studentID string, postId int64) error {
@@ -143,9 +147,13 @@ func (id *InteractionDao) CommentPost(c context.Context, studentID string, postI
 		Update("comment_num", gorm.Expr("comment_num + ?", 1)).Error
 }
 
+// DecreasePostCommentNum 回减帖子评论数；comment_num 为 int unsigned，
+// 用 CASE 保证不为负，避免减过头触发 MySQL UNSIGNED 下溢。
 func (id *InteractionDao) DecreasePostCommentNum(c context.Context, postId int64, n int64) error {
 	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
-		Update("comment_num", gorm.Expr("comment_num - ?", n)).Error
+		Update("comment_num", gorm.Expr(
+			"CASE WHEN comment_num >= ? THEN comment_num - ? ELSE 0 END", n, n,
+		)).Error
 }
 
 func (id *InteractionDao) CollectActivity(c context.Context, studentID string, activityId int64) error {

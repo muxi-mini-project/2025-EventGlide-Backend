@@ -97,6 +97,7 @@ func (r *InteractionRepo) CommentPost(ctx context.Context, studentID string, tar
 	return r.posts.Invalidate(ctx, targetID)
 }
 
+// DecreaseActivityCommentNum 回减活动评论数并失效对应缓存。
 func (r *InteractionRepo) DecreaseActivityCommentNum(ctx context.Context, activityId int64, n int64) error {
 	if err := r.dao.DecreaseActivityCommentNum(ctx, activityId, n); err != nil {
 		return err
@@ -104,6 +105,7 @@ func (r *InteractionRepo) DecreaseActivityCommentNum(ctx context.Context, activi
 	return r.acts.Invalidate(ctx, activityId)
 }
 
+// DecreasePostCommentNum 回减帖子评论数并失效对应缓存。
 func (r *InteractionRepo) DecreasePostCommentNum(ctx context.Context, postId int64, n int64) error {
 	if err := r.dao.DecreasePostCommentNum(ctx, postId, n); err != nil {
 		return err

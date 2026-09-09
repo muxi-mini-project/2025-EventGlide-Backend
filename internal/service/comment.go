@@ -47,6 +47,9 @@ func NewCommentService(cd *dao.CommentDao, ud *repo.UserRepo, id *repo.Interacti
 	}
 }
 
+// CreateComment 创建一级评论或按 comment 主题创建回复：
+// subject=activity/post 时为一级评论，subject=comment 时为对某条评论的回复（写入 ReplyTo 与 root 归属）。
+// 写库后自评亦 +1 计数；回复类评论计数失败仅记日志不阻断，避免客户端重试产生重复数据。
 func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
 	creator, err := cs.ud.GetUserInfo(c, studentID)
 	if err != nil {
@@ -120,7 +123,7 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		return nil, err
 	}
 
-	// 计数在前，自评也要 +1（与 AnswerComment 行为一致）
+	// 评论已落库，计数失败只记日志不返回错误，避免客户端重试产生重复评论
 	switch cmt.Subject {
 	case SubjectActivity:
 		err = cs.id.CommentActivity(c, studentID, cmt.ParentID)
@@ -130,8 +133,11 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		err = cs.IncreaseCommentNum(c, rootSubject, studentID)
 	}
 	if err != nil {
-		cs.l.Error("Error comment create failed", zap.Error(err))
-		return nil, err
+		cs.l.Error("Error increase comment num failed",
+			zap.Error(err),
+			zap.Int64("commentID", cmt.Id),
+			zap.String("subject", cmt.Subject),
+		)
 	}
 
 	if studentID == subject.StudentID {
@@ -163,26 +169,35 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 	return cmt, nil
 }
 
+// DeleteComment 删除评论：仅限本人。一级评论级联删除整条扁平子树并回减根对象计数，
+// 子级评论仅删自身。评论不存在或非本人均幂等返回成功（不通过响应差异泄露存在性）。
 func (cs *CommentService) DeleteComment(c context.Context, targetID int64, studentID string) error {
-	// 取归属信息用于计数回减（只取非加密列，损坏行也允许删除）
+	// 取归属信息用于计数回减与越权判断（只取非加密列，损坏行也允许删除）
 	cmt, err := cs.cd.FindCmtByIDNoDecrypt(c, targetID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errs.ErrCommentNotFound
+			// 评论不存在：幂等成功，不视为错误
+			return nil
 		}
 		cs.l.Error("Error find comment when deleting", zap.Error(err), zap.Int64("targetID", targetID))
 		return errs.ErrInternal.Wrap(err)
 	}
+	if cmt.StudentID != studentID {
+		// 非本人：静默 no-op 返回成功，与"不存在"表现一致，避免探测他人评论存在性
+		cs.l.Warn("Delete comment by non-owner ignored",
+			zap.Int64("commentID", targetID),
+			zap.String("operator", studentID),
+		)
+		return nil
+	}
 
-	// 删除本人评论：一级评论级联整个扁平子树，子级只删自身
 	deleted, err := cs.cd.DeleteCommentCascade(c, studentID, targetID)
 	if err != nil {
 		cs.l.Error("Error delete comment cascade failed", zap.Error(err), zap.Int64("targetID", targetID))
 		return errs.ErrInternal.Wrap(err)
 	}
 	if deleted == 0 {
-		// 评论存在但非本人，无权删除
-		return errs.ErrCommentNotFound
+		return nil
 	}
 
 	// 根对象计数回减：删除了几条就回减几条（一级含子树，子级为 1）
@@ -206,6 +221,7 @@ func (cs *CommentService) DeleteComment(c context.Context, targetID int64, stude
 	return nil
 }
 
+// decreaseRootCommentNum 按根对象类型回减其评论数；类型未知时静默跳过（历史脏行）。
 func (cs *CommentService) decreaseRootCommentNum(c context.Context, rootObjectID int64, rootObjectType string, n int64) error {
 	switch rootObjectType {
 	case SubjectActivity:
@@ -216,6 +232,8 @@ func (cs *CommentService) decreaseRootCommentNum(c context.Context, rootObjectID
 	return nil
 }
 
+// AnswerComment 回复一条评论（subject 恒为 comment）：root_id 继承父评论、写库前校验根对象存在。
+// 写库后计数失败仅记日志不阻断；对被回复者产生 at 消息。
 func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
 	creator, err := cs.ud.GetUserInfo(c, studentID)
 	if err != nil {
@@ -274,9 +292,13 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		zap.String("studentid", cmt.StudentID),
 	)
 
+	// 回复已落库，计数失败只记日志不返回错误，避免客户端重试产生重复回复
 	if err = cs.IncreaseCommentNum(c, root, studentID); err != nil {
-		cs.l.Error("Error increase comment num failed", zap.Error(err))
-		return nil, err
+		cs.l.Error("Error increase comment num failed",
+			zap.Error(err),
+			zap.Int64("commentID", cmt.Id),
+			zap.String("subject", cmt.Subject),
+		)
 	}
 
 	if studentID == parentCmt.StudentID {

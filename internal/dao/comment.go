@@ -47,7 +47,6 @@ func (cd *CommentDao) DeleteCommentCascade(c context.Context, sid string, id int
 			return res.Error
 		}
 		if res.RowsAffected == 0 {
-			// 本人评论不存在，无可删除（不视为错误）
 			return nil
 		}
 		deleted = res.RowsAffected
@@ -80,18 +79,19 @@ func (cd *CommentDao) AnswerComment(c context.Context, cmt *model.Comment) error
 	return cd.db.WithContext(c).Create(cmt).Error
 }
 
-// LoadComments 加载某活动/帖子下的一级评论（subject 限定非 comment，防止误传子级评论 ID）
+// LoadComments 加载某主题（活动/帖子）下的一级评论，subject 排除 comment 防误传子级评论 ID，按时间正序。
 func (cd *CommentDao) LoadComments(c context.Context, parentId int64) ([]model.Comment, error) {
 	var cmts []model.Comment
 	err := cd.db.WithContext(c).Where("parent_id = ? AND subject <> 'comment'", parentId).
-		Order("created_at ASC").Find(&cmts).Error
+		Order("created_at ASC, id ASC").Find(&cmts).Error
 	return cmts, err
 }
 
+// LoadAnswers 加载某条一级评论下的全部子级回复（root_id 指向它），按时间正序。
 func (cd *CommentDao) LoadAnswers(c context.Context, rootId int64) ([]model.Comment, error) {
 	var cmts []model.Comment
 	err := cd.db.WithContext(c).Where("root_id = ? and subject = 'comment'", rootId).
-		Order("created_at ASC").Find(&cmts).Error
+		Order("created_at ASC, id ASC").Find(&cmts).Error
 	return cmts, err
 }
 
@@ -103,12 +103,13 @@ func (cd *CommentDao) FindCmtByID(c context.Context, id int64) (*model.Comment, 
 	return &cmt, nil
 }
 
+// LoadAnswersBatch 批量加载多条一级评论下的全部子级回复（root_id IN 列表），按时间正序。
 func (cd *CommentDao) LoadAnswersBatch(c context.Context, rootIDs []int64) ([]model.Comment, error) {
 	if len(rootIDs) == 0 {
 		return nil, nil
 	}
 	var cmts []model.Comment
 	err := cd.db.WithContext(c).Where("root_id IN ? AND subject = 'comment'", rootIDs).
-		Order("created_at ASC").Find(&cmts).Error
+		Order("created_at ASC, id ASC").Find(&cmts).Error
 	return cmts, err
 }
