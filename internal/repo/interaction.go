@@ -97,6 +97,20 @@ func (r *InteractionRepo) CommentPost(ctx context.Context, studentID string, tar
 	return r.posts.Invalidate(ctx, targetID)
 }
 
+func (r *InteractionRepo) DecreaseActivityCommentNum(ctx context.Context, activityId int64, n int64) error {
+	if err := r.dao.DecreaseActivityCommentNum(ctx, activityId, n); err != nil {
+		return err
+	}
+	return r.acts.Invalidate(ctx, activityId)
+}
+
+func (r *InteractionRepo) DecreasePostCommentNum(ctx context.Context, postId int64, n int64) error {
+	if err := r.dao.DecreasePostCommentNum(ctx, postId, n); err != nil {
+		return err
+	}
+	return r.posts.Invalidate(ctx, postId)
+}
+
 func (r *InteractionRepo) CollectActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.CollectActivity(ctx, studentID, targetID); err != nil {
 		return err

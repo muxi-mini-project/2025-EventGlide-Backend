@@ -133,9 +133,19 @@ func (id *InteractionDao) CommentActivity(c context.Context, studentID string, a
 		Update("comment_num", gorm.Expr("comment_num + ?", 1)).Error
 }
 
+func (id *InteractionDao) DecreaseActivityCommentNum(c context.Context, activityId int64, n int64) error {
+	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
+		Update("comment_num", gorm.Expr("comment_num - ?", n)).Error
+}
+
 func (id *InteractionDao) CommentPost(c context.Context, studentID string, postId int64) error {
 	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
 		Update("comment_num", gorm.Expr("comment_num + ?", 1)).Error
+}
+
+func (id *InteractionDao) DecreasePostCommentNum(c context.Context, postId int64, n int64) error {
+	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
+		Update("comment_num", gorm.Expr("comment_num - ?", n)).Error
 }
 
 func (id *InteractionDao) CollectActivity(c context.Context, studentID string, activityId int64) error {

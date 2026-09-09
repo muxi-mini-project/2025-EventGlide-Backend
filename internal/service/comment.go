@@ -12,6 +12,7 @@ import (
 	"github.com/raiki02/EG/pkg/encrypt"
 	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 var _ CommentServiceHdl = &CommentService{}
@@ -69,9 +70,20 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		if parent == nil {
 			return nil, errs.ErrCommentParentNotFound
 		}
-		cmt.RootID = parent.Id
+		// parent 是子级评论时继承其 root_id，保证 root_id 始终指向一级评论
+		if parent.Subject == SubjectComment {
+			cmt.RootID = parent.RootID
+		} else {
+			cmt.RootID = parent.Id
+		}
 		cmt.RootObjectID = parent.RootObjectID
 		cmt.RootObjectType = parent.RootObjectType
+		// 回复一级评论时不带 ReplyTo（前端用 parentId==rootId 判断直接回复楼主），
+		// 回复子级才填被回复人
+		if parent.Subject == SubjectComment {
+			cmt.ReplyToUserID = parent.StudentID
+			cmt.ReplyToUserName = parent.CreatorName
+		}
 		rootID = parent.RootObjectID
 		rootType = parent.RootObjectType
 	} else {
@@ -87,6 +99,16 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		return nil, err
 	}
 
+	// 计数归属的根对象：subject=comment 时为父评论挂靠的活动/帖子
+	rootSubject := subject
+	if cmt.Subject == SubjectComment {
+		rootSubject, err = cs.sg.GetSubjectInfo(c, rootID, rootType)
+		if err != nil {
+			cs.l.Error("Error get root subject failed", zap.Error(err))
+			return nil, err
+		}
+	}
+
 	err = cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
 		zap.Int64("id", cmt.Id),
@@ -98,15 +120,34 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		return nil, err
 	}
 
+	// 计数在前，自评也要 +1（与 AnswerComment 行为一致）
+	switch cmt.Subject {
+	case SubjectActivity:
+		err = cs.id.CommentActivity(c, studentID, cmt.ParentID)
+	case SubjectPost:
+		err = cs.id.CommentPost(c, studentID, cmt.ParentID)
+	case SubjectComment:
+		err = cs.IncreaseCommentNum(c, rootSubject, studentID)
+	}
+	if err != nil {
+		cs.l.Error("Error comment create failed", zap.Error(err))
+		return nil, err
+	}
+
 	if studentID == subject.StudentID {
 		return cmt, nil
 	}
 
+	// 回复评论对被回复者是 @ 消息，与 AnswerComment 的 Action 保持一致
+	action := "comment"
+	if cmt.Subject == SubjectComment {
+		action = "at"
+	}
 	f := model.Feed{
 		StudentID: studentID,
 		TargetId:  cmt.ParentID,
 		Object:    cmt.Subject,
-		Action:    "comment",
+		Action:    action,
 		Receiver:  subject.StudentID,
 		RootID:    rootID,
 		RootType:  rootType,
@@ -119,22 +160,60 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		cs.l.Info("Publish Comment Feed Success", zap.Any("feed", f))
 	}
 
-	switch cmt.Subject {
-	case SubjectActivity:
-		err = cs.id.CommentActivity(c, studentID, cmt.ParentID)
-	case SubjectPost:
-		err = cs.id.CommentPost(c, studentID, cmt.ParentID)
-	}
-	if err != nil {
-		cs.l.Error("Error comment create failed", zap.Error(err))
-		return nil, err
-	}
-
 	return cmt, nil
 }
 
 func (cs *CommentService) DeleteComment(c context.Context, targetID int64, studentID string) error {
-	return cs.cd.DeleteComment(c, studentID, targetID)
+	// 取归属信息用于计数回减（只取非加密列，损坏行也允许删除）
+	cmt, err := cs.cd.FindCmtByIDNoDecrypt(c, targetID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errs.ErrCommentNotFound
+		}
+		cs.l.Error("Error find comment when deleting", zap.Error(err), zap.Int64("targetID", targetID))
+		return errs.ErrInternal.Wrap(err)
+	}
+
+	// 删除本人评论：一级评论级联整个扁平子树，子级只删自身
+	deleted, err := cs.cd.DeleteCommentCascade(c, studentID, targetID)
+	if err != nil {
+		cs.l.Error("Error delete comment cascade failed", zap.Error(err), zap.Int64("targetID", targetID))
+		return errs.ErrInternal.Wrap(err)
+	}
+	if deleted == 0 {
+		// 评论存在但非本人，无权删除
+		return errs.ErrCommentNotFound
+	}
+
+	// 根对象计数回减：删除了几条就回减几条（一级含子树，子级为 1）
+	switch cmt.Subject {
+	case SubjectActivity, SubjectPost:
+		if cmt.Subject == SubjectActivity {
+			if err = cs.id.DecreaseActivityCommentNum(c, cmt.ParentID, deleted); err != nil {
+				cs.l.Error("Error decrease activity comment num failed", zap.Error(err))
+			}
+		} else {
+			if err = cs.id.DecreasePostCommentNum(c, cmt.ParentID, deleted); err != nil {
+				cs.l.Error("Error decrease post comment num failed", zap.Error(err))
+			}
+		}
+	case SubjectComment:
+		// 子级回复：回减它挂靠的活动/帖子（原计数只在 root 归属上 +1）
+		if err = cs.decreaseRootCommentNum(c, cmt.RootObjectID, cmt.RootObjectType, deleted); err != nil {
+			cs.l.Error("Error decrease root comment num failed", zap.Error(err))
+		}
+	}
+	return nil
+}
+
+func (cs *CommentService) decreaseRootCommentNum(c context.Context, rootObjectID int64, rootObjectType string, n int64) error {
+	switch rootObjectType {
+	case SubjectActivity:
+		return cs.id.DecreaseActivityCommentNum(c, rootObjectID, n)
+	case SubjectPost:
+		return cs.id.DecreasePostCommentNum(c, rootObjectID, n)
+	}
+	return nil
 }
 
 func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error) {
@@ -145,6 +224,9 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	}
 	cmt.CreatorName = model.EncryptedString(creator.Name)
 	cmt.CreatorAvatar = creator.Avatar
+
+	// 回复评论时 subject 只能是 comment，防止客户端传值导致脏数据
+	cmt.Subject = SubjectComment
 
 	parentCmt, err := cs.cd.FindCmtByID(c, cmt.ParentID)
 	if err != nil {
@@ -157,14 +239,30 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	if parentCmt == nil {
 		return nil, errs.ErrCommentParentNotFound
 	}
-	cmt.RootID = parentCmt.Id
+	// parent 是子级评论时继承其 root_id，保证 root_id 始终指向一级评论
+	if parentCmt.Subject == SubjectComment {
+		cmt.RootID = parentCmt.RootID
+	} else {
+		cmt.RootID = parentCmt.Id
+	}
 	cmt.RootObjectID = parentCmt.RootObjectID
 	cmt.RootObjectType = parentCmt.RootObjectType
-	cmt.ReplyToUserID = parentCmt.StudentID
-	cmt.ReplyToUserName = parentCmt.CreatorName
+	// 回复一级评论时不带 ReplyTo（前端用 parentId==rootId 判断直接回复楼主），
+	// 回复子级才填被回复人
+	if parentCmt.Subject == SubjectComment {
+		cmt.ReplyToUserID = parentCmt.StudentID
+		cmt.ReplyToUserName = parentCmt.CreatorName
+	}
 
 	rootID := parentCmt.RootObjectID
 	rootType := parentCmt.RootObjectType
+
+	// 写库前校验根对象存在，避免接口报错但记录已落库
+	root, err := cs.sg.GetSubjectInfo(c, rootID, rootType)
+	if err != nil {
+		cs.l.Error("Error get root subject failed", zap.Error(err))
+		return nil, err
+	}
 
 	err = cs.cd.AnswerComment(c, cmt)
 	if err != nil {
@@ -176,24 +274,12 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		zap.String("studentid", cmt.StudentID),
 	)
 
-	parent, err := cs.sg.GetSubjectInfo(c, cmt.ParentID, cmt.Subject)
-	if err != nil {
-		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
-		return nil, err
-	}
-
-	root, err := cs.sg.GetSubjectInfo(c, rootID, rootType)
-	if err != nil {
-		cs.l.Error("Error get activity or post or comment failed", zap.Error(err))
-		return nil, err
-	}
-
 	if err = cs.IncreaseCommentNum(c, root, studentID); err != nil {
 		cs.l.Error("Error increase comment num failed", zap.Error(err))
 		return nil, err
 	}
 
-	if studentID == parent.StudentID {
+	if studentID == parentCmt.StudentID {
 		return cmt, nil
 	}
 
@@ -202,7 +288,7 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		TargetId:  cmt.ParentID,
 		Object:    "comment",
 		Action:    "at",
-		Receiver:  parent.StudentID,
+		Receiver:  parentCmt.StudentID,
 		RootID:    rootID,
 		RootType:  rootType,
 	}
