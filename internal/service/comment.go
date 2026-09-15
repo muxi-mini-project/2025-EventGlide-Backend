@@ -396,14 +396,10 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 	return details
 }
 
+// EnrichComment 富化单条评论。复用列表路径，使回复的作者与被回复者同样取实时值。
 func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
-	idList := []string{viewerID, cmt.StudentID}
-	userMap, err := cs.ud.GetUsersByIDs(c, idList)
-	if err != nil {
-		cs.l.Error("Error batch get users when enriching comment", zap.Error(err))
-	}
-	likedMap := cs.viewerLikedComments(c, viewerID, userMap, []int64{cmt.Id})
-	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap, nil, likedMap)
+	details := cs.EnrichComments(c, []model.Comment{*cmt}, viewerID)
+	return details[0]
 }
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
@@ -477,7 +473,7 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 	}
 	detail := model.ReplyDetail{
 		Comment:        *cmt,
-		ParentUserName: parentUserName(cmt, userMap),
+		ParentUserName: liveParentUserName(cmt, userMap),
 		IsLike:         isLike,
 	}
 	if creator := userMap[cmt.StudentID]; creator != nil {
@@ -490,14 +486,15 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 	return detail
 }
 
-// parentUserName 取被回复者的实时昵称，查不到时回退写入时的快照。
-func parentUserName(cmt *model.Comment, userMap map[string]*model.User) string {
-	if cmt.ReplyToUserID != "" {
-		if user := userMap[cmt.ReplyToUserID]; user != nil && user.Name != "" {
-			return user.Name
-		}
+// liveParentUserName 取被回复者的实时昵称，查不到返回空串（快照回退由 converter 统一处理）。
+func liveParentUserName(cmt *model.Comment, userMap map[string]*model.User) string {
+	if cmt.ReplyToUserID == "" {
+		return ""
 	}
-	return string(cmt.ReplyToUserName)
+	if user := userMap[cmt.ReplyToUserID]; user != nil {
+		return user.Name
+	}
+	return ""
 }
 
 func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {

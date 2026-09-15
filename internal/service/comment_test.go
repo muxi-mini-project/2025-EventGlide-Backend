@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -529,6 +530,64 @@ func TestEnrichReplyUsesLiveParentUserName(t *testing.T) {
 
 	if detail.ParentUserName != "BobLive" {
 		t.Errorf("ParentUserName = %q, want BobLive (live user query)", detail.ParentUserName)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// 批量路径：用户查询失败（userMap 为 nil）时不 panic，实时名为空（快照回退由 converter 兜底）
+func TestEnrichCommentsParentNameFallsBackWhenUserQueryFails(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	top := seedTopComment()
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE root_id IN \\(\\?\\) AND subject = 'comment' ORDER BY created_at ASC, id ASC").
+		WithArgs(top.Id).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "root_id", "subject", "creator_name", "creator_avatar", "reply_to_user_id", "reply_to_user_name"}).
+			AddRow(2, userC, top.Id, "comment", "CarolSnapshot", "https://snap.example/carol.png", userB, "BobSnapshot"))
+	mock.ExpectQuery("SELECT \\* FROM `user` WHERE student_id IN").
+		WillReturnError(errors.New("db down"))
+
+	details := cs.EnrichComments(ctx, []model.Comment{top}, userA)
+	if len(details) != 1 || len(details[0].Replies) != 1 {
+		t.Fatalf("want 1 comment with 1 reply, got %+v", details)
+	}
+
+	// service 只负责实时解析；userMap 缺失时返回空，快照回退在 converter
+	if got := details[0].Replies[0].ParentUserName; got != "" {
+		t.Errorf("ParentUserName = %q, want empty (live only; snapshot fallback is converter's job)", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// 单条 EnrichComment 复用列表路径：其回复的作者也取实时值（此前仅查 viewer+评论作者，回复会回退快照）
+func TestEnrichCommentUsesLiveCreatorForReplies(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	top := seedTopComment()
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE root_id IN \\(\\?\\) AND subject = 'comment' ORDER BY created_at ASC, id ASC").
+		WithArgs(top.Id).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "root_id", "subject", "creator_name", "creator_avatar"}).
+			AddRow(2, userC, top.Id, "comment", "CarolSnapshot", "https://snap.example/carol.png"))
+
+	// idSet 应含 viewer=userA、评论作者=userA、回复作者=userC
+	args := &argCollector{}
+	mock.ExpectQuery("SELECT \\* FROM `user` WHERE student_id IN \\(\\?,\\?\\)").
+		WithArgs(args, args).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "name", "avatar"}).
+			AddRow(1, userA, "AliceLive", "https://live.example/alice.png").
+			AddRow(3, userC, "CarolLive", "https://live.example/carol.png"))
+
+	detail := cs.EnrichComment(ctx, &top, userA)
+	if len(detail.Replies) != 1 {
+		t.Fatalf("want 1 reply, got %+v", detail.Replies)
+	}
+	if got := detail.Replies[0].Creator.Name; got != "CarolLive" {
+		t.Errorf("reply Creator.Name = %q, want CarolLive (live)", got)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
