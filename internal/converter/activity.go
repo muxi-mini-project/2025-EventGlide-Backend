@@ -267,10 +267,8 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 		)
 		res.Content = ctt
 
-		if tools.IfRegisterMapper(aw.CactReq.LabelForm.IfRegister) {
-			*res.Tags = append(*res.Tags, "含报名表需要审核")
-			res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, aw.CactReq.LabelForm.ActiveForm)
-		}
+		*res.Tags = append(*res.Tags, "含申请表需要审核")
+		res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, aw.CactReq.LabelForm.ActiveForm)
 	case model.SubjectPost:
 		res.Author = &aw.StudentId
 		*res.Tags = append(*res.Tags, "帖子")

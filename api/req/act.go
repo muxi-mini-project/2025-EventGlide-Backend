@@ -79,7 +79,7 @@ type CreateActLabel struct {
 	IfRegister     string `json:"ifRegister" validate:"required,oneof=是 否"`
 	RegisterMethod string `json:"registerMethod"`
 	StartTime      string `json:"startTime" validate:"required,ltcsfield=EndTime"`
-	ActiveForm     string `json:"activeForm" validate:"required,required_unless=HolderType 个人"`
+	ActiveForm     string `json:"activeForm" validate:"required"`
 	EndTime        string `json:"endTime" validate:"required,gtcsfield=StartTime"`
 	Type           string `json:"type" validate:"required"`
 
