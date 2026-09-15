@@ -3,17 +3,19 @@ package resp
 import "github.com/raiki02/EG/pkg/utils"
 
 type CreateActivityResp struct {
-	Id         utils.SnowflakeID `json:"id"`
-	Title      string   `json:"title"`
-	Introduce  string   `json:"introduce"`
-	ShowImg    []string `json:"showImg"`
-	Type       string   `json:"type"`
-	Position   string   `json:"position"`
-	IfRegister string   `json:"ifRegister"`
-	IsChecking string   `json:"isChecking"`
-	ActiveForm string   `json:"activeForm"`
-	Signer     []Signer `json:"signer"`
-	UserInfo   UserInfo `json:"userInfo"`
+	Id            utils.SnowflakeID `json:"id"`
+	Title         string            `json:"title"`
+	Introduce     string            `json:"introduce"`
+	ShowImg       []string          `json:"showImg"`
+	Type          string            `json:"type"`
+	OrganizerUnit string            `json:"organizerUnit"`
+	Position      string            `json:"position"`
+	Address       string            `json:"address"`
+	IfRegister    string            `json:"ifRegister"`
+	IsChecking    string            `json:"isChecking"`
+	ActiveForm    string            `json:"activeForm"`
+	Signer        []Signer          `json:"signer"`
+	UserInfo      UserInfo          `json:"userInfo"`
 }
 
 type ListActivitiesResp struct {
@@ -21,15 +23,17 @@ type ListActivitiesResp struct {
 
 	DetailTime DetailTime `json:"detailTime"`
 
-	Title      string   `json:"title"`
-	Id         utils.SnowflakeID `json:"id"`
-	Introduce  string   `json:"introduce"`
-	Position   string   `json:"position"`
-	Type       string   `json:"type"`
-	HolderType string   `json:"holderType"`
-	IfRegister string   `json:"ifRegister"`
-	ShowImg    []string `json:"showImg"`
-	IsChecking string   `json:"isChecking"`
+	Title         string            `json:"title"`
+	Id            utils.SnowflakeID `json:"id"`
+	Introduce     string            `json:"introduce"`
+	OrganizerUnit string            `json:"organizerUnit"`
+	Position      string            `json:"position"`
+	Address       string            `json:"address"`
+	Type          string            `json:"type"`
+	HolderType    string            `json:"holderType"`
+	IfRegister    string            `json:"ifRegister"`
+	ShowImg       []string          `json:"showImg"`
+	IsChecking    string            `json:"isChecking"`
 
 	LikeNum    uint `json:"likeNum"`
 	CollectNum uint `json:"collectNum"`
@@ -40,10 +44,10 @@ type ListActivitiesResp struct {
 }
 
 type PaginatedListActivitiesResp struct {
-	Total   int64                  `json:"total"`
-	Page    int                    `json:"page"`
-	Limit   int                    `json:"limit"`
-	Details []ListActivitiesResp   `json:"details"`
+	Total   int64                `json:"total"`
+	Page    int                  `json:"page"`
+	Limit   int                  `json:"limit"`
+	Details []ListActivitiesResp `json:"details"`
 }
 
 type LoadActivitiesDraftResp struct {
@@ -66,7 +70,9 @@ type DetailTime struct {
 
 type LabelForm struct {
 	HolderType     string `json:"holderType"`
+	OrganizerUnit  string `json:"organizerUnit"`
 	Position       string `json:"position"`
+	Address        string `json:"address"`
 	IfRegister     string `json:"ifRegister"`
 	RegisterMethod string `json:"registerMethod"`
 	StartTime      string `json:"startTime"`

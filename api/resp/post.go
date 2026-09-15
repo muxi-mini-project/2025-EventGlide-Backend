@@ -3,9 +3,9 @@ package resp
 import "github.com/raiki02/EG/pkg/utils"
 
 type CreatePostResp struct {
-	Id         utils.SnowflakeID `json:"id"`
-	StudentID  string `json:"studentId"`
-	PublishTime string `json:"publishTime"`
+	Id          utils.SnowflakeID `json:"id"`
+	StudentID   string            `json:"studentId"`
+	PublishTime string            `json:"publishTime"`
 
 	Title      string   `json:"title"`
 	Introduce  string   `json:"introduce"`
@@ -16,9 +16,9 @@ type CreatePostResp struct {
 }
 
 type ListPostsResp struct {
-	Id         utils.SnowflakeID `json:"id"`
-	UserInfo   UserInfo `json:"userInfo"`
-	PublishTime string   `json:"publishTime"`
+	Id          utils.SnowflakeID `json:"id"`
+	UserInfo    UserInfo          `json:"userInfo"`
+	PublishTime string            `json:"publishTime"`
 
 	Introduce string   `json:"introduce"`
 	ShowImg   []string `json:"showImg"`
@@ -35,16 +35,16 @@ type ListPostsResp struct {
 
 type LoadPostDraftResp struct {
 	Id        utils.SnowflakeID `json:"id"`
-	Title     string   `json:"title"`
-	Introduce string   `json:"introduce"`
-	ShowImg   []string `json:"showImg"`
-	StudentID string   `json:"studentId"`
-	CreatedAt string   `json:"createdAt"`
+	Title     string            `json:"title"`
+	Introduce string            `json:"introduce"`
+	ShowImg   []string          `json:"showImg"`
+	StudentID string            `json:"studentId"`
+	CreatedAt string            `json:"createdAt"`
 }
 
 type PaginatedListPostsResp struct {
-	Total   int64            `json:"total"`
-	Page    int              `json:"page"`
-	Limit   int              `json:"limit"`
-	Details []ListPostsResp  `json:"details"`
+	Total   int64           `json:"total"`
+	Page    int             `json:"page"`
+	Limit   int             `json:"limit"`
+	Details []ListPostsResp `json:"details"`
 }

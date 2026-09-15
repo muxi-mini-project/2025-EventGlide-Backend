@@ -41,6 +41,11 @@ func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *mod
 	}
 	act.SignerCount = signerCount
 	act.SignedCount = 0
+	// 除申请人外无签署人时，approvement 表为空，签字环节无人可推。
+	// 直接置为待审核，避免活动永远停留在 pending_signers 而无法送审。
+	if signerCount == 0 {
+		act.IsChecking = "pending_auditor"
+	}
 
 	if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
 		return err

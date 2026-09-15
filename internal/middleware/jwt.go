@@ -122,7 +122,7 @@ func (c *Jwt) WrapCheckToken() gin.HandlerFunc {
 			ctx.Abort()
 			return
 		}
-		reqCtx:=ctx.Request.Context()
+		reqCtx := ctx.Request.Context()
 		err := c.CheckToken(reqCtx, token)
 		if err != nil {
 			ctx.JSON(http.StatusOK, tools.ReturnMSG(errs.ErrJWTInvalid.Code, "token is invalid", nil))

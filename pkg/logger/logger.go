@@ -94,4 +94,3 @@ func newLogger(serviceName string) *zap.Logger {
 
 	return zap.New(core)
 }
-

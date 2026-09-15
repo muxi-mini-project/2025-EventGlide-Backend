@@ -11,7 +11,9 @@ type Activity struct {
 	Title          string           `gorm:"type:varchar(255);column:title;not null;uniqueIndex:idx_activity_unique"`
 	Introduce      string           `gorm:"type:text;column:introduce;not null"`
 	HolderType     string           `gorm:"type:varchar(255);column:holder_type;not null"`
+	OrganizerUnit  string           `gorm:"type:varchar(255);not null;default:'';column:organizer_unit"`
 	Position       string           `gorm:"type:varchar(255);column:position;not null"`
+	Address        string           `gorm:"type:varchar(255);not null;default:'';column:address"`
 	IfRegister     string           `gorm:"type:enum('是','否');column:if_register;not null"`
 	RegisterMethod string           `gorm:"type:varchar(255);column:register_method"`
 	StartTime      string           `gorm:"type:datetime;column:start_time;not null;uniqueIndex:idx_activity_unique"`
@@ -36,7 +38,9 @@ type ActivityDraft struct {
 	Title          string           `gorm:"type:varchar(255);column:title"`
 	Introduce      string           `gorm:"type:text;column:introduce"`
 	HolderType     string           `gorm:"type:varchar(255);column:holder_type"`
+	OrganizerUnit  string           `gorm:"type:varchar(255);column:organizer_unit"`
 	Position       string           `gorm:"type:varchar(255);column:position"`
+	Address        string           `gorm:"type:varchar(255);column:address"`
 	IfRegister     string           `gorm:"type:varchar(32);column:if_register"`
 	RegisterMethod string           `gorm:"type:varchar(255);column:register_method"`
 	StartTime      string           `gorm:"type:varchar(255);column:start_time"`
@@ -48,9 +52,9 @@ type ActivityDraft struct {
 }
 
 type ActivitySigner struct {
-	Id         int64  `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
-	ActivityId int64  `gorm:"type:bigint;index"`
-	StudentID  string `gorm:"type:varchar(255);not null"`
+	Id         int64           `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
+	ActivityId int64           `gorm:"type:bigint;index"`
+	StudentID  string          `gorm:"type:varchar(255);not null"`
 	Name       EncryptedString `gorm:"type:varchar(255);not null"`
 }
 

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
@@ -309,6 +310,7 @@ func (as *ActivityService) TriggerAuditorUpload(ctx context.Context, actId int64
 	aw := &req.AuditWrapper{
 		Subject:   SubjectActivity,
 		StudentId: act.StudentID,
+		CactReq:   converter.ActivityToAuditReq(&act),
 	}
 
 	return as.uploadAuditorForm(ctx, &act, aw)

@@ -6,12 +6,12 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alicebob/miniredis/v2"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
-	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/pkg/logger"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
@@ -41,7 +41,7 @@ func newCommentServiceForTest(t *testing.T) (*CommentService, sqlmock.Sqlmock) {
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
 	gdb, err := gorm.Open(mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true}), &gorm.Config{
-		NamingStrategy: schema.NamingStrategy{SingularTable: true},
+		NamingStrategy:         schema.NamingStrategy{SingularTable: true},
 		SkipDefaultTransaction: true,
 	})
 	if err != nil {
@@ -64,10 +64,10 @@ func newCommentServiceForTest(t *testing.T) (*CommentService, sqlmock.Sqlmock) {
 }
 
 const (
-	actID  int64 = 1001 // 活动 ID
-	userA        = "S20250001" // A：一级评论作者
-	userB        = "S20250002" // B：回复 A 的人
-	userC        = "S20250003" // C：回复 B 的人
+	actID int64 = 1001        // 活动 ID
+	userA       = "S20250001" // A：一级评论作者
+	userB       = "S20250002" // B：回复 A 的人
+	userC       = "S20250003" // C：回复 B 的人
 )
 
 // mockActivityPreloads 预置 FindActById 的主查询与两个 Preload 查询（Images -> Signers）

@@ -2161,14 +2161,14 @@ const docTemplate = `{
                 "limit": {
                     "type": "integer"
                 },
-                "location": {
+                "page": {
+                    "type": "integer"
+                },
+                "position": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
-                },
-                "page": {
-                    "type": "integer"
                 },
                 "type": {
                     "type": "array",
@@ -2202,15 +2202,20 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "activeForm",
+                "address",
                 "endTime",
                 "holderType",
                 "ifRegister",
+                "organizerUnit",
                 "position",
                 "startTime",
                 "type"
             ],
             "properties": {
                 "activeForm": {
+                    "type": "string"
+                },
+                "address": {
                     "type": "string"
                 },
                 "endTime": {
@@ -2225,6 +2230,9 @@ const docTemplate = `{
                         "是",
                         "否"
                     ]
+                },
+                "organizerUnit": {
+                    "type": "string"
                 },
                 "position": {
                     "type": "string"
@@ -2296,6 +2304,9 @@ const docTemplate = `{
                 "activeForm": {
                     "type": "string"
                 },
+                "address": {
+                    "type": "string"
+                },
                 "endTime": {
                     "type": "string"
                 },
@@ -2303,6 +2314,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ifRegister": {
+                    "type": "string"
+                },
+                "organizerUnit": {
                     "type": "string"
                 },
                 "position": {
@@ -2344,18 +2358,12 @@ const docTemplate = `{
         },
         "req.CreatePostReq": {
             "type": "object",
-            "required": [
-                "introduce",
-                "showImg",
-                "title"
-            ],
             "properties": {
                 "introduce": {
                     "type": "string"
                 },
                 "showImg": {
                     "type": "array",
-                    "minItems": 1,
                     "items": {
                         "type": "string"
                     }
@@ -2545,7 +2553,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 30
                 },
                 "studentId": {
                     "type": "string"
@@ -2559,7 +2568,8 @@ const docTemplate = `{
             ],
             "properties": {
                 "newName": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 30
                 }
             }
         },
@@ -2681,6 +2691,9 @@ const docTemplate = `{
                 "activeForm": {
                     "type": "string"
                 },
+                "address": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "integer"
                 },
@@ -2691,6 +2704,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "isChecking": {
+                    "type": "string"
+                },
+                "organizerUnit": {
                     "type": "string"
                 },
                 "position": {
@@ -2747,206 +2763,206 @@ const docTemplate = `{
         "resp.FeedAtResp": {
             "type": "object",
             "properties": {
-                "firstPic": {
+                "FirstPic": {
                     "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "PublishedAt": {
+                    "type": "string"
+                },
+                "RootId": {
+                    "type": "integer"
+                },
+                "RootType": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "TargetId": {
+                    "type": "integer"
+                },
+                "Userinfo": {
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "message": {
-                    "type": "string"
-                },
-                "publishedAt": {
-                    "type": "string"
-                },
-                "rootId": {
-                    "type": "integer"
-                },
-                "rootType": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
-                },
-                "subject": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
-                },
-                "userInfo": {
-                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
         "resp.FeedCollectResp": {
             "type": "object",
             "properties": {
-                "firstPic": {
+                "FirstPic": {
                     "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "PublishedAt": {
+                    "type": "string"
+                },
+                "RootId": {
+                    "type": "integer"
+                },
+                "RootType": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "TargetId": {
+                    "type": "integer"
+                },
+                "Userinfo": {
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "message": {
-                    "type": "string"
-                },
-                "publishedAt": {
-                    "type": "string"
-                },
-                "rootId": {
-                    "type": "integer"
-                },
-                "rootType": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
-                },
-                "subject": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
-                },
-                "userInfo": {
-                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
         "resp.FeedCommentResp": {
             "type": "object",
             "properties": {
-                "firstPic": {
+                "FirstPic": {
                     "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "PublishedAt": {
+                    "type": "string"
+                },
+                "RootId": {
+                    "type": "integer"
+                },
+                "RootType": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "TargetId": {
+                    "type": "integer"
+                },
+                "Userinfo": {
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "message": {
-                    "type": "string"
-                },
-                "publishedAt": {
-                    "type": "string"
-                },
-                "rootId": {
-                    "type": "integer"
-                },
-                "rootType": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
-                },
-                "subject": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
-                },
-                "userInfo": {
-                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
         "resp.FeedInvitationResp": {
             "type": "object",
             "properties": {
-                "firstPic": {
+                "FirstPic": {
                     "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "PublishedAt": {
+                    "type": "string"
+                },
+                "RootId": {
+                    "type": "integer"
+                },
+                "RootType": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "TargetId": {
+                    "type": "integer"
+                },
+                "Userinfo": {
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "message": {
-                    "type": "string"
-                },
-                "publishedAt": {
-                    "type": "string"
-                },
-                "rootId": {
-                    "type": "integer"
-                },
-                "rootType": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
-                },
-                "subject": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
-                },
-                "userInfo": {
-                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
         "resp.FeedLikeResp": {
             "type": "object",
             "properties": {
-                "firstPic": {
+                "FirstPic": {
                     "type": "string"
+                },
+                "Message": {
+                    "type": "string"
+                },
+                "PublishedAt": {
+                    "type": "string"
+                },
+                "RootId": {
+                    "type": "integer"
+                },
+                "RootType": {
+                    "type": "string"
+                },
+                "Subject": {
+                    "type": "string"
+                },
+                "TargetId": {
+                    "type": "integer"
+                },
+                "Userinfo": {
+                    "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "message": {
-                    "type": "string"
-                },
-                "publishedAt": {
-                    "type": "string"
-                },
-                "rootId": {
-                    "type": "integer"
-                },
-                "rootType": {
-                    "type": "string"
-                },
                 "status": {
                     "type": "string"
-                },
-                "subject": {
-                    "type": "string"
-                },
-                "targetId": {
-                    "type": "integer"
-                },
-                "userInfo": {
-                    "$ref": "#/definitions/resp.FeedUserInfo"
                 }
             }
         },
         "resp.FeedResp": {
             "type": "object",
             "properties": {
-                "ats": {
+                "Ats": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/resp.FeedAtResp"
                     }
                 },
-                "collects": {
+                "Collects": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/resp.FeedCollectResp"
                     }
                 },
-                "comments": {
+                "Comments": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/resp.FeedCommentResp"
                     }
                 },
-                "invitations": {
+                "Invitations": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/resp.FeedInvitationResp"
                     }
                 },
-                "likes": {
+                "Likes": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/resp.FeedLikeResp"
@@ -2957,13 +2973,13 @@ const docTemplate = `{
         "resp.FeedUserInfo": {
             "type": "object",
             "properties": {
-                "avatar": {
+                "Avatar": {
                     "type": "string"
                 },
-                "studentId": {
+                "StudentID": {
                     "type": "string"
                 },
-                "username": {
+                "Username": {
                     "type": "string"
                 }
             }
@@ -2985,6 +3001,9 @@ const docTemplate = `{
                 "activeForm": {
                     "type": "string"
                 },
+                "address": {
+                    "type": "string"
+                },
                 "endTime": {
                     "type": "string"
                 },
@@ -2992,6 +3011,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ifRegister": {
+                    "type": "string"
+                },
+                "organizerUnit": {
                     "type": "string"
                 },
                 "position": {
@@ -3018,6 +3040,9 @@ const docTemplate = `{
         "resp.ListActivitiesResp": {
             "type": "object",
             "properties": {
+                "address": {
+                    "type": "string"
+                },
                 "collectNum": {
                     "type": "integer"
                 },
@@ -3050,6 +3075,9 @@ const docTemplate = `{
                 },
                 "likeNum": {
                     "type": "integer"
+                },
+                "organizerUnit": {
+                    "type": "string"
                 },
                 "position": {
                     "type": "string"

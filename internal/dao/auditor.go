@@ -32,10 +32,10 @@ func NewAuditorRepo(db *gorm.DB, l *logger.LoggerSet) AuditorRepository {
 
 func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error) {
 	form := model.AuditorForm{
-		Id:        tools.MustGenerateID(),
+		Id:         tools.MustGenerateID(),
 		ActivityId: activityId,
-		FormUrl:   formUrl,
-		Subject:   sub,
+		FormUrl:    formUrl,
+		Subject:    sub,
 	}
 	if err := a.db.WithContext(c).Create(&form).Error; err != nil {
 		return nil, err

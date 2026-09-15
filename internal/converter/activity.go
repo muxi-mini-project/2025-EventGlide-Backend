@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -16,21 +17,23 @@ import (
 func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
 	id := tools.MustGenerateID()
 	act := &model.Activity{
-		Id:            id,
-		CreatedAt:     time.Now(),
-		StudentID:     studentID,
-		Title:         r.Title,
-		Introduce:     r.Introduce,
-		Position:      r.LabelForm.Position,
-		HolderType:    r.LabelForm.HolderType,
-		Type:          r.LabelForm.Type,
-		IfRegister:    r.LabelForm.IfRegister,
+		Id:             id,
+		CreatedAt:      time.Now(),
+		StudentID:      studentID,
+		Title:          r.Title,
+		Introduce:      r.Introduce,
+		OrganizerUnit:  r.LabelForm.OrganizerUnit,
+		Position:       r.LabelForm.Position,
+		Address:        r.LabelForm.Address,
+		HolderType:     r.LabelForm.HolderType,
+		Type:           r.LabelForm.Type,
+		IfRegister:     r.LabelForm.IfRegister,
 		RegisterMethod: r.LabelForm.RegisterMethod,
-		StartTime:     r.LabelForm.StartTime,
-		EndTime:       r.LabelForm.EndTime,
-		ActiveForm:    r.LabelForm.ActiveForm,
-		Signers:       SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
-		Images:        ImagesFromUrls(r.ShowImg, id, "activity"),
+		StartTime:      r.LabelForm.StartTime,
+		EndTime:        r.LabelForm.EndTime,
+		ActiveForm:     r.LabelForm.ActiveForm,
+		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
+		Images:         ImagesFromUrls(r.ShowImg, id, "activity"),
 	}
 	return act
 }
@@ -38,21 +41,23 @@ func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
 func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.ActivityDraft {
 	id := tools.MustGenerateID()
 	return &model.ActivityDraft{
-		Id:            id,
-		CreatedAt:     time.Now(),
-		StudentID:     studentID,
-		Title:         r.Title,
-		Introduce:     r.Introduce,
-		Position:      r.LabelForm.Position,
-		HolderType:    r.LabelForm.HolderType,
-		Type:          r.LabelForm.Type,
-		IfRegister:    r.LabelForm.IfRegister,
+		Id:             id,
+		CreatedAt:      time.Now(),
+		StudentID:      studentID,
+		Title:          r.Title,
+		Introduce:      r.Introduce,
+		OrganizerUnit:  r.LabelForm.OrganizerUnit,
+		Position:       r.LabelForm.Position,
+		Address:        r.LabelForm.Address,
+		HolderType:     r.LabelForm.HolderType,
+		Type:           r.LabelForm.Type,
+		IfRegister:     r.LabelForm.IfRegister,
 		RegisterMethod: r.LabelForm.RegisterMethod,
-		StartTime:     r.LabelForm.StartTime,
-		EndTime:       r.LabelForm.EndTime,
-		ActiveForm:    r.LabelForm.ActiveForm,
-		Signers:       SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
-		Images:        ImagesFromUrls(r.ShowImg, id, "activity_draft"),
+		StartTime:      r.LabelForm.StartTime,
+		EndTime:        r.LabelForm.EndTime,
+		ActiveForm:     r.LabelForm.ActiveForm,
+		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
+		Images:         ImagesFromUrls(r.ShowImg, id, "activity_draft"),
 	}
 }
 
@@ -78,7 +83,9 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 	res.ShowImg = ImagesToUrls(d.Images)
 
 	res.LabelForm.HolderType = d.HolderType
+	res.LabelForm.OrganizerUnit = d.OrganizerUnit
 	res.LabelForm.Position = d.Position
+	res.LabelForm.Address = d.Address
 	res.LabelForm.IfRegister = d.IfRegister
 	res.LabelForm.RegisterMethod = d.RegisterMethod
 	res.LabelForm.StartTime = d.StartTime
@@ -140,7 +147,9 @@ func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 	res.HolderType = act.HolderType
 	res.Title = act.Title
 	res.Introduce = act.Introduce
+	res.OrganizerUnit = act.OrganizerUnit
 	res.Position = act.Position
+	res.Address = act.Address
 	res.Type = act.Type
 	res.LikeNum = act.LikeNum
 	res.CommentNum = act.CommentNum
@@ -162,7 +171,9 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 	res.Type = act.Type
 	res.Id = utils.SnowflakeID(act.Id)
 	res.ActiveForm = act.ActiveForm
+	res.OrganizerUnit = act.OrganizerUnit
 	res.Position = act.Position
+	res.Address = act.Address
 	res.IfRegister = act.IfRegister
 	res.Signer = ActivitySignersToResp(act.Signers)
 	res.IsChecking = act.IsChecking
@@ -182,7 +193,9 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 	res.ShowImg = ImagesToUrls(d.Images)
 	res.Type = d.Type
 	res.Id = utils.SnowflakeID(d.Id)
+	res.OrganizerUnit = d.OrganizerUnit
 	res.Position = d.Position
+	res.Address = d.Address
 	res.IfRegister = d.IfRegister
 	res.UserInfo.School = author.School
 	res.UserInfo.Username = author.Name
@@ -233,7 +246,33 @@ func ActivitySignersToResp(signers []model.ActivitySigner) []resp.Signer {
 	return out
 }
 
-func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string) request.UploadReq {
+// ActivityToAuditReq 将已落库的活动还原为审核请求，供后台送审路径使用。
+func ActivityToAuditReq(act *model.Activity) *req.CreateActReq {
+	signers := make([]req.Signer, 0, len(act.Signers))
+	for _, s := range act.Signers {
+		signers = append(signers, req.Signer{StudentID: s.StudentID, Name: string(s.Name)})
+	}
+	return &req.CreateActReq{
+		Title:     act.Title,
+		Introduce: act.Introduce,
+		ShowImg:   ImagesToUrls(act.Images),
+		LabelForm: req.CreateActLabel{
+			HolderType:     act.HolderType,
+			OrganizerUnit:  act.OrganizerUnit,
+			Position:       act.Position,
+			Address:        act.Address,
+			IfRegister:     act.IfRegister,
+			RegisterMethod: act.RegisterMethod,
+			StartTime:      act.StartTime,
+			ActiveForm:     act.ActiveForm,
+			EndTime:        act.EndTime,
+			Type:           act.Type,
+			Signer:         signers,
+		},
+	}
+}
+
+func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string) (request.UploadReq, error) {
 	now := time.Now().Unix()
 	idUint := uint(id)
 	res := request.UploadReq{
@@ -245,6 +284,9 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 
 	switch aw.Subject {
 	case model.SubjectActivity:
+		if aw.CactReq == nil {
+			return request.UploadReq{}, errors.New("auditor: activity request is nil")
+		}
 		author := extractAuthors(aw.CactReq.LabelForm.Signer)
 		res.Author = &author
 		*res.Tags = append(*res.Tags, aw.CactReq.LabelForm.Type, "活动")
@@ -255,11 +297,14 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 		)
 		res.Content = ctt
 
-		if tools.IfRegisterMapper(aw.CactReq.LabelForm.IfRegister) {
-			*res.Tags = append(*res.Tags, "含报名表需要审核")
-			res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, aw.CactReq.LabelForm.ActiveForm)
+		if form := aw.CactReq.LabelForm.ActiveForm; form != "" {
+			*res.Tags = append(*res.Tags, "含申请表需要审核")
+			res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, form)
 		}
 	case model.SubjectPost:
+		if aw.CpostReq == nil {
+			return request.UploadReq{}, errors.New("auditor: post request is nil")
+		}
 		res.Author = &aw.StudentId
 		*res.Tags = append(*res.Tags, "帖子")
 
@@ -270,7 +315,7 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 		res.Content = ctt
 	}
 
-	return res
+	return res, nil
 }
 
 func extractAuthors(signers []req.Signer) string {

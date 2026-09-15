@@ -5,7 +5,7 @@ import "github.com/raiki02/EG/pkg/utils"
 type ActSearchReq struct {
 	Type       []string `json:"type,omitempty"`
 	HolderType []string `json:"holderType,omitempty"`
-	Location   []string `json:"location,omitempty"`
+	Location   []string `json:"position,omitempty"`
 	IfRegister string   `json:"ifRegister,omitempty"`
 	DetailTime string   `json:"detailTime,omitempty"`
 	Page       int      `json:"page,omitempty"`
@@ -73,11 +73,13 @@ type Signer struct {
 
 type CreateActLabel struct {
 	HolderType     string `json:"holderType" validate:"required"`
+	OrganizerUnit  string `json:"organizerUnit" validate:"required"`
 	Position       string `json:"position" validate:"required"`
+	Address        string `json:"address" validate:"required"`
 	IfRegister     string `json:"ifRegister" validate:"required,oneof=是 否"`
 	RegisterMethod string `json:"registerMethod"`
 	StartTime      string `json:"startTime" validate:"required,ltcsfield=EndTime"`
-	ActiveForm     string `json:"activeForm" validate:"required,required_unless=HolderType 个人"`
+	ActiveForm     string `json:"activeForm" validate:"required"`
 	EndTime        string `json:"endTime" validate:"required,gtcsfield=StartTime"`
 	Type           string `json:"type" validate:"required"`
 
@@ -86,7 +88,9 @@ type CreateActLabel struct {
 
 type CreateDraftLabel struct {
 	HolderType     string `json:"holderType"`
+	OrganizerUnit  string `json:"organizerUnit"`
 	Position       string `json:"position"`
+	Address        string `json:"address"`
 	IfRegister     string `json:"ifRegister"`
 	RegisterMethod string `json:"registerMethod"`
 	StartTime      string `json:"startTime"`

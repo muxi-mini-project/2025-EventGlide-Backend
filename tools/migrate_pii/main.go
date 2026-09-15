@@ -1,9 +1,11 @@
 // PII 存量数据加密迁移工具（一次性 CLI）。
 // 将历史明文真名/姓名快照加密为 v1: 密文；已有 v1: 前缀的行跳过（幂等，可重跑）。
 // 用法：
-//   export EG_PII_KEY="<与 Nacos piiKey 一致>"
-//   go run ./tools/migrate_pii -dsn "user:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true" -dry-run   # 预览
-//   go run ./tools/migrate_pii -dsn "user:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true"          # 执行
+//
+//	export EG_PII_KEY="<与 Nacos piiKey 一致>"
+//	go run ./tools/migrate_pii -dsn "user:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true" -dry-run   # 预览
+//	go run ./tools/migrate_pii -dsn "user:pass@tcp(host:3306)/db?charset=utf8mb4&parseTime=true"          # 执行
+//
 // key 从环境变量 EG_PII_KEY 读取（避免出现在进程参数中），需与运行时的 Nacos piiKey 一致。
 package main
 

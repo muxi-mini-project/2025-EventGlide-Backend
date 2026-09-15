@@ -13,13 +13,13 @@ const (
 )
 
 type AuditorForm struct {
-	Id          int64    `gorm:"primaryKey;type:bigint;column:id"`
-	Subject     string    `gorm:"type:varchar(255);not null"`                                                    // 活动 or 帖子
-	ActivityId  int64    `gorm:"type:bigint;not null;index;column:activity_id"`                                  // 活动/帖子ID
-	Status      string    `gorm:"type:enum('pending','pass','reject');default:'pending';column:status;not null"` // 表单审核状态 审核是0,1,2
-	FormUrl     string    `gorm:"type:text;column:form_url"`                                                     // 表单的URL地址 // 给活动用的填报表单
-	CreatedAt   time.Time `gorm:"type:datetime;column:created_at;not null"`                                      // 创建时间
-	UpdatedAt   time.Time `gorm:"type:datetime;column:updated_at;not null"`                                      // 更新时间
+	Id         int64     `gorm:"primaryKey;type:bigint;column:id"`
+	Subject    string    `gorm:"type:varchar(255);not null"`                                                    // 活动 or 帖子
+	ActivityId int64     `gorm:"type:bigint;not null;index;column:activity_id"`                                 // 活动/帖子ID
+	Status     string    `gorm:"type:enum('pending','pass','reject');default:'pending';column:status;not null"` // 表单审核状态 审核是0,1,2
+	FormUrl    string    `gorm:"type:text;column:form_url"`                                                     // 表单的URL地址 // 给活动用的填报表单
+	CreatedAt  time.Time `gorm:"type:datetime;column:created_at;not null"`                                      // 创建时间
+	UpdatedAt  time.Time `gorm:"type:datetime;column:updated_at;not null"`                                      // 更新时间
 }
 
 func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
