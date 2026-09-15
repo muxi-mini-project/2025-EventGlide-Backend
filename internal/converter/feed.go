@@ -166,10 +166,10 @@ func GetFirstPic(pics string) string {
 
 func FeedFromInteractionReq(r *req.InteractionReq, action string, studentID string, receiver string) model.Feed {
 	return model.Feed{
-		TargetId: int64(r.TargetID),
-		Object:   r.Subject,
+		TargetId:  int64(r.TargetID),
+		Object:    r.Subject,
 		StudentID: studentID,
-		Action:   action,
-		Receiver: receiver,
+		Action:    action,
+		Receiver:  receiver,
 	}
 }

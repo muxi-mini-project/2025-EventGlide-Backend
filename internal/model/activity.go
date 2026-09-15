@@ -52,9 +52,9 @@ type ActivityDraft struct {
 }
 
 type ActivitySigner struct {
-	Id         int64  `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
-	ActivityId int64  `gorm:"type:bigint;index"`
-	StudentID  string `gorm:"type:varchar(255);not null"`
+	Id         int64           `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
+	ActivityId int64           `gorm:"type:bigint;index"`
+	StudentID  string          `gorm:"type:varchar(255);not null"`
 	Name       EncryptedString `gorm:"type:varchar(255);not null"`
 }
 

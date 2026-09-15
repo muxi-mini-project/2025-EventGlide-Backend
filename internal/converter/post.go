@@ -118,8 +118,8 @@ func ToCreatePostRespFromDraft(d model.PostDraft, author model.UserBrief) resp.C
 		StudentID:   author.StudentID,
 		PublishTime: tools.ParseTime(d.CreatedAt),
 		Title:       d.Title,
-		Introduce:    d.Introduce,
-		ShowImg:      ImagesToUrls(d.Images),
+		Introduce:   d.Introduce,
+		ShowImg:     ImagesToUrls(d.Images),
 	}
 	res.UserInfo.StudentID = author.StudentID
 	res.UserInfo.Avatar = author.Avatar

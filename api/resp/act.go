@@ -44,10 +44,10 @@ type ListActivitiesResp struct {
 }
 
 type PaginatedListActivitiesResp struct {
-	Total   int64                  `json:"total"`
-	Page    int                    `json:"page"`
-	Limit   int                    `json:"limit"`
-	Details []ListActivitiesResp   `json:"details"`
+	Total   int64                `json:"total"`
+	Page    int                  `json:"page"`
+	Limit   int                  `json:"limit"`
+	Details []ListActivitiesResp `json:"details"`
 }
 
 type LoadActivitiesDraftResp struct {

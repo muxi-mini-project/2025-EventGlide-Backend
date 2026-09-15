@@ -19,7 +19,7 @@ const (
 type SubjectInfo struct {
 	Subject   string
 	StudentID string
-	Id       int64
+	Id        int64
 }
 
 type SubjectGetter interface {

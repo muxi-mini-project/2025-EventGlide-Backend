@@ -106,12 +106,12 @@ func (mq *MQ) AutoClaim(ctx context.Context, stream, group, consumer string, min
 
 func (mq *MQ) ListPendingExt(ctx context.Context, stream, group string, idle time.Duration, start, end string, count int64) ([]redis.XPendingExt, error) {
 	result, err := mq.rdb.XPendingExt(ctx, &redis.XPendingExtArgs{
-		Stream:   stream,
-		Group:    group,
-		Idle:     idle,
-		Start:    start,
-		End:      end,
-		Count:    count,
+		Stream: stream,
+		Group:  group,
+		Idle:   idle,
+		Start:  start,
+		End:    end,
+		Count:  count,
 	}).Result()
 	if err != nil {
 		return nil, err

@@ -7,12 +7,12 @@ type CommentResp struct {
 
 	Creator Creator `json:"creator"`
 
-	CommentedTime string `json:"commentedTime"`
-	CommentedPos  string `json:"commentedPos"`
-	Content       string `json:"content"`
-	LikeNum       int    `json:"likeNum"`
-	ReplyNum      int    `json:"replyNum"`
-	IsLike        string `json:"isLike"`
+	CommentedTime string            `json:"commentedTime"`
+	CommentedPos  string            `json:"commentedPos"`
+	Content       string            `json:"content"`
+	LikeNum       int               `json:"likeNum"`
+	ReplyNum      int               `json:"replyNum"`
+	IsLike        string            `json:"isLike"`
 	ParentID      utils.SnowflakeID `json:"parentId"`
 	RootID        utils.SnowflakeID `json:"rootId"`
 
@@ -30,7 +30,7 @@ type ReplyResp struct {
 
 	ParentID       utils.SnowflakeID `json:"parentId"`
 	RootID         utils.SnowflakeID `json:"rootId"`
-	ParentUserName string `json:"parentUserName"`
+	ParentUserName string            `json:"parentUserName"`
 
 	IsLike   string `json:"isLike"`
 	LikeNum  int    `json:"likeNum"`

@@ -61,15 +61,15 @@ func ToCommentResps(details []model.CommentDetail) []resp.CommentResp {
 func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 	cmt := d.Comment
 	res := resp.ReplyResp{
-		Id:            utils.SnowflakeID(cmt.Id),
-		ReplyContent:  cmt.Content,
-		ReplyTime:     tools.ParseTime(cmt.CreatedAt),
-		ReplyPos:      cmt.Position,
-		ParentID:      utils.SnowflakeID(cmt.ParentID),
-		RootID:        utils.SnowflakeID(cmt.RootID),
+		Id:             utils.SnowflakeID(cmt.Id),
+		ReplyContent:   cmt.Content,
+		ReplyTime:      tools.ParseTime(cmt.CreatedAt),
+		ReplyPos:       cmt.Position,
+		ParentID:       utils.SnowflakeID(cmt.ParentID),
+		RootID:         utils.SnowflakeID(cmt.RootID),
 		ParentUserName: string(cmt.ReplyToUserName),
-		LikeNum:       cmt.LikeNum,
-		ReplyNum:      0, // 回复的回复数始终为0，无嵌套结构
+		LikeNum:        cmt.LikeNum,
+		ReplyNum:       0, // 回复的回复数始终为0，无嵌套结构
 	}
 	if d.IsLike {
 		res.IsLike = "true"
