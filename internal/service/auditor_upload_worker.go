@@ -45,6 +45,11 @@ func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Contex
 	}
 
 	for _, act := range acts {
+		// 历史活动可能没有申请表（早期 activeForm 非必填）。空表单仍送审，
+		// 但显式告警，避免与正常带表活动混在同一句成功日志里。
+		if act.ActiveForm == "" {
+			w.logger.Auditor.Warn("Activity has no active form, uploading without it", zap.Int64("actId", act.Id))
+		}
 		aw := &req.AuditWrapper{
 			Subject:   SubjectActivity,
 			StudentId: act.StudentID,
