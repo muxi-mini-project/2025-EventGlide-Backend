@@ -51,9 +51,12 @@ func NewAuditorService(repo dao.AuditorRepository, cfg *config.Conf, l *logger.L
 }
 
 func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id int64) error {
-	uploadReq := converter.AuditorUploadReqFromWrapper(aw, id, a.HookUrl)
-	_, err := a.MuxiCli.UploadItem(c, &uploadReq)
+	uploadReq, err := converter.AuditorUploadReqFromWrapper(aw, id, a.HookUrl)
 	if err != nil {
+		a.l.Error("Build auditor upload req failed", zap.Error(err))
+		return errs.ErrUploadFormFailed.Wrap(err)
+	}
+	if _, err := a.MuxiCli.UploadItem(c, &uploadReq); err != nil {
 		a.l.Error("Upload to auditor failed", zap.Error(err))
 		return errs.ErrUploadFormFailed.Wrap(err)
 	}

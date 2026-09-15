@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
@@ -47,6 +48,7 @@ func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Contex
 		aw := &req.AuditWrapper{
 			Subject:   SubjectActivity,
 			StudentId: act.StudentID,
+			CactReq:   converter.ActivityToAuditReq(&act),
 		}
 		form, err := w.auditorService.CreateAuditorForm(ctx, act.Id, act.ActiveForm, SubjectActivity)
 		if err != nil {

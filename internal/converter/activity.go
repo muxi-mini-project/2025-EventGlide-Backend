@@ -1,6 +1,7 @@
 package converter
 
 import (
+	"errors"
 	"strings"
 	"time"
 
@@ -245,7 +246,33 @@ func ActivitySignersToResp(signers []model.ActivitySigner) []resp.Signer {
 	return out
 }
 
-func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string) request.UploadReq {
+// ActivityToAuditReq 将已落库的活动还原为审核请求，供后台送审路径使用。
+func ActivityToAuditReq(act *model.Activity) *req.CreateActReq {
+	signers := make([]req.Signer, 0, len(act.Signers))
+	for _, s := range act.Signers {
+		signers = append(signers, req.Signer{StudentID: s.StudentID, Name: string(s.Name)})
+	}
+	return &req.CreateActReq{
+		Title:     act.Title,
+		Introduce: act.Introduce,
+		ShowImg:   ImagesToUrls(act.Images),
+		LabelForm: req.CreateActLabel{
+			HolderType:     act.HolderType,
+			OrganizerUnit:  act.OrganizerUnit,
+			Position:       act.Position,
+			Address:        act.Address,
+			IfRegister:     act.IfRegister,
+			RegisterMethod: act.RegisterMethod,
+			StartTime:      act.StartTime,
+			ActiveForm:     act.ActiveForm,
+			EndTime:        act.EndTime,
+			Type:           act.Type,
+			Signer:         signers,
+		},
+	}
+}
+
+func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string) (request.UploadReq, error) {
 	now := time.Now().Unix()
 	idUint := uint(id)
 	res := request.UploadReq{
@@ -257,6 +284,9 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 
 	switch aw.Subject {
 	case model.SubjectActivity:
+		if aw.CactReq == nil {
+			return request.UploadReq{}, errors.New("auditor: activity request is nil")
+		}
 		author := extractAuthors(aw.CactReq.LabelForm.Signer)
 		res.Author = &author
 		*res.Tags = append(*res.Tags, aw.CactReq.LabelForm.Type, "活动")
@@ -267,9 +297,14 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 		)
 		res.Content = ctt
 
-		*res.Tags = append(*res.Tags, "含申请表需要审核")
-		res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, aw.CactReq.LabelForm.ActiveForm)
+		if form := aw.CactReq.LabelForm.ActiveForm; form != "" {
+			*res.Tags = append(*res.Tags, "含申请表需要审核")
+			res.Content.Topic.Pictures = append(res.Content.Topic.Pictures, form)
+		}
 	case model.SubjectPost:
+		if aw.CpostReq == nil {
+			return request.UploadReq{}, errors.New("auditor: post request is nil")
+		}
 		res.Author = &aw.StudentId
 		*res.Tags = append(*res.Tags, "帖子")
 
@@ -280,7 +315,7 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 		res.Content = ctt
 	}
 
-	return res
+	return res, nil
 }
 
 func extractAuthors(signers []req.Signer) string {
