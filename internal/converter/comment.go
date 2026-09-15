@@ -42,8 +42,8 @@ func ToCommentResp(d model.CommentDetail) resp.CommentResp {
 		res.IsLike = "false"
 	}
 	res.Creator.StudentID = cmt.StudentID
-	res.Creator.Username = string(cmt.CreatorName)
-	res.Creator.Avatar = cmt.CreatorAvatar
+	res.Creator.Username = prefer(d.Creator.Name, string(cmt.CreatorName))
+	res.Creator.Avatar = prefer(d.Creator.Avatar, cmt.CreatorAvatar)
 	for _, reply := range d.Replies {
 		res.Reply = append(res.Reply, ToReplyResp(reply))
 	}
@@ -77,7 +77,15 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 		res.IsLike = "false"
 	}
 	res.ReplyCreator.StudentID = cmt.StudentID
-	res.ReplyCreator.Username = string(cmt.CreatorName)
-	res.ReplyCreator.Avatar = cmt.CreatorAvatar
+	res.ReplyCreator.Username = prefer(d.Creator.Name, string(cmt.CreatorName))
+	res.ReplyCreator.Avatar = prefer(d.Creator.Avatar, cmt.CreatorAvatar)
 	return res
+}
+
+// prefer 优先取实时值，实时为空（用户查不到）时回退评论写入时的快照。
+func prefer(live string, snapshot string) string {
+	if live != "" {
+		return live
+	}
+	return snapshot
 }

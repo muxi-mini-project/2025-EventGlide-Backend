@@ -15,11 +15,11 @@ const (
 type Approvement struct {
 	Id          int64           `gorm:"primaryKey;type:bigint;column:id"`
 	ActivityId  int64           `gorm:"type:bigint;column:activity_id;not null"`
-	StudentId   string          `gorm:"type:varchar(255);not null;column:student_id"`
+	StudentId   string          `gorm:"type:varchar(255);not null;column:student_id;index:idx_approvement_student_stance_created,priority:1"`
 	StudentName EncryptedString `gorm:"type:varchar(255);not null;column:student_name"`
-	Stance      string          `gorm:"type:enum('pass','reject','pending');default:'pending';column:stance;not null"`
+	Stance      string          `gorm:"type:enum('pass','reject','pending');default:'pending';column:stance;not null;index:idx_approvement_student_stance_created,priority:2"`
 	UpdatedAt   time.Time       `gorm:"type:datetime;column:updated_at;not null"`
-	CreatedAt   time.Time       `gorm:"type:datetime;column:created_at;not null"`
+	CreatedAt   time.Time       `gorm:"type:datetime;column:created_at;not null;index:idx_approvement_student_stance_created,priority:3"`
 }
 
 func (a *Approvement) AfterUpdate(tx *gorm.DB) (err error) {

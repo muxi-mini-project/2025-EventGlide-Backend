@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql/driver"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -358,6 +359,100 @@ func TestDeleteNonExistentCommentIdempotent(t *testing.T) {
 	err := cs.DeleteComment(ctx, 999, userC)
 	if err != nil {
 		t.Fatalf("want nil when deleting non-existent comment, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// 回复评论的作者信息取自实时用户查询（EnrichReply 路径），而非评论写入时的快照
+func TestEnrichReplyUsesLiveCreator(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	// EnrichReply 批量查 viewer + 回复作者
+	mock.ExpectQuery("SELECT \\* FROM `user` WHERE student_id IN \\(\\?,\\?\\)").
+		WithArgs(userA, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "name", "avatar"}).
+			AddRow(1, userA, "ViewerLive", "https://live.example/viewer.png").
+			AddRow(2, userB, "BobLive", "https://live.example/bob.png"))
+	// 点赞状态走 Redis（miniredis 空集合），无 SQL
+
+	cmt := &model.Comment{
+		Id:            2,
+		StudentID:     userB,
+		Content:       "reply",
+		CreatorName:   "BobSnapshot",
+		CreatorAvatar: "https://snap.example/bob.png",
+		ParentID:      1,
+		RootID:        1,
+		Subject:       SubjectComment,
+	}
+	detail := cs.EnrichReply(ctx, cmt, userA)
+
+	if detail.Creator.Name != "BobLive" {
+		t.Errorf("Creator.Name = %q, want BobLive (live user query)", detail.Creator.Name)
+	}
+	if detail.Creator.Avatar != "https://live.example/bob.png" {
+		t.Errorf("Creator.Avatar = %q, want live avatar", detail.Creator.Avatar)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// argCollector 透传匹配并记录实际 SQL 参数，供调用后做无序集合断言。
+type argCollector struct {
+	seen []string
+}
+
+func (c *argCollector) Match(v driver.Value) bool {
+	if s, ok := v.(string); ok {
+		c.seen = append(c.seen, s)
+	}
+	return true
+}
+
+// 批量 EnrichComments 路径：回复作者的实时信息同样从批量 userMap 取得（验证 idSet 收集了回复作者）
+func TestEnrichCommentsUsesLiveCreatorForReplies(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	top := seedTopComment()
+	// 批量加载一级评论的子级回复，作者为 C
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE root_id IN \\(\\?\\) AND subject = 'comment' ORDER BY created_at ASC, id ASC").
+		WithArgs(top.Id).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "root_id", "subject", "creator_name", "creator_avatar"}).
+			AddRow(2, userC, top.Id, "comment", "CarolSnapshot", "https://snap.example/carol.png"))
+
+	// idSet 应为 {viewer=userA, 回复作者=userC}，map 迭代顺序不定故用收集器事后比集合
+	args := &argCollector{}
+	mock.ExpectQuery("SELECT \\* FROM `user` WHERE student_id IN \\(\\?,\\?\\)").
+		WithArgs(args, args).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "name", "avatar"}).
+			AddRow(1, userA, "AliceLive", "https://live.example/alice.png").
+			AddRow(3, userC, "CarolLive", "https://live.example/carol.png"))
+
+	details := cs.EnrichComments(ctx, []model.Comment{top}, userA)
+	if len(details) != 1 || len(details[0].Replies) != 1 {
+		t.Fatalf("want 1 comment with 1 reply, got %+v", details)
+	}
+
+	// 断言 user 查询参数恰为 {userA, userC}：漏收回复作者或多收都会失败
+	gotIDs := make(map[string]bool, len(args.seen))
+	for _, s := range args.seen {
+		gotIDs[s] = true
+	}
+	if len(gotIDs) != 2 || !gotIDs[userA] || !gotIDs[userC] {
+		t.Errorf("user query ids = %v, want exactly {userA, userC}", args.seen)
+	}
+
+	reply := details[0].Replies[0]
+	if reply.Creator.Name != "CarolLive" {
+		t.Errorf("reply Creator.Name = %q, want CarolLive (live batch user query)", reply.Creator.Name)
+	}
+	if reply.Creator.Avatar != "https://live.example/carol.png" {
+		t.Errorf("reply Creator.Avatar = %q, want live avatar", reply.Creator.Avatar)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)

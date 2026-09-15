@@ -59,9 +59,11 @@ func (fd *FeedDao) GetTotalCnt(ctx context.Context, id string) (*FeedTotalCnt, e
 	}, nil
 }
 
+// feed 列表按 created_at 升序返回：前端将各类别作为升序输入做归并后再倒序展示。
 func (fd *FeedDao) GetLikeFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "like", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "like", id).
+		Order("created_at ASC, id ASC").Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get Like Feed Failed", zap.Error(err))
 		return nil, err
@@ -71,7 +73,8 @@ func (fd *FeedDao) GetLikeFeed(ctx context.Context, id string) ([]*model.Feed, e
 
 func (fd *FeedDao) GetCollectFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "collect", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "collect", id).
+		Order("created_at ASC, id ASC").Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get Collect Feed Failed", zap.Error(err))
 		return nil, err
@@ -81,7 +84,8 @@ func (fd *FeedDao) GetCollectFeed(ctx context.Context, id string) ([]*model.Feed
 
 func (fd *FeedDao) GetCommentFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "comment", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "comment", id).
+		Order("created_at ASC, id ASC").Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get Comment Feed Failed", zap.Error(err))
 		return nil, err
@@ -91,7 +95,8 @@ func (fd *FeedDao) GetCommentFeed(ctx context.Context, id string) ([]*model.Feed
 
 func (fd *FeedDao) GetAtFeed(ctx context.Context, id string) ([]*model.Feed, error) {
 	var feeds []*model.Feed
-	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "at", id).Find(&feeds).Error
+	err := fd.db.WithContext(ctx).Where("receiver = ? and action = ? and student_id != ?", id, "at", id).
+		Order("created_at ASC, id ASC").Find(&feeds).Error
 	if err != nil {
 		fd.l.Error("Get At Feed Failed", zap.Error(err))
 		return nil, err
@@ -101,7 +106,8 @@ func (fd *FeedDao) GetAtFeed(ctx context.Context, id string) ([]*model.Feed, err
 
 func (fd *FeedDao) GetAuditorFeed(ctx context.Context, id string) ([]*model.Approvement, error) {
 	var a []*model.Approvement
-	if err := fd.db.WithContext(ctx).Where("stance = ? and student_id = ?", "pending", id).Find(&a).Error; err != nil {
+	if err := fd.db.WithContext(ctx).Where("stance = ? and student_id = ?", "pending", id).
+		Order("created_at ASC, id ASC").Find(&a).Error; err != nil {
 		fd.l.Error("Get Auditor Feed Failed", zap.Error(err))
 		return nil, err
 	}
