@@ -459,6 +459,82 @@ func TestEnrichCommentsUsesLiveCreatorForReplies(t *testing.T) {
 	}
 }
 
+// 批量路径：回复的"被回复者"昵称（回复@xxx）取实时值，被回复者也须进 idSet
+func TestEnrichCommentsUsesLiveParentUserName(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	top := seedTopComment()
+	// 回复由 C 发出、回复的是 B（ReplyToUserID=userB）
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE root_id IN \\(\\?\\) AND subject = 'comment' ORDER BY created_at ASC, id ASC").
+		WithArgs(top.Id).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "root_id", "subject", "creator_name", "creator_avatar", "reply_to_user_id", "reply_to_user_name"}).
+			AddRow(2, userC, top.Id, "comment", "CarolSnapshot", "https://snap.example/carol.png", userB, "BobSnapshot"))
+
+	// idSet 应为 {viewer=userA, 回复作者=userC, 被回复者=userB}
+	args := &argCollector{}
+	mock.ExpectQuery("SELECT \\* FROM `user` WHERE student_id IN \\(\\?,\\?,\\?\\)").
+		WithArgs(args, args, args).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "name", "avatar"}).
+			AddRow(1, userA, "AliceLive", "https://live.example/alice.png").
+			AddRow(3, userC, "CarolLive", "https://live.example/carol.png").
+			AddRow(4, userB, "BobLive", "https://live.example/bob.png"))
+
+	details := cs.EnrichComments(ctx, []model.Comment{top}, userA)
+	if len(details) != 1 || len(details[0].Replies) != 1 {
+		t.Fatalf("want 1 comment with 1 reply, got %+v", details)
+	}
+
+	// 被回复者必须进 user 查询集合，否则拿不到实时昵称
+	gotIDs := make(map[string]bool, len(args.seen))
+	for _, s := range args.seen {
+		gotIDs[s] = true
+	}
+	if len(gotIDs) != 3 || !gotIDs[userA] || !gotIDs[userC] || !gotIDs[userB] {
+		t.Errorf("user query ids = %v, want exactly {userA, userC, userB}", args.seen)
+	}
+
+	if got := details[0].Replies[0].ParentUserName; got != "BobLive" {
+		t.Errorf("ParentUserName = %q, want BobLive (live batch user query)", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// 单条 EnrichReply 路径：被回复者昵称实时优先
+func TestEnrichReplyUsesLiveParentUserName(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	mock.ExpectQuery("SELECT \\* FROM `user` WHERE student_id IN \\(\\?,\\?,\\?\\)").
+		WithArgs(userA, userC, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "name", "avatar"}).
+			AddRow(1, userA, "AliceLive", "https://live.example/alice.png").
+			AddRow(3, userC, "CarolLive", "https://live.example/carol.png").
+			AddRow(4, userB, "BobLive", "https://live.example/bob.png"))
+
+	cmt := &model.Comment{
+		Id:              2,
+		StudentID:       userC,
+		Content:         "reply to B",
+		CreatorName:     "CarolSnapshot",
+		ReplyToUserID:   userB,
+		ReplyToUserName: "BobSnapshot",
+		ParentID:        1,
+		RootID:          1,
+		Subject:         SubjectComment,
+	}
+	detail := cs.EnrichReply(ctx, cmt, userA)
+
+	if detail.ParentUserName != "BobLive" {
+		t.Errorf("ParentUserName = %q, want BobLive (live user query)", detail.ParentUserName)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
 // 一级评论自评（评论自己的活动）：也要计数 +1（修复前 return 在计数前）
 func TestCreateSelfCommentStillCounts(t *testing.T) {
 	cs, mock := newCommentServiceForTest(t)

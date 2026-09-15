@@ -358,6 +358,9 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 	for _, reply := range allReplies {
 		replyMap[reply.RootID] = append(replyMap[reply.RootID], reply)
 		idSet[reply.StudentID] = struct{}{}
+		if reply.ReplyToUserID != "" {
+			idSet[reply.ReplyToUserID] = struct{}{}
+		}
 	}
 
 	idList := make([]string, 0, len(idSet))
@@ -405,6 +408,9 @@ func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, v
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
 	idList := []string{viewerID, cmt.StudentID}
+	if cmt.ReplyToUserID != "" {
+		idList = append(idList, cmt.ReplyToUserID)
+	}
 	userMap, err := cs.ud.GetUsersByIDs(c, idList)
 	if err != nil {
 		cs.l.Error("Error batch get users when enriching reply", zap.Error(err))
@@ -471,7 +477,7 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 	}
 	detail := model.ReplyDetail{
 		Comment:        *cmt,
-		ParentUserName: string(cmt.ReplyToUserName),
+		ParentUserName: parentUserName(cmt, userMap),
 		IsLike:         isLike,
 	}
 	if creator := userMap[cmt.StudentID]; creator != nil {
@@ -482,6 +488,16 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 		}
 	}
 	return detail
+}
+
+// parentUserName 取被回复者的实时昵称，查不到时回退写入时的快照。
+func parentUserName(cmt *model.Comment, userMap map[string]*model.User) string {
+	if cmt.ReplyToUserID != "" {
+		if user := userMap[cmt.ReplyToUserID]; user != nil && user.Name != "" {
+			return user.Name
+		}
+	}
+	return string(cmt.ReplyToUserName)
 }
 
 func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {
