@@ -21,7 +21,9 @@ func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
 		StudentID:     studentID,
 		Title:         r.Title,
 		Introduce:     r.Introduce,
+		OrganizerUnit: r.LabelForm.OrganizerUnit,
 		Position:      r.LabelForm.Position,
+		Address:       r.LabelForm.Address,
 		HolderType:    r.LabelForm.HolderType,
 		Type:          r.LabelForm.Type,
 		IfRegister:    r.LabelForm.IfRegister,
@@ -43,7 +45,9 @@ func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.Ac
 		StudentID:     studentID,
 		Title:         r.Title,
 		Introduce:     r.Introduce,
+		OrganizerUnit: r.LabelForm.OrganizerUnit,
 		Position:      r.LabelForm.Position,
+		Address:       r.LabelForm.Address,
 		HolderType:    r.LabelForm.HolderType,
 		Type:          r.LabelForm.Type,
 		IfRegister:    r.LabelForm.IfRegister,
@@ -78,7 +82,9 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 	res.ShowImg = ImagesToUrls(d.Images)
 
 	res.LabelForm.HolderType = d.HolderType
+	res.LabelForm.OrganizerUnit = d.OrganizerUnit
 	res.LabelForm.Position = d.Position
+	res.LabelForm.Address = d.Address
 	res.LabelForm.IfRegister = d.IfRegister
 	res.LabelForm.RegisterMethod = d.RegisterMethod
 	res.LabelForm.StartTime = d.StartTime
@@ -140,7 +146,9 @@ func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 	res.HolderType = act.HolderType
 	res.Title = act.Title
 	res.Introduce = act.Introduce
+	res.OrganizerUnit = act.OrganizerUnit
 	res.Position = act.Position
+	res.Address = act.Address
 	res.Type = act.Type
 	res.LikeNum = act.LikeNum
 	res.CommentNum = act.CommentNum
@@ -162,7 +170,9 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 	res.Type = act.Type
 	res.Id = utils.SnowflakeID(act.Id)
 	res.ActiveForm = act.ActiveForm
+	res.OrganizerUnit = act.OrganizerUnit
 	res.Position = act.Position
+	res.Address = act.Address
 	res.IfRegister = act.IfRegister
 	res.Signer = ActivitySignersToResp(act.Signers)
 	res.IsChecking = act.IsChecking
@@ -182,7 +192,9 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 	res.ShowImg = ImagesToUrls(d.Images)
 	res.Type = d.Type
 	res.Id = utils.SnowflakeID(d.Id)
+	res.OrganizerUnit = d.OrganizerUnit
 	res.Position = d.Position
+	res.Address = d.Address
 	res.IfRegister = d.IfRegister
 	res.UserInfo.School = author.School
 	res.UserInfo.Username = author.Name

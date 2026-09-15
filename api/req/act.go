@@ -73,7 +73,9 @@ type Signer struct {
 
 type CreateActLabel struct {
 	HolderType     string `json:"holderType" validate:"required"`
+	OrganizerUnit  string `json:"organizerUnit" validate:"required"`
 	Position       string `json:"position" validate:"required"`
+	Address        string `json:"address" validate:"required"`
 	IfRegister     string `json:"ifRegister" validate:"required,oneof=是 否"`
 	RegisterMethod string `json:"registerMethod"`
 	StartTime      string `json:"startTime" validate:"required,ltcsfield=EndTime"`
@@ -86,7 +88,9 @@ type CreateActLabel struct {
 
 type CreateDraftLabel struct {
 	HolderType     string `json:"holderType"`
+	OrganizerUnit  string `json:"organizerUnit"`
 	Position       string `json:"position"`
+	Address        string `json:"address"`
 	IfRegister     string `json:"ifRegister"`
 	RegisterMethod string `json:"registerMethod"`
 	StartTime      string `json:"startTime"`
