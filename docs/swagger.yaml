@@ -39,6 +39,8 @@ definitions:
     properties:
       activeForm:
         type: string
+      address:
+        type: string
       endTime:
         type: string
       holderType:
@@ -47,6 +49,8 @@ definitions:
         enum:
         - 是
         - 否
+        type: string
+      organizerUnit:
         type: string
       position:
         type: string
@@ -63,9 +67,11 @@ definitions:
         type: string
     required:
     - activeForm
+    - address
     - endTime
     - holderType
     - ifRegister
+    - organizerUnit
     - position
     - startTime
     - type
@@ -103,11 +109,15 @@ definitions:
     properties:
       activeForm:
         type: string
+      address:
+        type: string
       endTime:
         type: string
       holderType:
         type: string
       ifRegister:
+        type: string
+      organizerUnit:
         type: string
       position:
         type: string
@@ -140,14 +150,9 @@ definitions:
       showImg:
         items:
           type: string
-        minItems: 1
         type: array
       title:
         type: string
-    required:
-    - introduce
-    - showImg
-    - title
     type: object
   req.DeleteCommentReq:
     properties:
@@ -266,6 +271,7 @@ definitions:
   req.Signer:
     properties:
       name:
+        maxLength: 30
         type: string
       studentId:
         type: string
@@ -273,6 +279,7 @@ definitions:
   req.UpdateNameReq:
     properties:
       newName:
+        maxLength: 30
         type: string
     required:
     - newName
@@ -354,6 +361,8 @@ definitions:
     properties:
       activeForm:
         type: string
+      address:
+        type: string
       id:
         type: integer
       ifRegister:
@@ -361,6 +370,8 @@ definitions:
       introduce:
         type: string
       isChecking:
+        type: string
+      organizerUnit:
         type: string
       position:
         type: string
@@ -397,149 +408,149 @@ definitions:
     type: object
   resp.FeedAtResp:
     properties:
-      firstPic:
+      FirstPic:
         type: string
+      Message:
+        type: string
+      PublishedAt:
+        type: string
+      RootId:
+        type: integer
+      RootType:
+        type: string
+      Subject:
+        type: string
+      TargetId:
+        type: integer
+      Userinfo:
+        $ref: '#/definitions/resp.FeedUserInfo'
       id:
         type: integer
-      message:
-        type: string
-      publishedAt:
-        type: string
-      rootId:
-        type: integer
-      rootType:
-        type: string
       status:
         type: string
-      subject:
-        type: string
-      targetId:
-        type: integer
-      userInfo:
-        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedCollectResp:
     properties:
-      firstPic:
+      FirstPic:
         type: string
+      Message:
+        type: string
+      PublishedAt:
+        type: string
+      RootId:
+        type: integer
+      RootType:
+        type: string
+      Subject:
+        type: string
+      TargetId:
+        type: integer
+      Userinfo:
+        $ref: '#/definitions/resp.FeedUserInfo'
       id:
         type: integer
-      message:
-        type: string
-      publishedAt:
-        type: string
-      rootId:
-        type: integer
-      rootType:
-        type: string
       status:
         type: string
-      subject:
-        type: string
-      targetId:
-        type: integer
-      userInfo:
-        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedCommentResp:
     properties:
-      firstPic:
+      FirstPic:
         type: string
+      Message:
+        type: string
+      PublishedAt:
+        type: string
+      RootId:
+        type: integer
+      RootType:
+        type: string
+      Subject:
+        type: string
+      TargetId:
+        type: integer
+      Userinfo:
+        $ref: '#/definitions/resp.FeedUserInfo'
       id:
         type: integer
-      message:
-        type: string
-      publishedAt:
-        type: string
-      rootId:
-        type: integer
-      rootType:
-        type: string
       status:
         type: string
-      subject:
-        type: string
-      targetId:
-        type: integer
-      userInfo:
-        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedInvitationResp:
     properties:
-      firstPic:
+      FirstPic:
         type: string
+      Message:
+        type: string
+      PublishedAt:
+        type: string
+      RootId:
+        type: integer
+      RootType:
+        type: string
+      Subject:
+        type: string
+      TargetId:
+        type: integer
+      Userinfo:
+        $ref: '#/definitions/resp.FeedUserInfo'
       id:
         type: integer
-      message:
-        type: string
-      publishedAt:
-        type: string
-      rootId:
-        type: integer
-      rootType:
-        type: string
       status:
         type: string
-      subject:
-        type: string
-      targetId:
-        type: integer
-      userInfo:
-        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedLikeResp:
     properties:
-      firstPic:
+      FirstPic:
         type: string
+      Message:
+        type: string
+      PublishedAt:
+        type: string
+      RootId:
+        type: integer
+      RootType:
+        type: string
+      Subject:
+        type: string
+      TargetId:
+        type: integer
+      Userinfo:
+        $ref: '#/definitions/resp.FeedUserInfo'
       id:
         type: integer
-      message:
-        type: string
-      publishedAt:
-        type: string
-      rootId:
-        type: integer
-      rootType:
-        type: string
       status:
         type: string
-      subject:
-        type: string
-      targetId:
-        type: integer
-      userInfo:
-        $ref: '#/definitions/resp.FeedUserInfo'
     type: object
   resp.FeedResp:
     properties:
-      ats:
+      Ats:
         items:
           $ref: '#/definitions/resp.FeedAtResp'
         type: array
-      collects:
+      Collects:
         items:
           $ref: '#/definitions/resp.FeedCollectResp'
         type: array
-      comments:
+      Comments:
         items:
           $ref: '#/definitions/resp.FeedCommentResp'
         type: array
-      invitations:
+      Invitations:
         items:
           $ref: '#/definitions/resp.FeedInvitationResp'
         type: array
-      likes:
+      Likes:
         items:
           $ref: '#/definitions/resp.FeedLikeResp'
         type: array
     type: object
   resp.FeedUserInfo:
     properties:
-      avatar:
+      Avatar:
         type: string
-      studentId:
+      StudentID:
         type: string
-      username:
+      Username:
         type: string
     type: object
   resp.ImgBedResp:
@@ -553,11 +564,15 @@ definitions:
     properties:
       activeForm:
         type: string
+      address:
+        type: string
       endTime:
         type: string
       holderType:
         type: string
       ifRegister:
+        type: string
+      organizerUnit:
         type: string
       position:
         type: string
@@ -575,6 +590,8 @@ definitions:
     type: object
   resp.ListActivitiesResp:
     properties:
+      address:
+        type: string
       collectNum:
         type: integer
       commentNum:
@@ -597,6 +614,8 @@ definitions:
         type: string
       likeNum:
         type: integer
+      organizerUnit:
+        type: string
       position:
         type: string
       showImg:
