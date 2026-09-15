@@ -395,14 +395,20 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 
 func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
 	idList := []string{viewerID, cmt.StudentID}
-	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
+	userMap, err := cs.ud.GetUsersByIDs(c, idList)
+	if err != nil {
+		cs.l.Error("Error batch get users when enriching comment", zap.Error(err))
+	}
 	likedMap := cs.viewerLikedComments(c, viewerID, userMap, []int64{cmt.Id})
 	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap, nil, likedMap)
 }
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
 	idList := []string{viewerID, cmt.StudentID}
-	userMap, _ := cs.ud.GetUsersByIDs(c, idList)
+	userMap, err := cs.ud.GetUsersByIDs(c, idList)
+	if err != nil {
+		cs.l.Error("Error batch get users when enriching reply", zap.Error(err))
+	}
 	likedMap := cs.viewerLikedComments(c, viewerID, userMap, []int64{cmt.Id})
 	return cs.enrichReplyWithCache(c, cmt, viewerID, userMap, likedMap)
 }
@@ -463,11 +469,19 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 		// 批量 map 未覆盖（如单条 enrich 路径新加载的回复），回退单条查询
 		isLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
 	}
-	return model.ReplyDetail{
+	detail := model.ReplyDetail{
 		Comment:        *cmt,
 		ParentUserName: string(cmt.ReplyToUserName),
 		IsLike:         isLike,
 	}
+	if creator := userMap[cmt.StudentID]; creator != nil {
+		detail.Creator = model.UserBrief{
+			StudentID: creator.StudentID,
+			Name:      creator.Name,
+			Avatar:    creator.Avatar,
+		}
+	}
+	return detail
 }
 
 func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {
