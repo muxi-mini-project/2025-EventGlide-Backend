@@ -11,12 +11,12 @@ definitions:
         type: string
       limit:
         type: integer
-      location:
+      page:
+        type: integer
+      position:
         items:
           type: string
         type: array
-      page:
-        type: integer
       type:
         items:
           type: string

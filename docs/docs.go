@@ -2161,14 +2161,14 @@ const docTemplate = `{
                 "limit": {
                     "type": "integer"
                 },
-                "location": {
+                "page": {
+                    "type": "integer"
+                },
+                "position": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
-                },
-                "page": {
-                    "type": "integer"
                 },
                 "type": {
                     "type": "array",

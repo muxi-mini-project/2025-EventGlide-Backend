@@ -5,7 +5,7 @@ import "github.com/raiki02/EG/pkg/utils"
 type ActSearchReq struct {
 	Type       []string `json:"type,omitempty"`
 	HolderType []string `json:"holderType,omitempty"`
-	Location   []string `json:"location,omitempty"`
+	Location   []string `json:"position,omitempty"`
 	IfRegister string   `json:"ifRegister,omitempty"`
 	DetailTime string   `json:"detailTime,omitempty"`
 	Page       int      `json:"page,omitempty"`
