@@ -433,16 +433,7 @@ func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.C
 	creator := userMap[cmt.StudentID]
 	viewer := userMap[viewerID]
 
-	var replies []model.Comment
-	if replyMap != nil {
-		replies = replyMap[cmt.Id]
-	} else {
-		var err error
-		replies, err = cs.cd.LoadAnswers(c, cmt.Id)
-		if err != nil {
-			cs.l.Error("Error load answers when enriching comment", zap.Error(err))
-		}
-	}
+	replies := replyMap[cmt.Id]
 
 	detail := model.CommentDetail{
 		Comment: *cmt,
@@ -468,7 +459,7 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 	if liked, ok := likedMap[cmt.Id]; ok {
 		isLike = liked
 	} else if viewer := userMap[viewerID]; viewer != nil {
-		// 批量 map 未覆盖（如单条 enrich 路径新加载的回复），回退单条查询
+		// 点赞批量查询失败（likedMap 为空）时回退单条查询
 		isLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
 	}
 	detail := model.ReplyDetail{
