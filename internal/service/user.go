@@ -255,7 +255,10 @@ func (us *UserService) LoadCollectAct(ctx context.Context, studentId string, pag
 		}
 	}
 
-	likedIds, collectedIds, _ := us.idh.GetUserActivityInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedIds, collectedIds, err := us.idh.GetUserActivityInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to get activity interaction statuses", zap.Error(err), zap.String("studentId", user.StudentID))
+	}
 	likedMap := make(map[int64]bool)
 	collectedMap := make(map[int64]bool)
 	for _, id := range likedIds {
@@ -308,7 +311,10 @@ func (us *UserService) LoadCollectPost(ctx context.Context, studentId string, pa
 		}
 	}
 
-	likedIds, collectedIds, _ := us.idh.GetUserPostInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedIds, collectedIds, err := us.idh.GetUserPostInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to get post interaction statuses", zap.Error(err), zap.String("studentId", user.StudentID))
+	}
 	likedMap := make(map[int64]bool)
 	collectedMap := make(map[int64]bool)
 	for _, id := range likedIds {
@@ -361,7 +367,10 @@ func (us *UserService) LoadLikePost(ctx context.Context, studentId string, page,
 		}
 	}
 
-	likedIds, collectedIds, _ := us.idh.GetUserPostInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedIds, collectedIds, err := us.idh.GetUserPostInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to get post interaction statuses", zap.Error(err), zap.String("studentId", user.StudentID))
+	}
 	likedMap := make(map[int64]bool)
 	collectedMap := make(map[int64]bool)
 	for _, id := range likedIds {
@@ -414,7 +423,10 @@ func (us *UserService) LoadLikeAct(ctx context.Context, studentId string, page, 
 		}
 	}
 
-	likedIds, collectedIds, _ := us.idh.GetUserActivityInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	likedIds, collectedIds, err := us.idh.GetUserActivityInteractionStatuses(ctx, int64(user.Id), paginatedIds.Ids)
+	if err != nil {
+		us.l.Error("Failed to get activity interaction statuses", zap.Error(err), zap.String("studentId", user.StudentID))
+	}
 	likedMap := make(map[int64]bool)
 	collectedMap := make(map[int64]bool)
 	for _, id := range likedIds {

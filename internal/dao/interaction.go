@@ -262,38 +262,49 @@ func (id *InteractionDao) InsertApprovement(c context.Context, studentID, studen
 	return nil
 }
 
+// 以下 IsUserLiked/Collected 系列为降级查询：查询失败时返回 false 并记日志，便于发现降级。
 func (id *InteractionDao) IsUserLikedActivity(c context.Context, userId, activityId int64) bool {
 	var count int64
-	id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
-		Where("user_id = ? AND activity_id = ? AND type = ?", userId, activityId, "like").Count(&count)
+	if err := id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
+		Where("user_id = ? AND activity_id = ? AND type = ?", userId, activityId, "like").Count(&count).Error; err != nil {
+		id.l.Error("Failed to check activity like status from db", zap.Error(err), zap.Int64("userId", userId), zap.Int64("activityId", activityId))
+	}
 	return count > 0
 }
 
 func (id *InteractionDao) IsUserCollectedActivity(c context.Context, userId, activityId int64) bool {
 	var count int64
-	id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
-		Where("user_id = ? AND activity_id = ? AND type = ?", userId, activityId, "collect").Count(&count)
+	if err := id.db.WithContext(c).Model(&model.UserActivityInteraction{}).
+		Where("user_id = ? AND activity_id = ? AND type = ?", userId, activityId, "collect").Count(&count).Error; err != nil {
+		id.l.Error("Failed to check activity collect status from db", zap.Error(err), zap.Int64("userId", userId), zap.Int64("activityId", activityId))
+	}
 	return count > 0
 }
 
 func (id *InteractionDao) IsUserLikedPost(c context.Context, userId, postId int64) bool {
 	var count int64
-	id.db.WithContext(c).Model(&model.UserPostInteraction{}).
-		Where("user_id = ? AND post_id = ? AND type = ?", userId, postId, "like").Count(&count)
+	if err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
+		Where("user_id = ? AND post_id = ? AND type = ?", userId, postId, "like").Count(&count).Error; err != nil {
+		id.l.Error("Failed to check post like status from db", zap.Error(err), zap.Int64("userId", userId), zap.Int64("postId", postId))
+	}
 	return count > 0
 }
 
 func (id *InteractionDao) IsUserCollectedPost(c context.Context, userId, postId int64) bool {
 	var count int64
-	id.db.WithContext(c).Model(&model.UserPostInteraction{}).
-		Where("user_id = ? AND post_id = ? AND type = ?", userId, postId, "collect").Count(&count)
+	if err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
+		Where("user_id = ? AND post_id = ? AND type = ?", userId, postId, "collect").Count(&count).Error; err != nil {
+		id.l.Error("Failed to check post collect status from db", zap.Error(err), zap.Int64("userId", userId), zap.Int64("postId", postId))
+	}
 	return count > 0
 }
 
 func (id *InteractionDao) IsUserLikedComment(c context.Context, userId, commentId int64) bool {
 	var count int64
-	id.db.WithContext(c).Model(&model.UserCommentInteraction{}).
-		Where("user_id = ? AND comment_id = ? AND type = ?", userId, commentId, "like").Count(&count)
+	if err := id.db.WithContext(c).Model(&model.UserCommentInteraction{}).
+		Where("user_id = ? AND comment_id = ? AND type = ?", userId, commentId, "like").Count(&count).Error; err != nil {
+		id.l.Error("Failed to check comment like status from db", zap.Error(err), zap.Int64("userId", userId), zap.Int64("commentId", commentId))
+	}
 	return count > 0
 }
 

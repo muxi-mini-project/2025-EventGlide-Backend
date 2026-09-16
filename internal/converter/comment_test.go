@@ -47,17 +47,17 @@ func TestToCommentRespFallsBackToSnapshot(t *testing.T) {
 	}
 }
 
-// TestToReplyRespPrefersLiveCreator 回复作者同样实时优先，且只影响作者本人，
-// ReplyToUserName（“回复@xxx”）保持历史快照不变。
+// TestToReplyRespPrefersLiveCreator 回复作者与被回复者昵称（“回复@xxx”）均实时优先。
 func TestToReplyRespPrefersLiveCreator(t *testing.T) {
 	d := model.ReplyDetail{
 		Comment: model.Comment{
 			StudentID:       "S20250003",
 			CreatorName:     "旧名",
 			CreatorAvatar:   "https://old.example/a.png",
-			ReplyToUserName: "被回复人快照",
+			ReplyToUserName: "被回复人旧名",
 		},
-		Creator: model.UserBrief{Name: "新名", Avatar: "https://new.example/a.png"},
+		Creator:        model.UserBrief{Name: "新名", Avatar: "https://new.example/a.png"},
+		ParentUserName: "被回复人新名",
 	}
 
 	res := ToReplyResp(d)
@@ -67,8 +67,23 @@ func TestToReplyRespPrefersLiveCreator(t *testing.T) {
 	if res.ReplyCreator.Avatar != "https://new.example/a.png" {
 		t.Errorf("ReplyCreator.Avatar = %q, want live avatar", res.ReplyCreator.Avatar)
 	}
+	if res.ParentUserName != "被回复人新名" {
+		t.Errorf("ParentUserName = %q, want live name", res.ParentUserName)
+	}
+}
+
+// TestToReplyRespParentUserNameFallsBack 被回复者实时查不到时回退快照。
+func TestToReplyRespParentUserNameFallsBack(t *testing.T) {
+	d := model.ReplyDetail{
+		Comment: model.Comment{
+			StudentID:       "S20250003",
+			ReplyToUserName: "被回复人快照",
+		},
+	}
+
+	res := ToReplyResp(d)
 	if res.ParentUserName != "被回复人快照" {
-		t.Errorf("ParentUserName = %q, want snapshot unchanged", res.ParentUserName)
+		t.Errorf("ParentUserName = %q, want snapshot fallback", res.ParentUserName)
 	}
 }
 

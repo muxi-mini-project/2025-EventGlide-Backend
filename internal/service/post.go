@@ -139,7 +139,10 @@ func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, 
 	for _, post := range posts {
 		studentIDs = append(studentIDs, post.StudentID)
 	}
-	usersMap, _ := ps.ud.GetUsersByIDs(c, studentIDs)
+	usersMap, err := ps.ud.GetUsersByIDs(c, studentIDs)
+	if err != nil {
+		ps.l.Error("Failed to batch get users when enriching posts", zap.Error(err))
+	}
 	searcher := usersMap[viewerID]
 
 	viewerUserId := int64(0)
@@ -189,7 +192,10 @@ func (ps *PostService) EnrichForSearcherWithStatuses(c context.Context, posts []
 	for _, post := range posts {
 		studentIDs = append(studentIDs, post.StudentID)
 	}
-	usersMap, _ := ps.ud.GetUsersByIDs(c, studentIDs)
+	usersMap, err := ps.ud.GetUsersByIDs(c, studentIDs)
+	if err != nil {
+		ps.l.Error("Failed to batch get users when enriching posts", zap.Error(err))
+	}
 
 	details := make([]model.PostDetail, 0, len(posts))
 	for i := range posts {
@@ -219,7 +225,10 @@ func (ps *PostService) EnrichOneForSearcher(c context.Context, post *model.Post,
 }
 
 func (ps *PostService) AuthorBrief(c context.Context, studentID string) model.UserBrief {
-	usersMap, _ := ps.ud.GetUsersByIDs(c, []string{studentID})
+	usersMap, err := ps.ud.GetUsersByIDs(c, []string{studentID})
+	if err != nil {
+		ps.l.Error("Failed to get user when building author brief", zap.Error(err), zap.String("studentID", studentID))
+	}
 	if len(usersMap) == 0 {
 		return model.UserBrief{}
 	}
@@ -236,7 +245,10 @@ func (ps *PostService) AuthorBrief(c context.Context, studentID string) model.Us
 }
 
 func (ps *PostService) enrichOne(c context.Context, post *model.Post, viewerID string) model.PostDetail {
-	usersMap, _ := ps.ud.GetUsersByIDs(c, []string{viewerID, post.StudentID})
+	usersMap, err := ps.ud.GetUsersByIDs(c, []string{viewerID, post.StudentID})
+	if err != nil {
+		ps.l.Error("Failed to batch get users when enriching post", zap.Error(err))
+	}
 	searcher := usersMap[viewerID]
 	author := usersMap[post.StudentID]
 	if searcher == nil {

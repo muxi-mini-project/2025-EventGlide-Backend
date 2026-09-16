@@ -67,7 +67,7 @@ func ToReplyResp(d model.ReplyDetail) resp.ReplyResp {
 		ReplyPos:       cmt.Position,
 		ParentID:       utils.SnowflakeID(cmt.ParentID),
 		RootID:         utils.SnowflakeID(cmt.RootID),
-		ParentUserName: string(cmt.ReplyToUserName),
+		ParentUserName: prefer(d.ParentUserName, string(cmt.ReplyToUserName)),
 		LikeNum:        cmt.LikeNum,
 		ReplyNum:       0, // 回复的回复数始终为0，无嵌套结构
 	}

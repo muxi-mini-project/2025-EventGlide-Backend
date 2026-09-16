@@ -358,6 +358,9 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 	for _, reply := range allReplies {
 		replyMap[reply.RootID] = append(replyMap[reply.RootID], reply)
 		idSet[reply.StudentID] = struct{}{}
+		if reply.ReplyToUserID != "" {
+			idSet[reply.ReplyToUserID] = struct{}{}
+		}
 	}
 
 	idList := make([]string, 0, len(idSet))
@@ -393,18 +396,17 @@ func (cs *CommentService) EnrichComments(c context.Context, cmts []model.Comment
 	return details
 }
 
+// EnrichComment 富化单条评论。复用列表路径，使回复的作者与被回复者同样取实时值。
 func (cs *CommentService) EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail {
-	idList := []string{viewerID, cmt.StudentID}
-	userMap, err := cs.ud.GetUsersByIDs(c, idList)
-	if err != nil {
-		cs.l.Error("Error batch get users when enriching comment", zap.Error(err))
-	}
-	likedMap := cs.viewerLikedComments(c, viewerID, userMap, []int64{cmt.Id})
-	return cs.enrichCommentWithCache(c, cmt, viewerID, userMap, nil, likedMap)
+	details := cs.EnrichComments(c, []model.Comment{*cmt}, viewerID)
+	return details[0]
 }
 
 func (cs *CommentService) EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail {
 	idList := []string{viewerID, cmt.StudentID}
+	if cmt.ReplyToUserID != "" {
+		idList = append(idList, cmt.ReplyToUserID)
+	}
 	userMap, err := cs.ud.GetUsersByIDs(c, idList)
 	if err != nil {
 		cs.l.Error("Error batch get users when enriching reply", zap.Error(err))
@@ -431,16 +433,7 @@ func (cs *CommentService) enrichCommentWithCache(c context.Context, cmt *model.C
 	creator := userMap[cmt.StudentID]
 	viewer := userMap[viewerID]
 
-	var replies []model.Comment
-	if replyMap != nil {
-		replies = replyMap[cmt.Id]
-	} else {
-		var err error
-		replies, err = cs.cd.LoadAnswers(c, cmt.Id)
-		if err != nil {
-			cs.l.Error("Error load answers when enriching comment", zap.Error(err))
-		}
-	}
+	replies := replyMap[cmt.Id]
 
 	detail := model.CommentDetail{
 		Comment: *cmt,
@@ -466,12 +459,12 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 	if liked, ok := likedMap[cmt.Id]; ok {
 		isLike = liked
 	} else if viewer := userMap[viewerID]; viewer != nil {
-		// 批量 map 未覆盖（如单条 enrich 路径新加载的回复），回退单条查询
+		// 点赞批量查询失败（likedMap 为空）时回退单条查询
 		isLike = cs.id.IsUserLikedComment(c, int64(viewer.Id), cmt.Id)
 	}
 	detail := model.ReplyDetail{
 		Comment:        *cmt,
-		ParentUserName: string(cmt.ReplyToUserName),
+		ParentUserName: liveParentUserName(cmt, userMap),
 		IsLike:         isLike,
 	}
 	if creator := userMap[cmt.StudentID]; creator != nil {
@@ -482,6 +475,17 @@ func (cs *CommentService) enrichReplyWithCache(c context.Context, cmt *model.Com
 		}
 	}
 	return detail
+}
+
+// liveParentUserName 取被回复者的实时昵称，查不到返回空串（快照回退由 converter 统一处理）。
+func liveParentUserName(cmt *model.Comment, userMap map[string]*model.User) string {
+	if cmt.ReplyToUserID == "" {
+		return ""
+	}
+	if user := userMap[cmt.ReplyToUserID]; user != nil {
+		return user.Name
+	}
+	return ""
 }
 
 func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {
