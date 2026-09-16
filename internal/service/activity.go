@@ -148,7 +148,10 @@ func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Act
 	for _, act := range acts {
 		studentIDs = append(studentIDs, act.StudentID)
 	}
-	usersMap, _ := as.ud.GetUsersByIDs(c, studentIDs)
+	usersMap, err := as.ud.GetUsersByIDs(c, studentIDs)
+	if err != nil {
+		as.l.Error("Failed to batch get users when enriching activities", zap.Error(err))
+	}
 	searcher := usersMap[viewerID]
 
 	viewerUserId := int64(0)
@@ -186,7 +189,10 @@ func (as *ActivityService) EnrichForSearcherWithStatuses(c context.Context, acts
 	for _, act := range acts {
 		studentIDs = append(studentIDs, act.StudentID)
 	}
-	usersMap, _ := as.ud.GetUsersByIDs(c, studentIDs)
+	usersMap, err := as.ud.GetUsersByIDs(c, studentIDs)
+	if err != nil {
+		as.l.Error("Failed to batch get users when enriching activities", zap.Error(err))
+	}
 
 	details := make([]model.ActivityDetail, 0, len(acts))
 	for i := range acts {
@@ -217,7 +223,10 @@ func (as *ActivityService) EnrichOneForSearcher(c context.Context, act *model.Ac
 }
 
 func (as *ActivityService) AuthorBrief(c context.Context, studentID string) model.UserBrief {
-	usersMap, _ := as.ud.GetUsersByIDs(c, []string{studentID})
+	usersMap, err := as.ud.GetUsersByIDs(c, []string{studentID})
+	if err != nil {
+		as.l.Error("Failed to get user when building author brief", zap.Error(err), zap.String("studentID", studentID))
+	}
 	if len(usersMap) == 0 {
 		return model.UserBrief{}
 	}
@@ -234,7 +243,10 @@ func (as *ActivityService) AuthorBrief(c context.Context, studentID string) mode
 }
 
 func (as *ActivityService) enrichOne(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail {
-	usersMap, _ := as.ud.GetUsersByIDs(c, []string{viewerID, act.StudentID})
+	usersMap, err := as.ud.GetUsersByIDs(c, []string{viewerID, act.StudentID})
+	if err != nil {
+		as.l.Error("Failed to batch get users when enriching activity", zap.Error(err))
+	}
 	searcher := usersMap[viewerID]
 	author := usersMap[act.StudentID]
 	if searcher == nil {
