@@ -44,19 +44,20 @@ func ParseTime(t time.Time) string {
 	return t.Format("2006-01-02 15:04:05")
 }
 
+// StatusMapper 把审核平台的回调状态映射为 auditor_form.status 的枚举值。
+// 平台人工审核回调发送中文（未审核/通过/不通过），AI 审核回调发送英文
+// （Pending/Pass/Reject），两者都要识别且不区分大小写。无法识别时返回空串，
+// 交由调用方拒绝，避免将非法值写入 enum 列。
 func StatusMapper(auditStatus string) string {
-	// 0: "未审核",
-	// 1: "通过",
-	// 2: "不通过",
-	switch auditStatus {
-	case "未审核":
+	switch {
+	case auditStatus == "未审核" || strings.EqualFold(auditStatus, "Pending"):
 		return "pending"
-	case "通过":
+	case auditStatus == "通过" || strings.EqualFold(auditStatus, "Pass"):
 		return "pass"
-	case "不通过":
+	case auditStatus == "不通过" || strings.EqualFold(auditStatus, "Reject"):
 		return "reject"
 	default:
-		return "unknown error"
+		return ""
 	}
 }
 
