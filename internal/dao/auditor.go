@@ -19,6 +19,8 @@ type AuditorRepository interface {
 	IsRejected(c context.Context, activityId int64) (bool, error)
 	FindByActivity(c context.Context, activityId int64, sub string) (model.AuditorForm, error)
 	MarkPushed(c context.Context, formId int64, pushedAt time.Time) error
+	ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error)
+	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
 }
 type AuditorRepo struct {
 	db *gorm.DB
@@ -87,7 +89,7 @@ func (a *AuditorRepo) FindByActivity(c context.Context, activityId int64, sub st
 func (a *AuditorRepo) MarkPushed(c context.Context, formId int64, pushedAt time.Time) error {
 	res := a.db.WithContext(c).Model(&model.AuditorForm{}).
 		Where("id = ? AND pushed_at IS NULL", formId).
-		Update("pushed_at", pushedAt)
+		Updates(map[string]interface{}{"pushed_at": pushedAt, "claimed_at": nil})
 	if res.Error != nil {
 		a.l.Error("failed to mark auditor form pushed", zap.Error(res.Error), zap.Int64("formId", formId))
 		return res.Error
@@ -104,6 +106,31 @@ func (a *AuditorRepo) MarkPushed(c context.Context, formId int64, pushedAt time.
 			return errors.New("auditor form not marked pushed")
 		}
 		a.l.Info("auditor form already pushed, treated as success", zap.Int64("formId", formId))
+	}
+	return nil
+}
+
+// ClaimForUpload 以条件更新原子占用一条未推送表单的上传权（租约）。
+// 抢占条件：未推送、且无人持有或租约已过期。返回是否获得占用。
+func (a *AuditorRepo) ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error) {
+	res := a.db.WithContext(c).Model(&model.AuditorForm{}).
+		Where("id = ? AND pushed_at IS NULL AND (claimed_at IS NULL OR claimed_at <= ?)", formId, now).
+		Update("claimed_at", leaseUntil)
+	if res.Error != nil {
+		a.l.Error("failed to claim auditor form for upload", zap.Error(res.Error), zap.Int64("formId", formId))
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// ReleaseClaim 释放占用，仅当占用值仍为本次持有的租约值时生效，
+// 避免误清其它执行者后来建立的新占用。
+func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error {
+	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).
+		Where("id = ? AND claimed_at = ?", formId, leaseUntil).
+		Update("claimed_at", nil).Error; err != nil {
+		a.l.Error("failed to release auditor form claim", zap.Error(err), zap.Int64("formId", formId))
+		return err
 	}
 	return nil
 }

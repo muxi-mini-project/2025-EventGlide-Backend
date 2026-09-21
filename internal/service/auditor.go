@@ -24,10 +24,16 @@ var _ dao.AuditorRepository = (*dao.AuditorRepo)(nil)
 // ErrFormAlreadyPushed 表示该表单已成功送审，后台轮询应跳过，避免重复送审。
 var ErrFormAlreadyPushed = errors.New("auditor form already pushed")
 
+// uploadClaimLease 上传占用的租约时长：须大于单次上传的最坏耗时，
+// 以免上传进行中租约到期、被另一个 worker 重复上传；worker 崩溃后租约到期可自动重试。
+const uploadClaimLease = 60 * time.Second
+
 type AuditorService interface {
 	UploadForm(c context.Context, aw *req.AuditWrapper, FormId int64) error
 	CreateAuditorForm(c context.Context, ActId int64, FormUrl string, Sub string) (*model.AuditorForm, error)
 	GetOrCreatePendingForm(c context.Context, ActId int64, FormUrl string, Sub string) (*model.AuditorForm, error)
+	ClaimForUpload(c context.Context, FormId int64) (time.Time, bool, error)
+	ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error
 	MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error
 }
 
@@ -123,4 +129,20 @@ func reuseOrSkip(form model.AuditorForm) (*model.AuditorForm, error) {
 
 func (a *auditorService) MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error {
 	return a.AuditorRepo.MarkPushed(c, FormId, pushedAt)
+}
+
+// ClaimForUpload 上传前原子占用该表单的上传权；返回租约到期时间与是否获得占用
+// （false 表示已被其它执行者持有且租约未过期）。
+// 时间截断到秒：claimed_at 是 datetime(0)，若带纳秒则读回时被截断，
+// 与 ReleaseClaim 的相等比较将永不匹配。
+func (a *auditorService) ClaimForUpload(c context.Context, FormId int64) (time.Time, bool, error) {
+	now := time.Now().Truncate(time.Second)
+	leaseUntil := now.Add(uploadClaimLease)
+	ok, err := a.AuditorRepo.ClaimForUpload(c, FormId, now, leaseUntil)
+	return leaseUntil, ok, err
+}
+
+// ReleaseClaim 上传失败时释放占用，让后续 tick 可立即重试，不必等租约到期。
+func (a *auditorService) ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error {
+	return a.AuditorRepo.ReleaseClaim(c, FormId, leaseUntil)
 }

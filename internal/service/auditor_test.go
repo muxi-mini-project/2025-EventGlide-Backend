@@ -61,6 +61,24 @@ func (f *fakeAuditorRepo) MarkPushed(_ context.Context, formId int64, pushedAt t
 	return nil
 }
 
+func (f *fakeAuditorRepo) ClaimForUpload(_ context.Context, formId int64, now, leaseUntil time.Time) (bool, error) {
+	if f.existing == nil || f.existing.PushedAt != nil {
+		return false, nil
+	}
+	if f.existing.ClaimedAt != nil && f.existing.ClaimedAt.After(now) {
+		return false, nil // 已被持有且租约未过期
+	}
+	f.existing.ClaimedAt = &leaseUntil
+	return true, nil
+}
+
+func (f *fakeAuditorRepo) ReleaseClaim(_ context.Context, formId int64, leaseUntil time.Time) error {
+	if f.existing != nil && f.existing.ClaimedAt != nil && f.existing.ClaimedAt.Equal(leaseUntil) {
+		f.existing.ClaimedAt = nil
+	}
+	return nil
+}
+
 func newAuditorServiceForTest(repo dao.AuditorRepository) *auditorService {
 	return &auditorService{AuditorRepo: repo, l: nil}
 }
@@ -145,5 +163,64 @@ func TestGetOrCreatePendingForm_DupKeyPushedSkips(t *testing.T) {
 	}
 	if repo.insertCnt != 1 {
 		t.Fatalf("expected 1 insert attempt, got %d", repo.insertCnt)
+	}
+}
+
+// TestClaimForUpload_HeldLeaseBlocksSecondClaim 第一个执行者占用后，租约未过期时第二个不能占用。
+// 这是"两个 worker 同时读到同一未推送表单、各自重复上传"的回归点。
+func TestClaimForUpload_HeldLeaseBlocksSecondClaim(t *testing.T) {
+	repo := &fakeAuditorRepo{existing: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity}}
+	first := newAuditorServiceForTest(repo)
+	second := newAuditorServiceForTest(repo)
+
+	_, ok, err := first.ClaimForUpload(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("first claimant should acquire the lease")
+	}
+	_, ok, err = second.ClaimForUpload(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatalf("second claimant must not acquire while lease is held")
+	}
+}
+
+// TestClaimForUpload_ExpiredLeaseAllowsReclaim 租约过期后应可重新占用（避免永久卡死）。
+func TestClaimForUpload_ExpiredLeaseAllowsReclaim(t *testing.T) {
+	past := time.Now().Add(-time.Minute)
+	repo := &fakeAuditorRepo{existing: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity, ClaimedAt: &past}}
+	svc := newAuditorServiceForTest(repo)
+
+	_, ok, err := svc.ClaimForUpload(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("expired lease should be reclaimable")
+	}
+}
+
+// TestReleaseClaim_FreesForRetry 上传失败释放占用后，下一次可立即重新占用。
+func TestReleaseClaim_FreesForRetry(t *testing.T) {
+	repo := &fakeAuditorRepo{existing: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity}}
+	svc := newAuditorServiceForTest(repo)
+
+	lease, ok, err := svc.ClaimForUpload(context.Background(), 42)
+	if err != nil || !ok {
+		t.Fatalf("expected claim, got ok=%v err=%v", ok, err)
+	}
+	if err := svc.ReleaseClaim(context.Background(), 42, lease); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, ok, err = svc.ClaimForUpload(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("should be able to reclaim after release")
 	}
 }
