@@ -2,9 +2,11 @@ package repo
 
 import (
 	"context"
+	"errors"
 
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 )
 
@@ -155,16 +157,27 @@ func (r *InteractionRepo) DiscollectPost(ctx context.Context, studentID string, 
 
 func (r *InteractionRepo) ApproveActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.ApproveActivity(ctx, studentID, targetID); err != nil {
-		return err
+		return mapSignerDecisionErr(err)
 	}
 	return r.acts.Invalidate(ctx, targetID)
 }
 
 func (r *InteractionRepo) RejectActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.RejectActivity(ctx, studentID, targetID); err != nil {
-		return err
+		return mapSignerDecisionErr(err)
 	}
 	return r.acts.Invalidate(ctx, targetID)
+}
+
+func mapSignerDecisionErr(err error) error {
+	switch {
+	case errors.Is(err, dao.ErrSignerDecisionNotAllowed):
+		return errs.ErrInteractionNotAllowed.Wrap(err)
+	case errors.Is(err, dao.ErrSignerNotApprover):
+		return errs.ErrForbidden.Wrap(err)
+	default:
+		return err
+	}
 }
 
 func (r *InteractionRepo) InsertApprovement(ctx context.Context, studentID, studentName string, targetID int64) error {
