@@ -308,6 +308,10 @@ func (as *ActivityService) uploadAuditorForm(ctx context.Context, act *model.Act
 		as.l.Error("Failed to upload form", zap.Error(err), zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
 		return errs.ErrInternal.Wrap(err)
 	}
+	if err := as.aud.MarkPushed(ctx, form.Id, time.Now()); err != nil {
+		as.l.Error("Failed to mark form pushed", zap.Error(err), zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
+		return errs.ErrInternal.Wrap(err)
+	}
 
 	return nil
 }

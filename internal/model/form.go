@@ -13,13 +13,14 @@ const (
 )
 
 type AuditorForm struct {
-	Id         int64     `gorm:"primaryKey;type:bigint;column:id"`
-	Subject    string    `gorm:"type:varchar(255);not null"`                                                    // 活动 or 帖子
-	ActivityId int64     `gorm:"type:bigint;not null;index;column:activity_id"`                                 // 活动/帖子ID
-	Status     string    `gorm:"type:enum('pending','pass','reject');default:'pending';column:status;not null"` // 表单审核状态 审核是0,1,2
-	FormUrl    string    `gorm:"type:text;column:form_url"`                                                     // 表单的URL地址 // 给活动用的填报表单
-	CreatedAt  time.Time `gorm:"type:datetime;column:created_at;not null"`                                      // 创建时间
-	UpdatedAt  time.Time `gorm:"type:datetime;column:updated_at;not null"`                                      // 更新时间
+	Id         int64      `gorm:"primaryKey;type:bigint;column:id"`
+	Subject    string     `gorm:"type:varchar(255);not null"`                                                    // 活动 or 帖子
+	ActivityId int64      `gorm:"type:bigint;not null;index;column:activity_id"`                                 // 活动/帖子ID
+	Status     string     `gorm:"type:enum('pending','pass','reject');default:'pending';column:status;not null"` // 表单审核状态 审核是0,1,2
+	FormUrl    string     `gorm:"type:text;column:form_url"`                                                     // 表单的URL地址 // 给活动用的填报表单
+	PushedAt   *time.Time `gorm:"type:datetime;column:pushed_at"`                                                // 成功送审时间；NULL 表示尚未推送，供后台轮询幂等判重
+	CreatedAt  time.Time  `gorm:"type:datetime;column:created_at;not null"`                                      // 创建时间
+	UpdatedAt  time.Time  `gorm:"type:datetime;column:updated_at;not null"`                                      // 更新时间
 }
 
 func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
@@ -30,6 +31,7 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				UPDATE activity
 				SET is_checking = 'pass'
 				WHERE id = ?
+				AND is_checking = 'pending_auditor'
 				AND NOT EXISTS (
 					SELECT 1
 					FROM approvement
@@ -50,6 +52,7 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				UPDATE post
 				SET is_checking = 'pass'
 				WHERE id = ?
+				AND is_checking = 'checking'
 			`, af.ActivityId)
 			if update.Error != nil {
 				log.Println("auditorform AfterUpdate error when passing post:", update.Error)
@@ -68,6 +71,7 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				UPDATE activity
 				SET is_checking = 'reject'
 				WHERE id = ?
+				AND is_checking = 'pending_auditor'
 			`, af.ActivityId)
 			if update.Error != nil {
 				log.Println("auditorform AfterUpdate error when rejecting activity:", update.Error)
@@ -82,6 +86,7 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				UPDATE post
 				SET is_checking = 'reject'
 				WHERE id = ?
+				AND is_checking = 'checking'
 			`, af.ActivityId)
 			if update.Error != nil {
 				log.Println("auditorform AfterUpdate error when rejecting post:", update.Error)

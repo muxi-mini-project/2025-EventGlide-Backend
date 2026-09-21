@@ -1,0 +1,108 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/model"
+	"gorm.io/gorm"
+)
+
+// fakeAuditorRepo 记录 Insert 调用次数，用于锁定后台轮询的幂等契约。
+type fakeAuditorRepo struct {
+	existing   *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
+	insertCnt  int
+	lastFormId int64
+}
+
+var _ dao.AuditorRepository = (*fakeAuditorRepo)(nil)
+
+func (f *fakeAuditorRepo) Insert(_ context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error) {
+	f.insertCnt++
+	form := &model.AuditorForm{
+		Id:         int64(1000 + f.insertCnt),
+		ActivityId: activityId,
+		Subject:    sub,
+		FormUrl:    formUrl,
+		Status:     "pending",
+	}
+	f.existing = form
+	return form, nil
+}
+
+func (f *fakeAuditorRepo) Update(context.Context, int64, string) error { return nil }
+
+func (f *fakeAuditorRepo) Get(context.Context, int64) (model.AuditorForm, error) {
+	return model.AuditorForm{}, nil
+}
+
+func (f *fakeAuditorRepo) IsRejected(context.Context, int64) (bool, error) { return false, nil }
+
+func (f *fakeAuditorRepo) FindByActivity(_ context.Context, _ int64, _ string) (model.AuditorForm, error) {
+	if f.existing == nil {
+		return model.AuditorForm{}, gorm.ErrRecordNotFound
+	}
+	return *f.existing, nil
+}
+
+func (f *fakeAuditorRepo) MarkPushed(_ context.Context, formId int64, pushedAt time.Time) error {
+	if f.existing != nil {
+		f.existing.PushedAt = &pushedAt
+	}
+	f.lastFormId = formId
+	return nil
+}
+
+func newAuditorServiceForTest(repo dao.AuditorRepository) *auditorService {
+	return &auditorService{AuditorRepo: repo, l: nil}
+}
+
+// TestGetOrCreatePendingForm_NoFormInserts 没有表单时应新建。
+func TestGetOrCreatePendingForm_NoFormInserts(t *testing.T) {
+	repo := &fakeAuditorRepo{}
+	svc := newAuditorServiceForTest(repo)
+
+	form, err := svc.GetOrCreatePendingForm(context.Background(), 1, "https://form", SubjectActivity)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if form == nil || repo.insertCnt != 1 {
+		t.Fatalf("expected 1 insert, got %d (form=%v)", repo.insertCnt, form)
+	}
+}
+
+// TestGetOrCreatePendingForm_UnpushedReuses 存在未推送表单时应复用，不新建。
+func TestGetOrCreatePendingForm_UnpushedReuses(t *testing.T) {
+	repo := &fakeAuditorRepo{existing: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity}}
+	svc := newAuditorServiceForTest(repo)
+
+	form, err := svc.GetOrCreatePendingForm(context.Background(), 1, "https://form", SubjectActivity)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if form.Id != 42 || repo.insertCnt != 0 {
+		t.Fatalf("expected reuse of form 42 with 0 inserts, got id=%d inserts=%d", form.Id, repo.insertCnt)
+	}
+}
+
+// TestGetOrCreatePendingForm_PushedSkips 已推送成功的表单应跳过，既不新建也不返回表单。
+// 这是"回调到达前 worker 每 5s 重复送审"的核心回归点。
+func TestGetOrCreatePendingForm_PushedSkips(t *testing.T) {
+	now := time.Now()
+	repo := &fakeAuditorRepo{existing: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity, PushedAt: &now}}
+	svc := newAuditorServiceForTest(repo)
+
+	form, err := svc.GetOrCreatePendingForm(context.Background(), 1, "https://form", SubjectActivity)
+	if !errors.Is(err, ErrFormAlreadyPushed) {
+		t.Fatalf("expected ErrFormAlreadyPushed, got %v", err)
+	}
+	if form != nil {
+		t.Fatalf("expected nil form when already pushed, got %v", form)
+	}
+	if repo.insertCnt != 0 {
+		t.Fatalf("expected 0 inserts when already pushed, got %d", repo.insertCnt)
+	}
+}
