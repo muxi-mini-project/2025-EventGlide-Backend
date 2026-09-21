@@ -335,7 +335,9 @@ func buildActQuery(db *gorm.DB, a *req.ActSearchReq) *gorm.DB {
 
 func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, error) {
 	var acts []model.Activity
-	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&acts).Error
+	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").
+		Where("student_id = ? AND is_checking IN ?", sid, []string{"pending_signers", "pending_auditor"}).
+		Find(&acts).Error
 	if err != nil {
 		ad.l.Error("Failed to get checking activities", zap.Error(err), zap.String("student_id", sid))
 		return nil, err

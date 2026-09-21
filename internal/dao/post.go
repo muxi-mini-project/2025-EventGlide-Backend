@@ -194,7 +194,7 @@ func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
 
 func (pd *PostDao) GetChecking(c context.Context, sid string) ([]model.Post, error) {
 	var posts []model.Post
-	err := pd.db.WithContext(c).Preload("Images").Where("student_id = ? AND is_checking = ?", sid, "pending").Find(&posts).Error
+	err := pd.db.WithContext(c).Preload("Images").Where("student_id = ? AND is_checking = ?", sid, "checking").Find(&posts).Error
 	if err != nil {
 		pd.l.Error("Failed to get checking posts", zap.Error(err), zap.String("student_id", sid))
 		return nil, err
