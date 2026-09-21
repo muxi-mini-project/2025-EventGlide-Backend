@@ -85,22 +85,40 @@ func (a *auditorService) CreateAuditorForm(c context.Context, ActId int64, FormU
 	return a.AuditorRepo.Insert(c, ActId, FormUrl, sub)
 }
 
-// GetOrCreatePendingForm 返回该活动待推送的审核表单，保证同一 (活动, subject) 至多一条未推送记录：
+// GetOrCreatePendingForm 返回该活动待推送的审核表单，保证同一 (活动, subject) 至多一条记录
+// （DB 侧由唯一索引兜底）：
 //   - 已存在未推送的 form：复用，供上次上传失败后重试。
 //   - 已存在且已推送的 form：返回 ErrFormAlreadyPushed，调用方跳过，避免重复送审。
-//   - 完全不存在：新建。
+//   - 完全不存在：新建；并发下若撞唯一键，回读已存在的行按上述规则处理。
 func (a *auditorService) GetOrCreatePendingForm(c context.Context, ActId int64, FormUrl string, sub string) (*model.AuditorForm, error) {
 	form, err := a.AuditorRepo.FindByActivity(c, ActId, sub)
 	if err == nil {
-		if form.PushedAt != nil {
-			return nil, ErrFormAlreadyPushed
-		}
-		return &form, nil
+		return reuseOrSkip(form)
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, err
 	}
-	return a.AuditorRepo.Insert(c, ActId, FormUrl, sub)
+
+	created, err := a.AuditorRepo.Insert(c, ActId, FormUrl, sub)
+	if err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			form, findErr := a.AuditorRepo.FindByActivity(c, ActId, sub)
+			if findErr != nil {
+				return nil, findErr
+			}
+			return reuseOrSkip(form)
+		}
+		return nil, err
+	}
+	return created, nil
+}
+
+// reuseOrSkip 复用一个未推送表单；已推送则返回 ErrFormAlreadyPushed 让轮询跳过。
+func reuseOrSkip(form model.AuditorForm) (*model.AuditorForm, error) {
+	if form.PushedAt != nil {
+		return nil, ErrFormAlreadyPushed
+	}
+	return &form, nil
 }
 
 func (a *auditorService) MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error {

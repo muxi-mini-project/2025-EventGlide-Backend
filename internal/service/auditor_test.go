@@ -16,12 +16,17 @@ type fakeAuditorRepo struct {
 	existing   *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
 	insertCnt  int
 	lastFormId int64
+	insertDup  *model.AuditorForm // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
 }
 
 var _ dao.AuditorRepository = (*fakeAuditorRepo)(nil)
 
 func (f *fakeAuditorRepo) Insert(_ context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error) {
 	f.insertCnt++
+	if f.insertDup != nil {
+		f.existing = f.insertDup
+		return nil, gorm.ErrDuplicatedKey
+	}
 	form := &model.AuditorForm{
 		Id:         int64(1000 + f.insertCnt),
 		ActivityId: activityId,
@@ -104,5 +109,41 @@ func TestGetOrCreatePendingForm_PushedSkips(t *testing.T) {
 	}
 	if repo.insertCnt != 0 {
 		t.Fatalf("expected 0 inserts when already pushed, got %d", repo.insertCnt)
+	}
+}
+
+// TestGetOrCreatePendingForm_DupKeyReuses 并发下 Insert 撞唯一键时，应回读已存在行并复用，
+// 而不是把错误抛给调用方（多实例场景的兜底）。
+func TestGetOrCreatePendingForm_DupKeyReuses(t *testing.T) {
+	repo := &fakeAuditorRepo{insertDup: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity}}
+	svc := newAuditorServiceForTest(repo)
+
+	form, err := svc.GetOrCreatePendingForm(context.Background(), 1, "https://form", SubjectActivity)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if form == nil || form.Id != 42 {
+		t.Fatalf("expected reused form 42, got %v", form)
+	}
+	if repo.insertCnt != 1 {
+		t.Fatalf("expected 1 insert attempt, got %d", repo.insertCnt)
+	}
+}
+
+// TestGetOrCreatePendingForm_DupKeyPushedSkips 并发撞键且已存在行已推送时，应返回 ErrFormAlreadyPushed。
+func TestGetOrCreatePendingForm_DupKeyPushedSkips(t *testing.T) {
+	now := time.Now()
+	repo := &fakeAuditorRepo{insertDup: &model.AuditorForm{Id: 42, ActivityId: 1, Subject: SubjectActivity, PushedAt: &now}}
+	svc := newAuditorServiceForTest(repo)
+
+	form, err := svc.GetOrCreatePendingForm(context.Background(), 1, "https://form", SubjectActivity)
+	if !errors.Is(err, ErrFormAlreadyPushed) {
+		t.Fatalf("expected ErrFormAlreadyPushed, got %v", err)
+	}
+	if form != nil {
+		t.Fatalf("expected nil form, got %v", form)
+	}
+	if repo.insertCnt != 1 {
+		t.Fatalf("expected 1 insert attempt, got %d", repo.insertCnt)
 	}
 }
