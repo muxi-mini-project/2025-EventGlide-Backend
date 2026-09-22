@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sdkerrorx "github.com/muxi-Infra/auditor-Backend/sdk/v2/api/errorx"
+	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/client"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -82,7 +84,6 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 	if resp.Basic.Code != sdkerrorx.SuccessCode {
 		// 打印平台原始错误（Errorx 内含 "http request failed: status=... body=..."），
 		// 便于定位非 2xx 的真实原因，而非只看到 SDK 兜底码。
-		err := fmt.Errorf("auditor rejected upload: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
 		a.l.Error("Auditor upload not accepted",
 			zap.Int("code", resp.Basic.Code),
 			zap.String("msg", resp.Basic.Msg),
@@ -90,9 +91,51 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 			zap.Int64("formId", id),
 			zap.String("region", a.MuxiCli.Region),
 		)
+		// 平台可能因历史重复上传已存在该条目（返回"该条目已被创建"）。
+		// 此时回查其真实状态并落库，视为已送达，避免被永久挡在重复创建上。
+		if ok, syncErr := a.syncExistingFormStatus(c, id); syncErr != nil {
+			a.l.Error("Reconcile existing auditor item failed", zap.Error(syncErr), zap.Int64("formId", id))
+		} else if ok {
+			a.l.Info("Auditor item already exists, status synced", zap.Int64("formId", id))
+			return nil
+		}
+		err := fmt.Errorf("auditor rejected upload: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
 		return errs.ErrUploadFormFailed.Wrap(err)
 	}
 	return nil
+}
+
+// syncExistingFormStatus 回查平台已有条目的状态并写回 auditor_form。
+// 返回 true 表示平台确实存在该条目（调用方应视为已送达，不再重传）。
+// 平台状态为 Pending/Pass/Reject，经 StatusMapper 映射为内部状态；映射不到时
+// 仍视为"已存在"（止住重传风暴），但记录告警不落库状态。
+func (a *auditorService) syncExistingFormStatus(c context.Context, id int64) (bool, error) {
+	req, err := request.NewGetItemsStatusReq([]int{int(id)})
+	if err != nil {
+		return false, err
+	}
+	resp, err := a.MuxiCli.GetItems(c, req)
+	if err != nil {
+		return false, err
+	}
+	if resp.Basic.Code != sdkerrorx.SuccessCode {
+		return false, nil
+	}
+	for _, item := range resp.Items {
+		if int64(item.Id) != id {
+			continue
+		}
+		mapped := tools.StatusMapper(item.Status)
+		if mapped == "" {
+			a.l.Warn("Auditor item exists but status unmapped", zap.String("status", item.Status), zap.Int64("formId", id))
+			return true, nil
+		}
+		if err := a.AuditorRepo.Update(c, id, mapped); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+	return false, nil
 }
 
 func (a *auditorService) CreateAuditorForm(c context.Context, ActId int64, FormUrl string, sub string) (*model.AuditorForm, error) {
