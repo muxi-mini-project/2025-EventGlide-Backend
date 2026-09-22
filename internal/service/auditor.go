@@ -76,12 +76,20 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 	// 否则失败会被当作成功标记已推送，活动将永久停留在 pending_auditor。
 	resp, err := a.MuxiCli.UploadItem(c, &uploadReq)
 	if err != nil {
-		a.l.Error("Upload to auditor failed", zap.Error(err))
+		a.l.Error("Upload to auditor failed", zap.Error(err), zap.Int64("formId", id))
 		return errs.ErrUploadFormFailed.Wrap(err)
 	}
 	if resp.Basic.Code != sdkerrorx.SuccessCode {
+		// 打印平台原始错误（Errorx 内含 "http request failed: status=... body=..."），
+		// 便于定位非 2xx 的真实原因，而非只看到 SDK 兜底码。
 		err := fmt.Errorf("auditor rejected upload: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
-		a.l.Error("Auditor upload not accepted", zap.Int("code", resp.Basic.Code), zap.String("msg", resp.Basic.Msg), zap.Int64("formId", id))
+		a.l.Error("Auditor upload not accepted",
+			zap.Int("code", resp.Basic.Code),
+			zap.String("msg", resp.Basic.Msg),
+			zap.Error(resp.Basic.Errorx),
+			zap.Int64("formId", id),
+			zap.String("region", a.MuxiCli.Region),
+		)
 		return errs.ErrUploadFormFailed.Wrap(err)
 	}
 	return nil
