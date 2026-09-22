@@ -36,34 +36,96 @@ jobs:
   build:
     if : github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    # 跨国推送镜像偶发卡死，设置上限避免无限挂起。
+    timeout-minutes: 30
     needs:
       - test
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 限制 Docker 并发上传连接数，集中带宽，避免多连接争抢导致丢包。
+      - name: Configure Docker
+        run: |
+          set -euo pipefail
+          sudo bash -c 'cat > /etc/docker/daemon.json <<EOF
+          {
+            "max-concurrent-uploads": 1
+          }
+          EOF'
+          sudo systemctl restart docker
+
+      # docker/login-action 只执行一次 docker login，登录会 ping <registry>/v2/，
+      # 跨国网络抖动时连接被 reset 会直接判整个 job 失败，故自行重试。
       - name: Login to Docker
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.ALIYUN_USERNAME }}
-          password: ${{ secrets.ALIYUN_PASSWORD }}
-          registry: ${{ secrets.ALIYUN_REGISTRY }}
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        env:
+          REGISTRY: ${{ secrets.ALIYUN_REGISTRY }}
+          REGISTRY_USER: ${{ secrets.ALIYUN_USERNAME }}
+          REGISTRY_PASSWORD: ${{ secrets.ALIYUN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          success=false
+          for i in {1..5}; do
+            echo "Login attempt $i/5..."
+            if printf '%s' "$REGISTRY_PASSWORD" | docker login \
+              --username="$REGISTRY_USER" \
+              --password-stdin \
+              "$REGISTRY"; then
+              success=true
+              echo "Login succeeded on attempt $i!"
+              break
+            else
+              echo "Login attempt $i failed, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+          if [[ "$success" != "true" ]]; then
+            echo "ERROR: Failed to log in to registry after 5 attempts due to network issues." >&2
+            exit 1
+          fi
 
       - name: Build And Push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          # 阿里云 ACR 不兼容 OCI attestation manifest（unknown manifest class），需禁用
-          provenance: false
-          tags: ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ secrets.ALIYUN_REGISTRY_NAME }}:${{ needs.test.outputs.id }}
+        env:
+          TAG: ${{ secrets.ALIYUN_REGISTRY }}/${{ secrets.ALIYUN_NAMESPACE }}/${{ secrets.ALIYUN_REGISTRY_NAME }}:${{ needs.test.outputs.id }}
+        run: |
+          set -euo pipefail
+
+          # 禁用 IPv6，避免跨国路由解析异常
+          sudo sysctl -w net.ipv6.conf.all.disable_ipv6=1 >/dev/null 2>&1 || true
+          sudo sysctl -w net.ipv6.conf.default.disable_ipv6=1 >/dev/null 2>&1 || true
+
+          # 使用宿主机原生 Docker 构建镜像
+          echo "Building image $TAG..."
+          docker build -t "$TAG" -f ./Dockerfile .
+
+          # 伪造 TTY 环境运行 docker push，使进度条在 GitHub Actions 中实时输出
+          push_with_progress() {
+            if command -v python3 >/dev/null 2>&1; then
+              python3 -c 'import pty, sys; sys.exit(pty.spawn(["docker", "push", sys.argv[1]]))' "$TAG"
+            else
+              docker push "$TAG"
+            fi
+          }
+
+          # 针对跨国网络波动增加最多 5 次重试
+          echo "Pushing image $TAG to Aliyun..."
+          success=false
+          for i in {1..5}; do
+            echo "Push attempt $i/5..."
+            if push_with_progress; then
+              success=true
+              echo "Push succeeded on attempt $i!"
+              break
+            else
+              echo "Push attempt $i failed, retrying in 5 seconds..."
+              sleep 5
+            fi
+          done
+
+          if [[ "$success" != "true" ]]; then
+            echo "ERROR: Failed to push image after 5 attempts due to network issues." >&2
+            exit 1
+          fi
 
   deploy:
     if : github.event_name == 'push' && github.ref == 'refs/heads/master'
