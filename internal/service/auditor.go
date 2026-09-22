@@ -107,8 +107,10 @@ func (a *auditorService) UploadForm(c context.Context, aw *req.AuditWrapper, id 
 
 // syncExistingFormStatus 回查平台已有条目的状态并写回 auditor_form。
 // 返回 true 表示平台确实存在该条目（调用方应视为已送达，不再重传）。
-// 平台状态为 Pending/Pass/Reject，经 StatusMapper 映射为内部状态；映射不到时
-// 仍视为"已存在"（止住重传风暴），但记录告警不落库状态。
+// 只查询单个 id，故只要返回了条目即视为存在——不比对 hook_id：
+// 平台的 hook_id 是 int64 雪花值，SDK 反序列化到 interface{} 会变成 float64 丢精度，
+// 用 id 相等判断会永不命中，从而误判为"不存在"。
+// 平台状态经 StatusMapper 映射为内部状态；映射不到时仍视为已存在（止住重传），仅告警不落库。
 func (a *auditorService) syncExistingFormStatus(c context.Context, id int64) (bool, error) {
 	req, err := request.NewGetItemsStatusReq([]int{int(id)})
 	if err != nil {
@@ -119,23 +121,24 @@ func (a *auditorService) syncExistingFormStatus(c context.Context, id int64) (bo
 		return false, err
 	}
 	if resp.Basic.Code != sdkerrorx.SuccessCode {
+		a.l.Warn("Auditor get items not success",
+			zap.Int("code", resp.Basic.Code), zap.String("msg", resp.Basic.Msg),
+			zap.Error(resp.Basic.Errorx), zap.Int64("formId", id))
 		return false, nil
 	}
-	for _, item := range resp.Items {
-		if int64(item.Id) != id {
-			continue
-		}
-		mapped := tools.StatusMapper(item.Status)
-		if mapped == "" {
-			a.l.Warn("Auditor item exists but status unmapped", zap.String("status", item.Status), zap.Int64("formId", id))
-			return true, nil
-		}
-		if err := a.AuditorRepo.Update(c, id, mapped); err != nil {
-			return true, err
-		}
+	if len(resp.Items) == 0 {
+		return false, nil
+	}
+	// 只查询单个非零 id，平台按 ids 过滤返回，故返回的条目必为所查项。
+	mapped := tools.StatusMapper(resp.Items[0].Status)
+	if mapped == "" {
+		a.l.Warn("Auditor item exists but status unmapped", zap.String("status", resp.Items[0].Status), zap.Int64("formId", id))
 		return true, nil
 	}
-	return false, nil
+	if err := a.AuditorRepo.Update(c, id, mapped); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 func (a *auditorService) CreateAuditorForm(c context.Context, ActId int64, FormUrl string, sub string) (*model.AuditorForm, error) {
