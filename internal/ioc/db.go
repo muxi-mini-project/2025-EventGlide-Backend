@@ -1,6 +1,9 @@
 package ioc
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -16,6 +19,8 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 	"gorm.io/gorm/schema"
 )
+
+const migrateLockName = "eg:migrate"
 
 func InitDB(cfg *config.Conf) *gorm.DB {
 	model.SetDecryptErrorLogf(func(format string, args ...interface{}) {
@@ -58,13 +63,57 @@ func InitDB(cfg *config.Conf) *gorm.DB {
 }
 
 func migrate(db *gorm.DB) error {
+	// 单实例迁移：用 MySQL advisory lock 串行化，避免多副本同时启动时互相干扰
+	// （共享去重临时表冲突、并发建唯一索引）。
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	unlock, err := acquireMigrateLock(ctx, sqlDB)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+
 	// 三张互动表将建 (user_id, xxx_id, type) 唯一索引，存量重复行会导致建索引失败、服务无法启动。
 	// 建索引前先程序化去重（保留最小 id，幂等），杜绝启动崩溃。
 	if err := dedupInteractions(db); err != nil {
 		return err
 	}
 
-	if err := db.AutoMigrate(
+	// auditor_form 将建 (activity_id, subject) 唯一索引，需先清掉存量重复行
+	// （历史 worker 每 5s 重复送审累积的），否则 AutoMigrate 建索引失败。
+	// 去重后若仍有并发写入造成重复（滚动发布期间旧实例仍在写），建唯一索引会因 1062
+	// （TranslateError 后为 gorm.ErrDuplicatedKey）失败；此时重新去重并重试，有界循环，
+	// 避免迁移整体失败导致进程退出。已有索引时去重会被短路为廉价空操作。
+	const maxMigrateAttempts = 5
+	var migrateErr error
+	for attempt := 1; attempt <= maxMigrateAttempts; attempt++ {
+		if err := dedupAuditorForms(db); err != nil {
+			return err
+		}
+		migrateErr = autoMigrateAll(db)
+		if migrateErr == nil {
+			break
+		}
+		if !errors.Is(migrateErr, gorm.ErrDuplicatedKey) {
+			return migrateErr
+		}
+		log.Printf("migrate: duplicate rows during index creation (attempt %d/%d), retrying after dedup\n", attempt, maxMigrateAttempts)
+		time.Sleep(500 * time.Millisecond)
+	}
+	if migrateErr != nil {
+		return migrateErr
+	}
+
+	return db.AutoMigrate(&model.Feed{})
+}
+
+func autoMigrateAll(db *gorm.DB) error {
+	return db.AutoMigrate(
 		&model.User{},
 		&model.Activity{},
 		&model.ActivityDraft{},
@@ -78,11 +127,7 @@ func migrate(db *gorm.DB) error {
 		&model.UserActivityInteraction{},
 		&model.UserPostInteraction{},
 		&model.UserCommentInteraction{},
-	); err != nil {
-		return err
-	}
-
-	return db.AutoMigrate(&model.Feed{})
+	)
 }
 
 // dedupInteractions 清理互动表重复行（保留每组重复中 id 最小的一条），保证唯一索引可建。
@@ -119,6 +164,111 @@ func dedupInteractions(db *gorm.DB) error {
 				return err
 			}
 		}
+	}
+	return nil
+}
+
+// acquireMigrateLock 用 MySQL advisory lock 串行化迁移，返回释放函数。
+// 多副本同时启动时，先拿到锁的实例执行去重/建索引，其余实例等待后再进入（此时已是幂等空操作）。
+// GET_LOCK 作用于单条连接，而 sql.DB 是连接池，RELEASE_LOCK 必须回到同一条连接，
+// 因此整段占用一条专用连接（conn），释放后再归还。
+func acquireMigrateLock(ctx context.Context, sqlDB *sql.DB) (func(), error) {
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var ok sql.NullBool
+	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK(?, ?)", migrateLockName, 600).Scan(&ok); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	if !ok.Valid || !ok.Bool {
+		_ = conn.Close()
+		return nil, fmt.Errorf("acquire migrate lock %q timed out", migrateLockName)
+	}
+
+	return func() {
+		_, _ = conn.ExecContext(context.Background(), "SELECT RELEASE_LOCK(?)", migrateLockName)
+		_ = conn.Close()
+	}, nil
+}
+
+// dedupAuditorForms 清理 auditor_form 中 (activity_id, subject) 的重复行，保证唯一索引可建。
+// 每个分组保留一行：优先保留已有审核结论（pass/reject）的行，其次保留 id 最小（最早创建）的行。
+// 表不存在（全新库）或唯一索引已存在时跳过，避免每次启动做全表扫描。
+// 先一次性算出保留集与快照上界（避免每批重算窗口函数、且不误删快照后新增的行），
+// 再按上界分批删除，兼顾 179 万级数据下的启动耗时与锁表风险。
+func dedupAuditorForms(db *gorm.DB) error {
+	var exists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.tables " +
+			"WHERE table_schema = DATABASE() AND table_name = 'auditor_form'",
+	).Scan(&exists).Error; err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+
+	// 已有唯一索引即认为是干净状态，直接跳过，避免每次启动全表扫描。
+	var hasIndex bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics " +
+			"WHERE table_schema = DATABASE() AND table_name = 'auditor_form' " +
+			"AND index_name = 'idx_auditor_form_act_subject'",
+	).Scan(&hasIndex).Error; err != nil {
+		return err
+	}
+	if hasIndex {
+		return nil
+	}
+
+	// 快照上界：只处理此刻已存在的行，避免删除并发新增的合法行。
+	var maxID int64
+	if err := db.Raw("SELECT COALESCE(MAX(id), 0) FROM auditor_form").Scan(&maxID).Error; err != nil {
+		return err
+	}
+
+	const keepTable = "auditor_form_dedup_keep"
+	if err := db.Exec("DROP TABLE IF EXISTS " + keepTable).Error; err != nil {
+		return err
+	}
+	defer db.Exec("DROP TABLE IF EXISTS " + keepTable)
+
+	if err := db.Exec(fmt.Sprintf(
+		`CREATE TABLE %s (id BIGINT NOT NULL PRIMARY KEY) AS
+		 SELECT id FROM (
+		   SELECT id,
+		          ROW_NUMBER() OVER (
+		            PARTITION BY activity_id, subject
+		            ORDER BY (status IN ('pass','reject')) DESC, id ASC
+		          ) rn
+		   FROM auditor_form
+		   WHERE id <= %d
+		 ) x WHERE rn = 1`, keepTable, maxID,
+	)).Error; err != nil {
+		return err
+	}
+
+	const batchSize = 10000
+	total := int64(0)
+	for {
+		res := db.Exec(fmt.Sprintf(
+			"DELETE FROM auditor_form WHERE id <= %d AND id NOT IN (SELECT id FROM %s) LIMIT %d",
+			maxID, keepTable, batchSize,
+		))
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			break
+		}
+		total += res.RowsAffected
+		time.Sleep(100 * time.Millisecond)
+	}
+	if total > 0 {
+		log.Printf("dedupAuditorForms: removed %d duplicate rows from auditor_form\n", total)
 	}
 	return nil
 }

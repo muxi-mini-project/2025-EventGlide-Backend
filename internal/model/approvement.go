@@ -51,6 +51,7 @@ func (a *Approvement) AfterUpdate(tx *gorm.DB) (err error) {
 			UPDATE activity
 			SET is_checking = 'reject'
 			WHERE id = ?
+			AND is_checking = 'pending_signers'
 		`, a.ActivityId)
 		if rejectUpdate.Error != nil {
 			log.Println("approvement AfterUpdate error when rejecting:", rejectUpdate.Error)

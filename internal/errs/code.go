@@ -40,11 +40,13 @@ const (
 
 	// Interaction
 	InteractionSubjectInvalid = 34000
+	InteractionNotAllowed     = 34001
 
 	// Feed
 	FeedListFailed = 35000
 
 	// Auditor
-	UploadFormFailed = 36000
-	CreateFormFailed = 36001
+	UploadFormFailed     = 36000
+	CreateFormFailed     = 36001
+	AuditorStatusInvalid = 36002
 )

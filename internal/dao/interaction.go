@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type InteractionDao struct {
@@ -18,6 +19,12 @@ type InteractionDao struct {
 
 // ErrInvalidSubject 事件 subject 不在支持范围内，属于永久性错误，消费端可直接丢弃
 var ErrInvalidSubject = errors.New("invalid subject")
+
+// ErrSignerDecisionNotAllowed 活动已不在签署人征集阶段，不允许再变更签署意见。
+var ErrSignerDecisionNotAllowed = errors.New("signer decision not allowed")
+
+// ErrSignerNotApprover 当前用户不是该活动的签署人。
+var ErrSignerNotApprover = errors.New("signer not approver")
 
 func NewInteractionDao(db *gorm.DB, l *logger.LoggerSet) *InteractionDao {
 	return &InteractionDao{
@@ -219,33 +226,53 @@ func (id *InteractionDao) DiscollectPost(c context.Context, studentID string, po
 }
 
 func (id *InteractionDao) ApproveActivity(c context.Context, studentID string, activityId int64) error {
-	var approvement model.Approvement
-	if err := id.db.WithContext(c).Model(&model.Approvement{}).
-		Where("student_id = ? AND activity_id = ?", studentID, activityId).First(&approvement).Error; err != nil {
-		id.l.Error("Failed to load approvement", zap.Error(err), zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
-		return err
-	}
-	approvement.Stance = "pass"
-	if err := id.db.WithContext(c).Save(&approvement).Error; err != nil {
-		id.l.Error("Failed to approve activity", zap.Error(err))
-		return err
-	}
-	return nil
+	return id.setApprovementStance(c, studentID, activityId, "pass")
 }
 
 func (id *InteractionDao) RejectActivity(c context.Context, studentID string, activityId int64) error {
-	var approvement model.Approvement
-	if err := id.db.WithContext(c).Model(&model.Approvement{}).
-		Where("student_id = ? AND activity_id = ?", studentID, activityId).First(&approvement).Error; err != nil {
-		id.l.Error("Failed to load approvement", zap.Error(err))
-		return err
-	}
-	approvement.Stance = "reject"
-	if err := id.db.WithContext(c).Save(&approvement).Error; err != nil {
-		id.l.Error("Failed to reject activity", zap.Error(err))
-		return err
-	}
-	return nil
+	return id.setApprovementStance(c, studentID, activityId, "reject")
+}
+
+// setApprovementStance 在活动仍处于签署人征集中（pending_signers）时更新该签署人的意见。
+// 活动一旦进入官方审核或已发布，签署人不再能推翻结论，避免已发布活动被事后改为 reject。
+// 同一签署人可在征集阶段内改签（覆盖自己的旧意见）。
+// 整个检查-更新放在事务内并对活动行加锁，避免与其它签署人的并发决策交错导致状态错乱。
+func (id *InteractionDao) setApprovementStance(c context.Context, studentID string, activityId int64, stance string) error {
+	return id.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+		var approvement model.Approvement
+		if err := tx.Model(&model.Approvement{}).
+			Where("student_id = ? AND activity_id = ?", studentID, activityId).
+			First(&approvement).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				id.l.Warn("signer not found for activity", zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
+				return ErrSignerNotApprover
+			}
+			id.l.Error("Failed to load approvement", zap.Error(err), zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
+			return err
+		}
+
+		var act model.Activity
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", activityId).First(&act).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				id.l.Warn("activity not found for signer decision", zap.Int64("activity_id", activityId))
+				return ErrSignerDecisionNotAllowed
+			}
+			id.l.Error("Failed to load activity for signer decision", zap.Error(err), zap.Int64("activity_id", activityId))
+			return err
+		}
+		if act.IsChecking != "pending_signers" {
+			id.l.Warn("activity not accepting signer decisions", zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
+			return ErrSignerDecisionNotAllowed
+		}
+
+		approvement.Stance = stance
+		if err := tx.Save(&approvement).Error; err != nil {
+			id.l.Error("Failed to update approvement stance", zap.Error(err))
+			return err
+		}
+		return nil
+	})
 }
 
 func (id *InteractionDao) InsertApprovement(c context.Context, studentID, studentName string, activityId int64) error {

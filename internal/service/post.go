@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/errs"
@@ -70,6 +71,11 @@ func (ps *PostService) CreatePost(c context.Context, post *model.Post, aw *req.A
 	err = ps.pdh.CreatePost(c, post)
 	if err != nil {
 		return errs.ErrPostCreateFailed.Wrap(err)
+	}
+
+	// 送审已成功、帖子已落库，推送标记仅作本地记录，失败不影响请求结果。
+	if err := ps.aud.MarkPushed(c, form.Id, time.Now()); err != nil {
+		ps.l.Error("Failed to mark form pushed", zap.Error(err), zap.Int64("id", post.Id), zap.Int64("formID", form.Id))
 	}
 	return nil
 }
