@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/muxi-Infra/auditor-Backend/sdk/v2/client"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
 	"gorm.io/gorm"
@@ -17,6 +20,7 @@ type fakeAuditorRepo struct {
 	insertCnt  int
 	lastFormId int64
 	insertDup  *model.AuditorForm // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
+	updatedTo  string             // Update 写入的最后一个状态
 }
 
 var _ dao.AuditorRepository = (*fakeAuditorRepo)(nil)
@@ -38,7 +42,10 @@ func (f *fakeAuditorRepo) Insert(_ context.Context, activityId int64, formUrl st
 	return form, nil
 }
 
-func (f *fakeAuditorRepo) Update(context.Context, int64, string) error { return nil }
+func (f *fakeAuditorRepo) Update(_ context.Context, _ int64, status string) error {
+	f.updatedTo = status
+	return nil
+}
 
 func (f *fakeAuditorRepo) Get(context.Context, int64) (model.AuditorForm, error) {
 	return model.AuditorForm{}, nil
@@ -222,5 +229,59 @@ func TestReleaseClaim_FreesForRetry(t *testing.T) {
 	}
 	if !ok {
 		t.Fatalf("should be able to reclaim after release")
+	}
+}
+
+// TestSyncExistingFormStatus_BigHookID 平台 hook_id 是 int64 雪花值，经 SDK 的
+// interface{} 反序列化会被 float64 丢精度。回查必须据此判定"条目已存在"并同步状态，
+// 而不是用 id 相等比较（那会永不命中 → 误判不存在 → 继续重传）。
+func TestSyncExistingFormStatus_BigHookID(t *testing.T) {
+	const bigID int64 = 638278946403647490 // > 2^53，float64 无法精确表示
+	platformJSON := `{"msg":"","code":200,"data":{"items":[{"status":0,"hook_id":638278946403647490}]}}`
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(platformJSON))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo}
+
+	ok, err := svc.syncExistingFormStatus(context.Background(), bigID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("item with big hook_id should be detected as existing")
+	}
+	if repo.updatedTo != "pending" {
+		t.Fatalf("expected status synced to pending, got %q", repo.updatedTo)
+	}
+}
+
+// TestSyncExistingFormStatus_EmptyItems 平台返回空 items 时应判定为不存在。
+func TestSyncExistingFormStatus_EmptyItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: &fakeAuditorRepo{}}
+
+	ok, err := svc.syncExistingFormStatus(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatalf("empty items should be treated as not existing")
 	}
 }
