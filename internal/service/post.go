@@ -2,9 +2,7 @@ package service
 
 import (
 	"context"
-	"time"
 
-	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
@@ -16,7 +14,7 @@ var _ PostServiceHdl = &PostService{}
 
 type PostServiceHdl interface {
 	GetAllPost(context.Context, int, int) (*model.PaginatedPosts, error)
-	CreatePost(context.Context, *model.Post, *req.AuditWrapper) error
+	CreatePost(context.Context, *model.Post) error
 	FindPostByName(context.Context, string, int, int) (*model.PaginatedPosts, error)
 	DeletePost(context.Context, int64, string) error
 	CreateDraft(context.Context, *model.PostDraft) error
@@ -29,19 +27,17 @@ type PostServiceHdl interface {
 }
 
 type PostService struct {
-	aud AuditorService
 	pdh *repo.PostRepo
 	ud  *repo.UserRepo
 	id  *repo.InteractionRepo
 	l   *zap.Logger
 }
 
-func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, aud AuditorService, l *logger.LoggerSet) *PostService {
+func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, l *logger.LoggerSet) *PostService {
 	return &PostService{
 		pdh: pdh,
 		ud:  ud,
 		id:  id,
-		aud: aud,
 		l:   l.Post.Named("service"),
 	}
 }
@@ -55,27 +51,12 @@ func (ps *PostService) GetAllPost(c context.Context, page, limit int) (*model.Pa
 	return posts, nil
 }
 
-func (ps *PostService) CreatePost(c context.Context, post *model.Post, aw *req.AuditWrapper) error {
-	form, err := ps.aud.CreateAuditorForm(c, post.Id, "", SubjectPost)
-	if err != nil {
-		ps.l.Error("Failed to create auditor form", zap.Error(err), zap.Int64("id", post.Id))
+// CreatePost 先落库（is_checking 默认 checking），送审交由后台 worker 异步完成，
+// 避免请求内同步上传阻塞创建；fast 模式下帖子落库即可见。
+func (ps *PostService) CreatePost(c context.Context, post *model.Post) error {
+	if err := ps.pdh.CreatePost(c, post); err != nil {
+		ps.l.Error("Failed to create post", zap.Error(err), zap.Int64("id", post.Id))
 		return errs.ErrPostCreateFailed.Wrap(err)
-	}
-
-	err = ps.aud.UploadForm(c, aw, form.Id)
-	if err != nil {
-		ps.l.Error("Failed to upload form", zap.Error(err), zap.Int64("id", post.Id), zap.Int64("formID", form.Id))
-		return errs.ErrUploadFormFailed.Wrap(err)
-	}
-
-	err = ps.pdh.CreatePost(c, post)
-	if err != nil {
-		return errs.ErrPostCreateFailed.Wrap(err)
-	}
-
-	// 送审已成功、帖子已落库，推送标记仅作本地记录，失败不影响请求结果。
-	if err := ps.aud.MarkPushed(c, form.Id, time.Now()); err != nil {
-		ps.l.Error("Failed to mark form pushed", zap.Error(err), zap.Int64("id", post.Id), zap.Int64("formID", form.Id))
 	}
 	return nil
 }

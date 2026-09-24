@@ -112,6 +112,15 @@ func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 	return res
 }
 
+// PostToAuditReq 将已落库的帖子还原为审核请求，供后台送审路径使用。
+func PostToAuditReq(post *model.Post) *req.CreatePostReq {
+	return &req.CreatePostReq{
+		Title:     post.Title,
+		Introduce: post.Introduce,
+		ShowImg:   ImagesToUrls(post.Images),
+	}
+}
+
 func ToCreatePostRespFromDraft(d model.PostDraft, author model.UserBrief) resp.CreatePostResp {
 	res := resp.CreatePostResp{
 		Id:          utils.SnowflakeID(d.Id),

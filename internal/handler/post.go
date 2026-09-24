@@ -74,12 +74,7 @@ func (ph *PostHandler) GetAllPost(ctx *gin.Context, req_ req.ListAllPostsReq, cl
 // @Router /post/create [post]
 func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	post := converter.CreatePostFromReq(&req_, claims.Subject)
-	aw := &req.AuditWrapper{
-		Subject:   service.SubjectPost,
-		StudentId: claims.Subject,
-		CpostReq:  &req_,
-	}
-	if err := ph.ps.CreatePost(ctx, post, aw); err != nil {
+	if err := ph.ps.CreatePost(ctx, post); err != nil {
 		return ginx.ReturnError(err)
 	}
 	loadedPost, err := ph.ps.FindPostById(ctx, post.Id)

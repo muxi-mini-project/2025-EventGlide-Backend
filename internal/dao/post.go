@@ -23,6 +23,7 @@ type PostDaoHdl interface {
 	LoadDraft(ctx context.Context, sid string) (model.PostDraft, error)
 	FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error)
 	FindPostById(ctx context.Context, id int64) (model.Post, error)
+	FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error)
 }
 
 type PostDao struct {
@@ -166,6 +167,17 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 		Limit: limit,
 		Posts: posts,
 	}, nil
+}
+
+// FindPendingAuditorPosts 捞出待送审的帖子。帖子落库即 is_checking='checking'，
+// 由后台 worker 统一补送审，避免请求内同步上传阻塞创建。
+func (pd *PostDao) FindPendingAuditorPosts(c context.Context) ([]model.Post, error) {
+	var posts []model.Post
+	err := pd.db.WithContext(c).Where("is_checking = 'checking'").Preload("Images").Find(&posts).Error
+	if err != nil {
+		return nil, err
+	}
+	return posts, nil
 }
 
 func (pd *PostDao) FindPostById(ctx context.Context, id int64) (model.Post, error) {

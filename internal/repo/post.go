@@ -98,3 +98,7 @@ func (r *PostRepo) postByIdKey(id int64) string {
 func (r *PostRepo) FindPostsByIds(ctx context.Context, ids []int64) ([]model.Post, error) {
 	return r.dao.FindPostsByIds(ctx, ids)
 }
+
+func (r *PostRepo) FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error) {
+	return r.dao.FindPendingAuditorPosts(ctx)
+}

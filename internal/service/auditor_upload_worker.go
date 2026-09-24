@@ -7,21 +7,33 @@ import (
 
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
 	"go.uber.org/zap"
 )
 
+// pendingActivitySource / pendingPostSource 抽象待送审数据的读取，便于单测注入。
+type pendingActivitySource interface {
+	FindPendingAuditorActivities(ctx context.Context) ([]model.Activity, error)
+}
+
+type pendingPostSource interface {
+	FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error)
+}
+
 type AuditorUploadWorker struct {
-	activityRepo   *repo.ActivityRepo
+	activityRepo   pendingActivitySource
+	postRepo       pendingPostSource
 	auditorService AuditorService
 	logger         *logger.LoggerSet
 	ticker         *time.Ticker
 }
 
-func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
+func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, postRepo *repo.PostRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
 	w := &AuditorUploadWorker{
 		activityRepo:   activityRepo,
+		postRepo:       postRepo,
 		auditorService: auditorService,
 		logger:         logger,
 		ticker:         time.NewTicker(5 * time.Second),
@@ -32,10 +44,17 @@ func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, auditorService Audi
 
 func (w *AuditorUploadWorker) run() {
 	for range w.ticker.C {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		w.processPendingAuditorActivities(ctx)
-		cancel()
+		// 活动与帖子各自独立超时：共用同一 budget 时，前者积压会把预算耗尽，
+		// 导致后者整轮被饿死并每 tick 报错。
+		w.processWithTimeout(w.processPendingAuditorActivities)
+		w.processWithTimeout(w.processPendingAuditorPosts)
 	}
+}
+
+func (w *AuditorUploadWorker) processWithTimeout(fn func(context.Context)) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	fn(ctx)
 }
 
 func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Context) {
@@ -56,45 +75,68 @@ func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Contex
 			StudentId: act.StudentID,
 			CactReq:   converter.ActivityToAuditReq(&act),
 		}
-		// 复用尚未成功推送的 form；若该活动已送审成功则跳过，避免回调到达前每个 tick 重复送审。
-		form, err := w.auditorService.GetOrCreatePendingForm(ctx, act.Id, act.ActiveForm, SubjectActivity)
-		if err != nil {
-			if errors.Is(err, ErrFormAlreadyPushed) {
-				continue
-			}
-			w.logger.Auditor.Error("Failed to get or create auditor form", zap.Error(err), zap.Int64("actId", act.Id))
-			continue
-		}
-		// 上传前原子占用，避免多个实例同时读到同一未推送表单而各自重复上传。
-		leaseUntil, claimed, err := w.auditorService.ClaimForUpload(ctx, form.Id)
-		if err != nil {
-			w.logger.Auditor.Error("Failed to claim form for upload", zap.Error(err), zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
-			continue
-		}
-		if !claimed {
-			continue
-		}
-		if err := w.auditorService.UploadForm(ctx, aw, form.Id); err != nil {
-			w.logger.Auditor.Error("Failed to upload form", zap.Error(err), zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
-			w.releaseClaim(act.Id, form.Id, leaseUntil)
-			continue
-		}
-		// 上传已成功，标记本地状态失败不应触发远端重传：本地重试标记；仍失败则保留占用，
-		// 由租约到期后再兜底（最坏为 at-least-once，不会每 5s 重传）。
-		if err := w.markPushedWithRetry(ctx, form.Id); err != nil {
-			w.logger.Auditor.Error("Failed to mark form pushed after retries", zap.Error(err), zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
-			continue
-		}
-		w.logger.Auditor.Info("Successfully uploaded form to auditor", zap.Int64("actId", act.Id), zap.Int64("formId", form.Id))
+		w.uploadPendingForm(ctx, act.Id, act.ActiveForm, SubjectActivity, aw, zap.Int64("actId", act.Id))
 	}
 }
 
-func (w *AuditorUploadWorker) releaseClaim(actId, formId int64, leaseUntil time.Time) {
+func (w *AuditorUploadWorker) processPendingAuditorPosts(ctx context.Context) {
+	posts, err := w.postRepo.FindPendingAuditorPosts(ctx)
+	if err != nil {
+		w.logger.Auditor.Error("Failed to find pending auditor posts", zap.Error(err))
+		return
+	}
+
+	for _, post := range posts {
+		aw := &req.AuditWrapper{
+			Subject:   SubjectPost,
+			StudentId: post.StudentID,
+			CpostReq:  converter.PostToAuditReq(&post),
+		}
+		w.uploadPendingForm(ctx, post.Id, "", SubjectPost, aw, zap.Int64("postId", post.Id))
+	}
+}
+
+// uploadPendingForm 对单条待送审记录执行「取/建 form -> 占用租约 -> 上传 -> 标记」的幂等序列。
+// idField 用于区分活动/帖子的日志字段（actId / postId）。
+func (w *AuditorUploadWorker) uploadPendingForm(ctx context.Context, id int64, formUrl, subject string, aw *req.AuditWrapper, idField zap.Field) {
+	// 复用尚未成功推送的 form；若该记录已送审成功则跳过，避免回调到达前每个 tick 重复送审。
+	form, err := w.auditorService.GetOrCreatePendingForm(ctx, id, formUrl, subject)
+	if err != nil {
+		if errors.Is(err, ErrFormAlreadyPushed) {
+			return
+		}
+		w.logger.Auditor.Error("Failed to get or create auditor form", zap.Error(err), idField)
+		return
+	}
+	// 上传前原子占用，避免多个实例同时读到同一未推送表单而各自重复上传。
+	leaseUntil, claimed, err := w.auditorService.ClaimForUpload(ctx, form.Id)
+	if err != nil {
+		w.logger.Auditor.Error("Failed to claim form for upload", zap.Error(err), idField, zap.Int64("formId", form.Id))
+		return
+	}
+	if !claimed {
+		return
+	}
+	if err := w.auditorService.UploadForm(ctx, aw, form.Id); err != nil {
+		w.logger.Auditor.Error("Failed to upload form", zap.Error(err), idField, zap.Int64("formId", form.Id))
+		w.releaseClaim(form.Id, idField, leaseUntil)
+		return
+	}
+	// 上传已成功，标记本地状态失败不应触发远端重传：本地重试标记；仍失败则保留占用，
+	// 由租约到期后再兜底（最坏为 at-least-once，不会每 5s 重传）。
+	if err := w.markPushedWithRetry(ctx, form.Id); err != nil {
+		w.logger.Auditor.Error("Failed to mark form pushed after retries", zap.Error(err), idField, zap.Int64("formId", form.Id))
+		return
+	}
+	w.logger.Auditor.Info("Successfully uploaded form to auditor", idField, zap.Int64("formId", form.Id))
+}
+
+func (w *AuditorUploadWorker) releaseClaim(formId int64, idField zap.Field, leaseUntil time.Time) {
 	// 用独立短超时 ctx：入参 ctx 可能已随本次 tick 超时被取消，否则释放会失败、占用只能等租约自然到期。
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	if err := w.auditorService.ReleaseClaim(ctx, formId, leaseUntil); err != nil {
-		w.logger.Auditor.Error("Failed to release form claim", zap.Error(err), zap.Int64("actId", actId), zap.Int64("formId", formId))
+		w.logger.Auditor.Error("Failed to release form claim", zap.Error(err), idField, zap.Int64("formId", formId))
 	}
 }
 
