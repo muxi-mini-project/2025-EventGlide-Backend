@@ -58,7 +58,7 @@ func (ad *ActDao) DB() *gorm.DB {
 }
 
 func (ad *ActDao) DeleteActivityDraft(c context.Context, tx *gorm.DB, studentID string) error {
-	return tx.WithContext(c).Where("student_id = ?", studentID).Delete(&model.ActivityDraft{}).Error
+	return ad.deleteActivityDraftsByStudentID(c, tx, studentID)
 }
 
 func (ad *ActDao) CreateActivity(c context.Context, tx *gorm.DB, act *model.Activity) error {
@@ -97,6 +97,19 @@ func (ad *ActDao) DeleteSignersByActivityId(c context.Context, tx *gorm.DB, acti
 }
 
 func (ad *ActDao) DeleteDraftsByStudentID(c context.Context, tx *gorm.DB, studentID string) error {
+	return ad.deleteActivityDraftsByStudentID(c, tx, studentID)
+}
+
+// deleteActivityDraftsByStudentID 删除该学生全部活动草稿，并一并清理其关联图片。
+// 草稿「先删后建」每次保存都会重插 image 行，旧行须显式清理，否则残留孤儿行。
+func (ad *ActDao) deleteActivityDraftsByStudentID(c context.Context, tx *gorm.DB, studentID string) error {
+	var ids []int64
+	if err := tx.WithContext(c).Model(&model.ActivityDraft{}).Where("student_id = ?", studentID).Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	if err := deleteImagesByOwner(c, tx, "activity_draft", ids); err != nil {
+		return err
+	}
 	return tx.WithContext(c).Where("student_id = ?", studentID).Delete(&model.ActivityDraft{}).Error
 }
 

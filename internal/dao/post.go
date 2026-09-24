@@ -70,6 +70,13 @@ func (pd *PostDao) CreatePost(ctx context.Context, tx *gorm.DB, post *model.Post
 }
 
 func (pd *PostDao) DeleteDraftByStudent(ctx context.Context, tx *gorm.DB, sid string) error {
+	var ids []int64
+	if err := tx.WithContext(ctx).Model(&model.PostDraft{}).Where("student_id = ?", sid).Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+	if err := deleteImagesByOwner(ctx, tx, "post_draft", ids); err != nil {
+		return err
+	}
 	return tx.WithContext(ctx).Where("student_id = ?", sid).Delete(&model.PostDraft{}).Error
 }
 
@@ -95,8 +102,17 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit 
 }
 
 func (pd *PostDao) DeletePost(ctx context.Context, post *model.Post) error {
-	var p model.Post
-	return pd.db.WithContext(ctx).Where("id = ? and student_id = ?", post.Id, post.StudentID).Delete(&p).Error
+	return pd.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Where("id = ? and student_id = ?", post.Id, post.StudentID).Delete(&model.Post{})
+		if res.Error != nil {
+			return res.Error
+		}
+		// 仅当帖子确属该学生（删除命中）时才清图片，避免越权删他人帖子的图片。
+		if res.RowsAffected == 0 {
+			return nil
+		}
+		return deleteImagesByOwner(ctx, tx, "post", []int64{post.Id})
+	})
 }
 
 func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword string, page, limit int) (*model.PaginatedPosts, error) {
