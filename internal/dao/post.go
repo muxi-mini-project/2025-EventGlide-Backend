@@ -169,11 +169,17 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 	}, nil
 }
 
-// FindPendingAuditorPosts 捞出待送审的帖子。帖子落库即 is_checking='checking'，
-// 由后台 worker 统一补送审，避免请求内同步上传阻塞创建。
+// FindPendingAuditorPosts 捞出待送审的帖子：仍为 checking 且尚无已推送的审核表单。
+// 帖子在审核回调前一直保持 checking，直接按状态扫会把已推送的帖子也捞回来
+// （每 tick 重复查询、并为其预加载图片），故用 NOT EXISTS 排除已推送表单
+// （auditor_form 的 (activity_id, subject) 唯一索引可命中）。
 func (pd *PostDao) FindPendingAuditorPosts(c context.Context) ([]model.Post, error) {
 	var posts []model.Post
-	err := pd.db.WithContext(c).Where("is_checking = 'checking'").Preload("Images").Find(&posts).Error
+	err := pd.db.WithContext(c).
+		Where("is_checking = ?", "checking").
+		Where("NOT EXISTS (SELECT 1 FROM auditor_form af WHERE af.activity_id = post.id AND af.subject = ? AND af.pushed_at IS NOT NULL)", model.SubjectPost).
+		Preload("Images").
+		Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}

@@ -31,12 +31,15 @@ func newPostDaoForTest(t *testing.T) (*PostDao, sqlmock.Sqlmock) {
 	return &PostDao{db: gdb, l: logger.NewLoggerSet().Post}, mock
 }
 
-// TestFindPendingAuditorPostsSQL 锁定待送审帖子的筛选条件（is_checking='checking'），
-// 并确认预加载图片——worker 依赖完整行（含图片）重建送审请求。
+// TestFindPendingAuditorPostsSQL 锁定待送审帖子的筛选契约：
+//   - 仍为 checking；
+//   - 排除已有已推送审核表单的行（帖子回调前一直 checking，否则每 5s 会把已送审项重扫一遍）；
+//   - 预加载图片——worker 依赖完整行（含图片）重建送审请求。
 func TestFindPendingAuditorPostsSQL(t *testing.T) {
 	dao, mock := newPostDaoForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `post` WHERE is_checking = 'checking'").
+	mock.ExpectQuery("SELECT \\* FROM `post` WHERE is_checking = \\? AND \\(NOT EXISTS \\(SELECT 1 FROM auditor_form af WHERE af.activity_id = post.id AND af.subject = \\? AND af.pushed_at IS NOT NULL\\)\\)").
+		WithArgs("checking", "post").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "title", "introduce", "is_checking"}).
 			AddRow(1001, "S20250001", "招新", "正文", "checking"))
 	mock.ExpectQuery("SELECT \\* FROM `image` WHERE `image`.`owner_id` = \\?").
