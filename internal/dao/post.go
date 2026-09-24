@@ -23,6 +23,7 @@ type PostDaoHdl interface {
 	LoadDraft(ctx context.Context, sid string) (model.PostDraft, error)
 	FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error)
 	FindPostById(ctx context.Context, id int64) (model.Post, error)
+	FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error)
 }
 
 type PostDao struct {
@@ -166,6 +167,23 @@ func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit
 		Limit: limit,
 		Posts: posts,
 	}, nil
+}
+
+// FindPendingAuditorPosts 捞出待送审的帖子：仍为 checking 且尚无已推送的审核表单。
+// 帖子在审核回调前一直保持 checking，直接按状态扫会把已推送的帖子也捞回来
+// （每 tick 重复查询、并为其预加载图片），故用 NOT EXISTS 排除已推送表单
+// （auditor_form 的 (activity_id, subject) 唯一索引可命中）。
+func (pd *PostDao) FindPendingAuditorPosts(c context.Context) ([]model.Post, error) {
+	var posts []model.Post
+	err := pd.db.WithContext(c).
+		Where("is_checking = ?", "checking").
+		Where("NOT EXISTS (SELECT 1 FROM auditor_form af WHERE af.activity_id = post.id AND af.subject = ? AND af.pushed_at IS NOT NULL)", model.SubjectPost).
+		Preload("Images").
+		Find(&posts).Error
+	if err != nil {
+		return nil, err
+	}
+	return posts, nil
 }
 
 func (pd *PostDao) FindPostById(ctx context.Context, id int64) (model.Post, error) {
