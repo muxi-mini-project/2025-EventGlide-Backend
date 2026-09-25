@@ -10,6 +10,7 @@ import (
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AuditorRepository interface {
@@ -22,6 +23,7 @@ type AuditorRepository interface {
 	ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error)
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
 	FindPushedPending(c context.Context) ([]model.AuditorForm, error)
+	UpdateIfPending(c context.Context, formId int64, status string) error
 }
 type AuditorRepo struct {
 	db *gorm.DB
@@ -148,4 +150,30 @@ func (a *AuditorRepo) FindPushedPending(c context.Context) ([]model.AuditorForm,
 		return nil, err
 	}
 	return forms, nil
+}
+
+// UpdateIfPending 仅在表单当前仍为 pending 时更新状态，避免对账用平台过期结果覆盖
+// 回调已写入的终态（pass/reject）。条件未命中（已被回调更新）时视为无需处理，返回 nil。
+// 在事务内对行加锁，使"读当前状态 -> 写回"对同一行的并发回调写入原子，消除 TOCTOU。
+// 仍走 Save，以触发 AuditorForm.AfterUpdate 推进活动/帖子。
+func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status string) error {
+	return a.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
+		var form model.AuditorForm
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", formId).First(&form).Error; err != nil {
+			a.l.Error("auditor form not found", zap.Error(err), zap.Int64("formId", formId))
+			return err
+		}
+		if form.Status != "pending" {
+			a.l.Info("auditor form no longer pending, skip reconcile update",
+				zap.Int64("formId", formId), zap.String("status", form.Status))
+			return nil
+		}
+		form.Status = status
+		if err := tx.Save(&form).Error; err != nil {
+			a.l.Error("failed to update auditor form", zap.Error(err), zap.Int64("formId", formId))
+			return err
+		}
+		return nil
+	})
 }

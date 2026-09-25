@@ -111,3 +111,42 @@ func TestFindPushedPendingSQL(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestUpdateIfPendingSkipsTerminal 表单已是终态（pass）时，对账不得覆盖写回。
+func TestUpdateIfPendingSkipsTerminal(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status"}).AddRow(42, "pass"))
+	// 不期望任何 UPDATE：条件未命中即返回
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "pending"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateIfPendingUpdatesWhenPending 表单仍为 pending 时正常写回。
+func TestUpdateIfPendingUpdatesWhenPending(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject"}).AddRow(42, "pending", "activity"))
+	// 用 pending 目标状态，避免触发 AfterUpdate 对 activity/post 的写操作
+	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "pending"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

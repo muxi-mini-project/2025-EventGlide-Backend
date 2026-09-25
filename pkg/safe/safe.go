@@ -4,6 +4,9 @@ import "go.uber.org/zap"
 
 // Go 启动一个带 panic 兜底的后台 goroutine，用于一次性的异步任务。
 // name 用于日志定位；panic 时记录堆栈后结束该 goroutine，避免拖垮整个进程。
+//
+// 注意：不要只用 Go 包住一个长驻循环——循环内未被局部捕获的 panic 会结束该 goroutine，
+// 且不会自动重启。长驻循环应在循环体内逐轮用 Run，使单轮 panic 不终止循环。
 func Go(l *zap.Logger, name string, fn func()) {
 	go func() {
 		defer Recover(l, name)

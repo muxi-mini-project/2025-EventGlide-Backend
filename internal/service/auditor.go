@@ -136,7 +136,7 @@ func (a *auditorService) syncExistingFormStatus(c context.Context, id int64) (bo
 		a.l.Warn("Auditor item exists but status unmapped", zap.String("status", resp.Items[0].Status), zap.Int64("formId", id))
 		return true, nil
 	}
-	if err := a.AuditorRepo.Update(c, id, mapped); err != nil {
+	if err := a.AuditorRepo.UpdateIfPending(c, id, mapped); err != nil {
 		return true, err
 	}
 	return true, nil
@@ -214,6 +214,10 @@ func (a *auditorService) ReconcilePendingForms(c context.Context) {
 		return
 	}
 	for _, form := range forms {
+		if c.Err() != nil {
+			a.l.Warn("Reconcile pending forms aborted: context done", zap.Int("total", len(forms)))
+			return
+		}
 		ok, err := a.syncExistingFormStatus(c, form.Id)
 		if err != nil {
 			a.l.Error("Reconcile pending form failed", zap.Error(err), zap.Int64("formId", form.Id))

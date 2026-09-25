@@ -40,14 +40,16 @@ func (s *Server) Run() (err error) {
 	s.h.RegisterHandlers()
 	err, baseShutdown := s.h.Run()
 
-	// 启动后台任务
+	// 启动后台任务；两个启动调用各自兜底，避免其一 panic 导致另一个不被启动。
 	ctx, cancel := context.WithCancel(context.Background())
-	safe.Go(s.l, "background-tasks", func() {
+	safe.Go(s.l, "interaction-consumer", func() {
 		if s.consumer != nil {
 			if consumerErr := s.consumer.Start(ctx); consumerErr != nil {
 				s.l.Error("Start consumer failed", zap.Error(consumerErr))
 			}
 		}
+	})
+	safe.Go(s.l, "interaction-sync-task", func() {
 		if s.syncTask != nil {
 			s.syncTask.Start(ctx)
 		}

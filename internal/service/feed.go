@@ -126,66 +126,72 @@ func (fs *FeedService) ConsumeFeedStream() {
 		}
 
 		for {
-			msgs, err := fs.mq.ConsumeGroup(ctx, stream, group, consumer, batch, blockFor)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					fs.l.Info("Feed consumer stopped")
+			if ctx.Err() != nil {
+				return
+			}
+			// 逐轮隔离：单轮（含读流）panic 不终止整个消费循环。
+			safe.Run(fs.l, "feed-consumer.consume", func() {
+				msgs, err := fs.mq.ConsumeGroup(ctx, stream, group, consumer, batch, blockFor)
+				if err != nil {
+					if errors.Is(err, context.Canceled) {
+						fs.l.Info("Feed consumer stopped")
+						return
+					}
+					fs.l.Error("Failed to read feed stream", zap.Error(err))
+					time.Sleep(time.Second)
 					return
 				}
-				fs.l.Error("Failed to read feed stream", zap.Error(err))
-				time.Sleep(time.Second)
-				continue
-			}
 
-			if len(msgs) == 0 {
-				continue
-			}
+				if len(msgs) == 0 {
+					return
+				}
 
-			// 逐条隔离：单条消息的 panic 只丢弃该条并记日志，不终止整个消费循环。
-			// 注意 feed_stream 无 XAUTOCLAIM 兜底，被 panic 打断的这条消息不会自动重投。
-			for _, msg := range msgs {
-				safe.Run(fs.l, "feed-consumer.processMessage", func() {
-					data, ok := msg.Values["data"].(string)
-					if !ok {
-						fs.l.Warn("Message data is not String", zap.Any("msg", msg))
-						if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-							fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+				// 逐条隔离：单条消息的 panic 只丢弃该条并记日志，不终止整个消费循环。
+				// 注意 feed_stream 无 XAUTOCLAIM 兜底，被 panic 打断的这条消息不会自动重投。
+				for _, msg := range msgs {
+					safe.Run(fs.l, "feed-consumer.processMessage", func() {
+						data, ok := msg.Values["data"].(string)
+						if !ok {
+							fs.l.Warn("Message data is not String", zap.Any("msg", msg))
+							if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+								fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+							}
+							return
 						}
-						return
-					}
 
-					var feed model.Feed
-					if err := json.Unmarshal([]byte(data), &feed); err != nil {
-						fs.l.Error("Failed to unmarshal feed", zap.Error(err))
-						if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-							fs.l.Error("Failed to ack malformed feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+						var feed model.Feed
+						if err := json.Unmarshal([]byte(data), &feed); err != nil {
+							fs.l.Error("Failed to unmarshal feed", zap.Error(err))
+							if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+								fs.l.Error("Failed to ack malformed feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+							}
+							return
 						}
-						return
-					}
 
-					feed.CreatedAt = time.Now()
-					feed.Status = "未读"
-					if feed.Object == SubjectComment {
-						rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
-						if resolveErr != nil {
-							fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
+						feed.CreatedAt = time.Now()
+						feed.Status = "未读"
+						if feed.Object == SubjectComment {
+							rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
+							if resolveErr != nil {
+								fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
+							} else {
+								feed.RootID = rootID
+								feed.RootType = rootType
+							}
+						}
+
+						if err := fs.fd.CreateFeed(ctx, &feed); err != nil {
+							fs.l.Error("Failed to consume feed", zap.Error(err), zap.String("msgID", msg.ID))
 						} else {
-							feed.RootID = rootID
-							feed.RootType = rootType
+							fs.l.Info("Feed processed", zap.Any("feed", feed))
 						}
-					}
 
-					if err := fs.fd.CreateFeed(ctx, &feed); err != nil {
-						fs.l.Error("Failed to consume feed", zap.Error(err), zap.String("msgID", msg.ID))
-					} else {
-						fs.l.Info("Feed processed", zap.Any("feed", feed))
-					}
-
-					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-						fs.l.Error("Failed to ack feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
-					}
-				})
-			}
+						if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+							fs.l.Error("Failed to ack feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+						}
+					})
+				}
+			})
 		}
 	})
 }

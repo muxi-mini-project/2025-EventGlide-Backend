@@ -41,3 +41,19 @@ func TestRunExecutesFn(t *testing.T) {
 		t.Fatal("fn was not executed")
 	}
 }
+
+// 长驻循环用 Run 逐轮隔离：某一轮 panic 后，循环必须继续执行后续轮次。
+func TestRunIsolatesIterations(t *testing.T) {
+	var ran int
+	for i := 0; i < 3; i++ {
+		Run(zap.NewNop(), "loop", func() {
+			ran++
+			if i == 1 {
+				panic("boom")
+			}
+		})
+	}
+	if ran != 3 {
+		t.Fatalf("expected all 3 iterations to run despite a mid-loop panic, got %d", ran)
+	}
+}

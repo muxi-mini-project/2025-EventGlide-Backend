@@ -49,6 +49,11 @@ func (f *fakeAuditorRepo) Update(_ context.Context, _ int64, status string) erro
 	return nil
 }
 
+func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status string) error {
+	f.updatedTo = status
+	return nil
+}
+
 func (f *fakeAuditorRepo) Get(context.Context, int64) (model.AuditorForm, error) {
 	return model.AuditorForm{}, nil
 }
