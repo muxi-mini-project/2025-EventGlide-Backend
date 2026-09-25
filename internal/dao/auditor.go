@@ -21,6 +21,7 @@ type AuditorRepository interface {
 	MarkPushed(c context.Context, formId int64, pushedAt time.Time) error
 	ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error)
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
+	FindPushedPending(c context.Context) ([]model.AuditorForm, error)
 }
 type AuditorRepo struct {
 	db *gorm.DB
@@ -133,4 +134,18 @@ func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil t
 		return err
 	}
 	return nil
+}
+
+// FindPushedPending 返回已成功推送但平台尚未给出结论的表单，
+// 供定时回查平台状态（回调可能丢失，导致表单永久停在 pending）。
+func (a *AuditorRepo) FindPushedPending(c context.Context) ([]model.AuditorForm, error) {
+	var forms []model.AuditorForm
+	err := a.db.WithContext(c).
+		Where("pushed_at IS NOT NULL AND status = ?", "pending").
+		Find(&forms).Error
+	if err != nil {
+		a.l.Error("failed to find pushed pending auditor forms", zap.Error(err))
+		return nil, err
+	}
+	return forms, nil
 }

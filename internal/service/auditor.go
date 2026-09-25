@@ -37,6 +37,7 @@ type AuditorService interface {
 	ClaimForUpload(c context.Context, FormId int64) (time.Time, bool, error)
 	ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error
 	MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error
+	ReconcilePendingForms(c context.Context)
 }
 
 type auditorService struct {
@@ -199,4 +200,29 @@ func (a *auditorService) ClaimForUpload(c context.Context, FormId int64) (time.T
 // ReleaseClaim 上传失败时释放占用，让后续 tick 可立即重试，不必等租约到期。
 func (a *auditorService) ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error {
 	return a.AuditorRepo.ReleaseClaim(c, FormId, leaseUntil)
+}
+
+// ReconcilePendingForms 回查所有"已推送但平台仍 pending"的表单，拉取平台结论并落库。
+// 平台回调可能丢失，此前的实现只在"上传被拒"时回查，导致丢失回调的表单永久停在 pending。
+// 对账只同步平台已有结论；若平台根本没有该条目（历史推送丢失），仅告警不自动重推——
+// 自动重推有重复创建风险（参见历史 "该条目已被创建" 事故），属需产品单独决策的扩展项。
+// 当前全量读取待对账表单；若平台长期不出结论导致积压，需再评估分页/限流。
+func (a *auditorService) ReconcilePendingForms(c context.Context) {
+	forms, err := a.AuditorRepo.FindPushedPending(c)
+	if err != nil {
+		a.l.Error("Reconcile pending forms: find failed", zap.Error(err))
+		return
+	}
+	for _, form := range forms {
+		ok, err := a.syncExistingFormStatus(c, form.Id)
+		if err != nil {
+			a.l.Error("Reconcile pending form failed", zap.Error(err), zap.Int64("formId", form.Id))
+			continue
+		}
+		if !ok {
+			a.l.Warn("Pushed auditor form missing on platform, not re-pushing",
+				zap.Int64("formId", form.Id), zap.Int64("targetId", form.ActivityId), zap.String("subject", form.Subject))
+		}
+	}
+	a.l.Info("Reconcile pending auditor forms done", zap.Int("count", len(forms)))
 }
