@@ -37,6 +37,17 @@ func (r *InteractionRepo) GetUserIDByStudentID(ctx context.Context, studentID st
 	return int64(user.Id), nil
 }
 
+// DeletePostInteractionCache 清掉帖子在 Redis 的点赞/收藏 Set 与计数 key（帖子被删时调用）。
+func (r *InteractionRepo) DeletePostInteractionCache(ctx context.Context, postID int64) error {
+	return r.lfr.DeleteInteractions(ctx, cache.SubjectPost, []int64{postID})
+}
+
+// DeleteCommentInteractionCache 清掉评论在 Redis 的点赞 Set 与计数 key
+// （删帖级联删评论时调用），一次 DEL 批量清理。
+func (r *InteractionRepo) DeleteCommentInteractionCache(ctx context.Context, commentIDs []int64) error {
+	return r.lfr.DeleteInteractions(ctx, cache.SubjectComment, commentIDs)
+}
+
 func (r *InteractionRepo) CommentActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.CommentActivity(ctx, studentID, targetID); err != nil {
 		return err

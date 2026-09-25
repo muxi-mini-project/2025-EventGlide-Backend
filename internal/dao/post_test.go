@@ -67,14 +67,70 @@ func TestDeletePostRemovesImages(t *testing.T) {
 	mock.ExpectExec("DELETE FROM `post` WHERE id = \\? and student_id = \\?").
 		WithArgs(int64(1001), "S20250001").
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT `id` FROM `comment` WHERE root_object_id = \\? AND root_object_type = \\?").
+		WithArgs(int64(1001), "post").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectExec("DELETE FROM `comment` WHERE root_object_id = \\? AND root_object_type = \\?").
+		WithArgs(int64(1001), "post").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("DELETE FROM `user_post_interaction` WHERE post_id = \\?").
+		WithArgs(int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("DELETE FROM `image` WHERE owner_type = \\? AND owner_id IN \\(\\?\\)").
 		WithArgs("post", int64(1001)).
 		WillReturnResult(sqlmock.NewResult(0, 2))
 	mock.ExpectCommit()
 
-	err := dao.DeletePost(context.Background(), &model.Post{Id: 1001, StudentID: "S20250001"})
+	deleted, commentIDs, err := dao.DeletePost(context.Background(), &model.Post{Id: 1001, StudentID: "S20250001"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatalf("expected delete to report hit")
+	}
+	if len(commentIDs) != 0 {
+		t.Fatalf("expected no comment ids, got %v", commentIDs)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestDeletePostCascadesCommentsAndInteractions 删帖须连同该帖的评论、评论互动、帖子互动一并清理，
+// 否则留下孤儿评论与指向死帖的点赞/收藏行。
+func TestDeletePostCascadesCommentsAndInteractions(t *testing.T) {
+	dao, mock := newPostDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectExec("DELETE FROM `post` WHERE id = \\? and student_id = \\?").
+		WithArgs(int64(1001), "S20250001").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT `id` FROM `comment` WHERE root_object_id = \\? AND root_object_type = \\?").
+		WithArgs(int64(1001), "post").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(7001).AddRow(7002))
+	mock.ExpectExec("DELETE FROM `user_comment_interaction` WHERE comment_id IN \\(\\?,\\?\\)").
+		WithArgs(int64(7001), int64(7002)).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectExec("DELETE FROM `comment` WHERE root_object_id = \\? AND root_object_type = \\?").
+		WithArgs(int64(1001), "post").
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectExec("DELETE FROM `user_post_interaction` WHERE post_id = \\?").
+		WithArgs(int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 3))
+	mock.ExpectExec("DELETE FROM `image` WHERE owner_type = \\? AND owner_id IN \\(\\?\\)").
+		WithArgs("post", int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	deleted, commentIDs, err := dao.DeletePost(context.Background(), &model.Post{Id: 1001, StudentID: "S20250001"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !deleted {
+		t.Fatalf("expected delete to report hit")
+	}
+	if len(commentIDs) != 2 || commentIDs[0] != 7001 || commentIDs[1] != 7002 {
+		t.Fatalf("expected deleted comment ids [7001 7002], got %v", commentIDs)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -92,9 +148,15 @@ func TestDeletePostNotOwnedKeepsImages(t *testing.T) {
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 
-	err := dao.DeletePost(context.Background(), &model.Post{Id: 1001, StudentID: "S-attacker"})
+	deleted, commentIDs, err := dao.DeletePost(context.Background(), &model.Post{Id: 1001, StudentID: "S-attacker"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(commentIDs) != 0 {
+		t.Fatalf("non-owned delete must not report comment ids, got %v", commentIDs)
+	}
+	if deleted {
+		t.Fatalf("delete of a post not owned must not report hit")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

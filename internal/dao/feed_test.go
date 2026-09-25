@@ -107,3 +107,23 @@ func TestFeedListQueriesAreOrderedAscending(t *testing.T) {
 		})
 	}
 }
+
+// TestPostExistsBatchSQL 断言帖子存在性批量判断按 post 主键一次 IN 查询（避免逐条 COUNT 的 N+1）。
+func TestPostExistsBatchSQL(t *testing.T) {
+	fd, mock := newFeedDaoForTest(t)
+
+	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
+		WithArgs(int64(1001), int64(1002)).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
+
+	exists, err := fd.PostExistsBatch(context.Background(), []int64{1001, 1002})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !exists[1001] || exists[1002] {
+		t.Fatalf("expected only 1001 to exist, got %+v", exists)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

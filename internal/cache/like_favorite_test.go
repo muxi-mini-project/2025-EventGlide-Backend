@@ -136,3 +136,63 @@ func TestMGetLikedStatusesForUser(t *testing.T) {
 		}
 	}
 }
+
+// TestDeleteInteractionsRemovesCountAndSetKeys 删除某个目标时须清掉它的点赞/收藏 Set 与计数四个 key，
+// 否则 key 永久残留（无 TTL）并可能被复用的 id 继承。
+func TestDeleteInteractionsRemovesCountAndSetKeys(t *testing.T) {
+	ctx := context.Background()
+	l, mr := newTestLikeFavoriteRedis(t)
+
+	const id = int64(5)
+	const other = int64(6)
+	keys := []string{
+		LikeSetKey(SubjectPost, id),
+		LikeCountKey(SubjectPost, id),
+		CollectSetKey(SubjectPost, id),
+		CollectCountKey(SubjectPost, id),
+	}
+	for _, k := range keys {
+		if err := l.rdb.Set(ctx, k, 1, 0).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// 另一个目标的 key 不应被误删
+	if err := l.rdb.Set(ctx, LikeCountKey(SubjectPost, other), 9, 0).Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := l.DeleteInteractions(ctx, SubjectPost, []int64{id}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range keys {
+		if mr.Exists(k) {
+			t.Errorf("key %s should be deleted", k)
+		}
+	}
+	if !mr.Exists(LikeCountKey(SubjectPost, other)) {
+		t.Errorf("key of another target must be left intact")
+	}
+}
+
+// TestDeleteInteractionsBatchAndEmpty 一次批量删除多个目标的 key；空切片为 no-op。
+func TestDeleteInteractionsBatchAndEmpty(t *testing.T) {
+	ctx := context.Background()
+	l, mr := newTestLikeFavoriteRedis(t)
+
+	for _, id := range []int64{5, 6} {
+		if err := l.rdb.Set(ctx, LikeCountKey(SubjectPost, id), 1, 0).Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := l.DeleteInteractions(ctx, SubjectPost, []int64{5, 6}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mr.Exists(LikeCountKey(SubjectPost, 5)) || mr.Exists(LikeCountKey(SubjectPost, 6)) {
+		t.Fatalf("batch delete must remove every id")
+	}
+
+	if err := l.DeleteInteractions(ctx, SubjectPost, nil); err != nil {
+		t.Fatalf("empty delete must be a no-op, got %v", err)
+	}
+}

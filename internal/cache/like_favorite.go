@@ -305,3 +305,21 @@ func (l *LikeFavoriteRedis) AddLikedUser(ctx context.Context, subject Subject, s
 	key := LikeSetKey(subject, subjectID)
 	return l.rdb.SAdd(ctx, key, userID).Err()
 }
+
+// DeleteInteractions 批量删除多个目标的点赞/收藏 Set 与计数 key（一次 DEL）。
+// 目标被删除后这些 key 无 TTL，不清理会永久残留，并可能被复用的 id 继承。
+func (l *LikeFavoriteRedis) DeleteInteractions(ctx context.Context, subject Subject, subjectIDs []int64) error {
+	if len(subjectIDs) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(subjectIDs)*4)
+	for _, id := range subjectIDs {
+		keys = append(keys,
+			LikeSetKey(subject, id),
+			LikeCountKey(subject, id),
+			CollectSetKey(subject, id),
+			CollectCountKey(subject, id),
+		)
+	}
+	return l.rdb.Del(ctx, keys...).Err()
+}

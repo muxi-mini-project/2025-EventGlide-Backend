@@ -30,6 +30,9 @@ type fakeAuditorSvc struct {
 	reconcileCnt int
 	lastSub      string
 	lastFormUrl  string
+	orphans      []model.AuditorForm
+	revoked      []int64
+	revokeErr    error
 }
 
 var _ AuditorService = (*fakeAuditorSvc)(nil)
@@ -85,6 +88,15 @@ func (f *fakeAuditorSvc) CreateAuditorForm(context.Context, int64, string, strin
 
 func (f *fakeAuditorSvc) ReconcilePendingForms(context.Context) {
 	f.reconcileCnt++
+}
+
+func (f *fakeAuditorSvc) FindOrphanPostForms(context.Context) ([]model.AuditorForm, error) {
+	return f.orphans, nil
+}
+
+func (f *fakeAuditorSvc) RevokeForm(_ context.Context, form model.AuditorForm) error {
+	f.revoked = append(f.revoked, form.Id)
+	return f.revokeErr
 }
 
 func newWorkerForTest(posts *fakePendingPosts, svc AuditorService) *AuditorUploadWorker {
@@ -151,5 +163,36 @@ func TestWorkerReconcileInvokesService(t *testing.T) {
 	w.reconcile()
 	if svc.reconcileCnt != 1 {
 		t.Fatalf("expected reconcile invoked once, got %d", svc.reconcileCnt)
+	}
+}
+
+// TestProcessPendingAuditorRevokes_RevokesAllOrphans 每个孤儿表单（帖子已删）都应触发一次撤销。
+func TestProcessPendingAuditorRevokes_RevokesAllOrphans(t *testing.T) {
+	now := time.Now()
+	svc := &fakeAuditorSvc{orphans: []model.AuditorForm{
+		{Id: 1, Subject: SubjectPost, PushedAt: &now},
+		{Id: 2, Subject: SubjectPost},
+	}}
+	w := newWorkerForTest(&fakePendingPosts{}, svc)
+
+	w.processPendingAuditorRevokes(context.Background())
+
+	if len(svc.revoked) != 2 || svc.revoked[0] != 1 || svc.revoked[1] != 2 {
+		t.Fatalf("expected both orphan forms revoked, got %v", svc.revoked)
+	}
+}
+
+// TestProcessPendingAuditorRevokes_ContinuesAfterFailure 单个撤销失败不应中断整轮，
+// 且失败项保留在孤儿集合里由下一轮重试。
+func TestProcessPendingAuditorRevokes_ContinuesAfterFailure(t *testing.T) {
+	svc := &fakeAuditorSvc{
+		orphans:   []model.AuditorForm{{Id: 1}, {Id: 2}},
+		revokeErr: errors.New("auditor down"),
+	}
+	w := newWorkerForTest(&fakePendingPosts{}, svc)
+
+	w.processPendingAuditorRevokes(context.Background())
+	if len(svc.revoked) != 2 {
+		t.Fatalf("worker should attempt every orphan even if one fails, got %v", svc.revoked)
 	}
 }

@@ -271,15 +271,15 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 		fs.l.Error("Get Like Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
+	targets, deleted := fs.resolveFeedTargets(ctx, likes)
 	var res []model.FeedLikeDetail
-	for _, v := range likes {
+	for i, v := range likes {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get like feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
-		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID, resolvedRootType)
+		pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get like feed Failed", zap.Error(err))
 		}
@@ -290,11 +290,11 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 				Username:  user.Name,
 			},
 			Id:          v.Id,
-			Message:     processMsg(v, user.Name),
+			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetId:    v.TargetId,
-			RootID:      resolvedRootID,
-			RootType:    resolvedRootType,
+			RootID:      targets[i].rootID,
+			RootType:    targets[i].rootType,
 			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
@@ -309,8 +309,9 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 		fs.l.Error("Get Collect Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
+	targets, deleted := fs.resolveFeedTargets(ctx, collects)
 	var res []model.FeedCollectDetail
-	for _, v := range collects {
+	for i, v := range collects {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get collect feed Failed", zap.Error(err))
@@ -327,11 +328,11 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 				Username:  user.Name,
 			},
 			Id:          v.Id,
-			Message:     processMsg(v, user.Name),
+			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetId:    v.TargetId,
-			RootID:      v.RootID,
-			RootType:    v.RootType,
+			RootID:      targets[i].rootID,
+			RootType:    targets[i].rootType,
 			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
@@ -346,15 +347,15 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 		fs.l.Error("Get Comment Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
+	targets, deleted := fs.resolveFeedTargets(ctx, comments)
 	var res []model.FeedCommentDetail
-	for _, v := range comments {
+	for i, v := range comments {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get comment feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
-		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID, resolvedRootType)
+		pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get comment feed Failed", zap.Error(err))
 		}
@@ -365,11 +366,11 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 				Username:  user.Name,
 			},
 			Id:          v.Id,
-			Message:     processMsg(v, user.Name),
+			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetId:    v.TargetId,
-			RootID:      resolvedRootID,
-			RootType:    resolvedRootType,
+			RootID:      targets[i].rootID,
+			RootType:    targets[i].rootType,
 			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
@@ -384,15 +385,15 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 		fs.l.Error("Get At Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
+	targets, deleted := fs.resolveFeedTargets(ctx, ats)
 	var res []model.FeedAtDetail
-	for _, v := range ats {
+	for i, v := range ats {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
 		if err != nil {
 			fs.l.Error("Get User Info when get at feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		resolvedRootID, resolvedRootType := fs.resolveRootMeta(ctx, v)
-		pics, err := fs.loadFeedPicture(ctx, v, resolvedRootID, resolvedRootType)
+		pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
 		if err != nil {
 			fs.l.Error("Get Picture From Obj when get at feed Failed", zap.Error(err))
 		}
@@ -403,11 +404,11 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 				Username:  user.Name,
 			},
 			Id:          v.Id,
-			Message:     processMsg(v, user.Name),
+			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
 			PublishedAt: tools.ParseTime(v.CreatedAt),
 			TargetId:    v.TargetId,
-			RootID:      resolvedRootID,
-			RootType:    resolvedRootType,
+			RootID:      targets[i].rootID,
+			RootType:    targets[i].rootType,
 			Subject:     v.Object,
 			Status:      v.Status,
 			FirstPic:    getFirstPic(pics),
@@ -452,6 +453,78 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 		})
 	}
 	return model.FeedDetail{Invitations: res}, nil
+}
+
+// feedTargetDeletedMsg 帖子被删后，保留的 feed 行统一展示的文案。
+const feedTargetDeletedMsg = "帖子已不存在"
+
+// feedTarget 是 feed 在展示期解析出的根对象信息；postID 非 0 表示该 feed 指向某个帖子。
+type feedTarget struct {
+	rootID   int64
+	rootType string
+	postID   int64
+}
+
+// feedPostID 返回 feed 指向的帖子 id；like/collect 直接指向帖子（Object=post, TargetId），
+// comment/at 指向评论，其根对象为帖子（RootType=post, RootID）。不涉及帖子时返回 0。
+func feedPostID(f *model.Feed, rootID int64, rootType string) int64 {
+	switch {
+	case f.Object == SubjectPost:
+		return f.TargetId
+	case rootType == SubjectPost:
+		return rootID
+	default:
+		return 0
+	}
+}
+
+// resolveFeedTargets 解析每条 feed 的根对象，并一次性批量判断其帖子是否存在（单次 IN 查询），
+// 返回与 feeds 对齐的目标信息与"已删除帖子"集合，供逐条渲染文案时使用。
+func (fs *FeedService) resolveFeedTargets(ctx context.Context, feeds []*model.Feed) ([]feedTarget, map[int64]bool) {
+	targets := make([]feedTarget, len(feeds))
+	postIDs := make([]int64, 0, len(feeds))
+	seen := make(map[int64]struct{}, len(feeds))
+	for i, f := range feeds {
+		rootID, rootType := fs.resolveRootMeta(ctx, f)
+		pid := feedPostID(f, rootID, rootType)
+		targets[i] = feedTarget{rootID: rootID, rootType: rootType, postID: pid}
+		if pid != 0 {
+			if _, ok := seen[pid]; !ok {
+				seen[pid] = struct{}{}
+				postIDs = append(postIDs, pid)
+			}
+		}
+	}
+	deleted, err := fs.deletedPostSet(ctx, postIDs)
+	if err != nil {
+		fs.l.Error("Batch check feed target posts failed", zap.Error(err))
+		return targets, map[int64]bool{}
+	}
+	return targets, deleted
+}
+
+// deletedPostSet 批量查询帖子是否存在，返回"已删除"的帖子 id 集合。
+func (fs *FeedService) deletedPostSet(ctx context.Context, postIDs []int64) (map[int64]bool, error) {
+	if len(postIDs) == 0 {
+		return map[int64]bool{}, nil
+	}
+	existing, err := fs.fd.PostExistsBatch(ctx, postIDs)
+	if err != nil {
+		return nil, err
+	}
+	deleted := make(map[int64]bool, len(postIDs))
+	for _, id := range postIDs {
+		deleted[id] = !existing[id]
+	}
+	return deleted, nil
+}
+
+// feedMessage 生成 feed 文案；目标帖子已删时统一改为"帖子已不存在"。
+func (fs *FeedService) feedMessage(f *model.Feed, t feedTarget, name string, deleted map[int64]bool) string {
+	if t.postID != 0 && deleted[t.postID] {
+		return feedTargetDeletedMsg
+	}
+	return processMsg(f, name)
 }
 
 func (fs *FeedService) resolveRootMeta(ctx context.Context, f *model.Feed) (int64, string) {
