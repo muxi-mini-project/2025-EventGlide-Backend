@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/pkg/safe"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -58,8 +59,8 @@ func (c *InteractionConsumer) Start(ctx context.Context) error {
 		return err
 	}
 
-	go c.recoverLoop(ctx)
-	go c.consumeLoop(ctx)
+	safe.Go(c.l, "interaction-consumer.recoverLoop", func() { c.recoverLoop(ctx) })
+	safe.Go(c.l, "interaction-consumer.consumeLoop", func() { c.consumeLoop(ctx) })
 	return nil
 }
 
@@ -82,7 +83,7 @@ func (c *InteractionConsumer) consumeLoop(ctx context.Context) {
 			if len(msgs) == 0 {
 				continue
 			}
-			c.processMessages(ctx, msgs)
+			safe.Run(c.l, "interaction-consumer.processMessages", func() { c.processMessages(ctx, msgs) })
 		}
 	}
 }
@@ -115,7 +116,7 @@ func (c *InteractionConsumer) recoverPending(ctx context.Context) {
 		if len(msgs) == 0 {
 			return
 		}
-		c.processRecoveredMessages(ctx, msgs)
+		safe.Run(c.l, "interaction-consumer.processRecoveredMessages", func() { c.processRecoveredMessages(ctx, msgs) })
 		start = nextStart
 		if nextStart == "" || nextStart == "0-0" {
 			return

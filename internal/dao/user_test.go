@@ -3,12 +3,14 @@ package dao
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/encrypt"
+	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
@@ -57,6 +59,78 @@ func TestUpdateRealNamePassesEncryptedValue(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func newUserDaoForTest(t *testing.T) (*UserDao, sqlmock.Sqlmock) {
+	t.Helper()
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sqlDB.Close() })
+
+	gdb, err := gorm.Open(mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true}), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{SingularTable: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &UserDao{db: gdb, l: zap.NewNop()}, mock
+}
+
+func TestCheckUserExistTrue(t *testing.T) {
+	ud, mock := newUserDaoForTest(t)
+	mock.ExpectQuery("SELECT `id` FROM `user` WHERE student_id = \\? LIMIT \\?").
+		WithArgs("2021000001", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
+
+	exists, err := ud.CheckUserExist(context.Background(), "2021000001")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !exists {
+		t.Fatal("expected user to exist")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCheckUserExistFalse(t *testing.T) {
+	ud, mock := newUserDaoForTest(t)
+	mock.ExpectQuery("SELECT `id` FROM `user` WHERE student_id = \\? LIMIT \\?").
+		WithArgs("2021999999", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	exists, err := ud.CheckUserExist(context.Background(), "2021999999")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if exists {
+		t.Fatal("expected user to be absent")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 数据库故障必须返回 error，不能被当成"用户不存在"（否则会误触发建号写路径）。
+func TestCheckUserExistPropagatesError(t *testing.T) {
+	ud, mock := newUserDaoForTest(t)
+	mock.ExpectQuery("SELECT `id` FROM `user` WHERE student_id = \\? LIMIT \\?").
+		WithArgs("2021000001", 1).
+		WillReturnError(errors.New("db down"))
+
+	exists, err := ud.CheckUserExist(context.Background(), "2021000001")
+	if err == nil {
+		t.Fatal("expected error to propagate")
+	}
+	if exists {
+		t.Fatal("expected exists=false on error")
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}

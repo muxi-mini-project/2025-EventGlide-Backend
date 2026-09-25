@@ -7,6 +7,7 @@ import (
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/safe"
 	"go.uber.org/zap"
 )
 
@@ -30,10 +31,10 @@ func NewInteractionSyncTask(lfr *cache.LikeFavoriteRedis, dao *dao.InteractionDa
 // Start 启动定时任务
 func (t *InteractionSyncTask) Start(ctx context.Context) {
 	// 每5分钟预热热点数据
-	go t.hotWarmupLoop(ctx)
+	safe.Go(t.l, "hotWarmupLoop", func() { t.hotWarmupLoop(ctx) })
 
 	// 每小时对账
-	go t.reconcileLoop(ctx)
+	safe.Go(t.l, "reconcileLoop", func() { t.reconcileLoop(ctx) })
 }
 
 // hotWarmupLoop 热点数据预热循环

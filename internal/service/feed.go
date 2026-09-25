@@ -16,6 +16,7 @@ import (
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/safe"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
@@ -105,7 +106,7 @@ func (fs *FeedService) ConsumeFeedStream() {
 	feedConsumerLifecycle.cancel = cancel
 	feedConsumerLifecycle.mu.Unlock()
 
-	go func() {
+	safe.Go(fs.l, "feed-consumer", func() {
 		const (
 			stream   = "feed_stream"
 			group    = "feed_consumers"
@@ -140,49 +141,53 @@ func (fs *FeedService) ConsumeFeedStream() {
 				continue
 			}
 
+			// 逐条隔离：单条消息的 panic 只丢弃该条并记日志，不终止整个消费循环。
+			// 注意 feed_stream 无 XAUTOCLAIM 兜底，被 panic 打断的这条消息不会自动重投。
 			for _, msg := range msgs {
-				data, ok := msg.Values["data"].(string)
-				if !ok {
-					fs.l.Warn("Message data is not String", zap.Any("msg", msg))
-					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-						fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+				safe.Run(fs.l, "feed-consumer.processMessage", func() {
+					data, ok := msg.Values["data"].(string)
+					if !ok {
+						fs.l.Warn("Message data is not String", zap.Any("msg", msg))
+						if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+							fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+						}
+						return
 					}
-					continue
-				}
 
-				var feed model.Feed
-				if err := json.Unmarshal([]byte(data), &feed); err != nil {
-					fs.l.Error("Failed to unmarshal feed", zap.Error(err))
-					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-						fs.l.Error("Failed to ack malformed feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+					var feed model.Feed
+					if err := json.Unmarshal([]byte(data), &feed); err != nil {
+						fs.l.Error("Failed to unmarshal feed", zap.Error(err))
+						if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+							fs.l.Error("Failed to ack malformed feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+						}
+						return
 					}
-					continue
-				}
 
-				feed.CreatedAt = time.Now()
-				feed.Status = "未读"
-				if feed.Object == SubjectComment {
-					rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
-					if resolveErr != nil {
-						fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
+					feed.CreatedAt = time.Now()
+					feed.Status = "未读"
+					if feed.Object == SubjectComment {
+						rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
+						if resolveErr != nil {
+							fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
+						} else {
+							feed.RootID = rootID
+							feed.RootType = rootType
+						}
+					}
+
+					if err := fs.fd.CreateFeed(ctx, &feed); err != nil {
+						fs.l.Error("Failed to consume feed", zap.Error(err), zap.String("msgID", msg.ID))
 					} else {
-						feed.RootID = rootID
-						feed.RootType = rootType
+						fs.l.Info("Feed processed", zap.Any("feed", feed))
 					}
-				}
 
-				if err := fs.fd.CreateFeed(ctx, &feed); err != nil {
-					fs.l.Error("Failed to consume feed", zap.Error(err), zap.String("msgID", msg.ID))
-				} else {
-					fs.l.Info("Feed processed", zap.Any("feed", feed))
-				}
-
-				if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-					fs.l.Error("Failed to ack feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
-				}
+					if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
+						fs.l.Error("Failed to ack feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
+					}
+				})
 			}
 		}
-	}()
+	})
 }
 
 func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.FeedLikeDetail, error) {

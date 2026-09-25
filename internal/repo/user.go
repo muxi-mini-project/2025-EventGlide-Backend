@@ -29,7 +29,7 @@ func (r *UserRepo) Create(ctx context.Context, user *model.User) error {
 	return r.ch.SetAndInvalidate(ctx, r.userInfoKey(user.StudentID), nil, 0)
 }
 
-func (r *UserRepo) CheckUserExist(ctx context.Context, studentID string) bool {
+func (r *UserRepo) CheckUserExist(ctx context.Context, studentID string) (bool, error) {
 	return r.dao.CheckUserExist(ctx, studentID)
 }
 

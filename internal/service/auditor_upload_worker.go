@@ -10,6 +10,7 @@ import (
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/safe"
 	"go.uber.org/zap"
 )
 
@@ -38,7 +39,7 @@ func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, postRepo *repo.Post
 		logger:         logger,
 		ticker:         time.NewTicker(5 * time.Second),
 	}
-	go w.run()
+	safe.Go(logger.Auditor, "auditor-worker", w.run)
 	return w
 }
 
@@ -46,8 +47,13 @@ func (w *AuditorUploadWorker) run() {
 	for range w.ticker.C {
 		// 活动与帖子各自独立超时：共用同一 budget 时，前者积压会把预算耗尽，
 		// 导致后者整轮被饿死并每 tick 报错。
-		w.processWithTimeout(w.processPendingAuditorActivities)
-		w.processWithTimeout(w.processPendingAuditorPosts)
+		// 每轮单独 recover：单条数据的 panic 不应让整个 worker 永久停摆。
+		safe.Run(w.logger.Auditor, "auditor-worker.activities", func() {
+			w.processWithTimeout(w.processPendingAuditorActivities)
+		})
+		safe.Run(w.logger.Auditor, "auditor-worker.posts", func() {
+			w.processWithTimeout(w.processPendingAuditorPosts)
+		})
 	}
 }
 

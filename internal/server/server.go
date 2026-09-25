@@ -9,6 +9,7 @@ import (
 	"github.com/raiki02/EG/internal/schedule"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/safe"
 	"go.uber.org/zap"
 )
 
@@ -41,7 +42,7 @@ func (s *Server) Run() (err error) {
 
 	// 启动后台任务
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
+	safe.Go(s.l, "background-tasks", func() {
 		if s.consumer != nil {
 			if consumerErr := s.consumer.Start(ctx); consumerErr != nil {
 				s.l.Error("Start consumer failed", zap.Error(consumerErr))
@@ -50,7 +51,7 @@ func (s *Server) Run() (err error) {
 		if s.syncTask != nil {
 			s.syncTask.Start(ctx)
 		}
-	}()
+	})
 
 	s.Shutdown = func() {
 		baseShutdown()
