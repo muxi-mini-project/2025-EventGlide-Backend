@@ -151,12 +151,12 @@ func (c *InteractionConsumer) processRecoveredMessage(ctx context.Context, msg r
 	var event InteractionEvent
 	data, ok := msg.Values["data"].(string)
 	if !ok {
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+		c.ack(ctx, msg.ID)
 		return
 	}
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
 		c.l.Error("Unmarshal failed", zap.Error(err), zap.String("data", data))
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+		c.ack(ctx, msg.ID)
 		return
 	}
 
@@ -166,8 +166,16 @@ func (c *InteractionConsumer) processRecoveredMessage(ctx context.Context, msg r
 			zap.String("msg_id", msg.ID),
 			zap.Int64("retry_count", pending[0].RetryCount),
 			zap.Any("event", event))
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-		c.mq.Publish(ctx, DLQKey, event)
+		// 先写 DLQ 再 ACK：若先 ACK 后 Publish 失败，事件会从 PEL 与 DLQ 双双丢失。
+		if err := c.mq.Publish(ctx, DLQKey, event); err != nil {
+			c.l.Error("Failed to publish to DLQ, leaving message for retry",
+				zap.Error(err), zap.String("msg_id", msg.ID))
+			return
+		}
+		if err := c.mq.Ack(ctx, StreamKey, c.group, msg.ID); err != nil {
+			// Publish 成功但 ACK 失败：消息仍在 PEL，重投后会再次入 DLQ（at-least-once，可能重复）。
+			c.l.Error("Failed to ack after DLQ publish", zap.Error(err), zap.String("msg_id", msg.ID))
+		}
 		return
 	}
 
@@ -178,7 +186,7 @@ func (c *InteractionConsumer) processRecoveredMessage(ctx context.Context, msg r
 				zap.String("msg_id", msg.ID),
 				zap.Error(err),
 				zap.Any("event", event))
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+			c.ack(ctx, msg.ID)
 			return
 		}
 		// 可重试错误：留在 PEL，等待下次 recoverLoop
@@ -188,7 +196,7 @@ func (c *InteractionConsumer) processRecoveredMessage(ctx context.Context, msg r
 			zap.Any("event", event))
 		return
 	}
-	c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+	c.ack(ctx, msg.ID)
 }
 
 // processMessages 处理消息列表。逐条隔离：单条 panic 不影响本批其余消息。
@@ -204,12 +212,12 @@ func (c *InteractionConsumer) processMessage(ctx context.Context, msg redis.XMes
 	data, ok := msg.Values["data"].(string)
 	if !ok {
 		c.l.Warn("Invalid message format", zap.Any("msg", msg))
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+		c.ack(ctx, msg.ID)
 		return
 	}
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
 		c.l.Error("Unmarshal failed", zap.Error(err), zap.String("data", data))
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+		c.ack(ctx, msg.ID)
 		return
 	}
 
@@ -220,7 +228,7 @@ func (c *InteractionConsumer) processMessage(ctx context.Context, msg redis.XMes
 				zap.String("msg_id", msg.ID),
 				zap.Error(err),
 				zap.Any("event", event))
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+			c.ack(ctx, msg.ID)
 			return
 		}
 		// 可重试错误：留在 PEL，由 recoverLoop 的 XAUTOCLAIM 重新消费
@@ -231,7 +239,14 @@ func (c *InteractionConsumer) processMessage(ctx context.Context, msg redis.XMes
 		return
 	}
 
-	c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+	c.ack(ctx, msg.ID)
+}
+
+// ack 确认一条消息；失败仅记日志——消息会留在 PEL，由 recoverLoop 重投。
+func (c *InteractionConsumer) ack(ctx context.Context, msgID string) {
+	if err := c.mq.Ack(ctx, StreamKey, c.group, msgID); err != nil {
+		c.l.Error("Failed to ack message", zap.Error(err), zap.String("msg_id", msgID))
+	}
 }
 
 // 事件分发层的哨兵错误：消息内容不合法，属于永久性错误，重试无意义
