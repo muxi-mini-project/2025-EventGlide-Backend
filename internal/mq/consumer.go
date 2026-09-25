@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/pkg/safe"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -58,8 +59,8 @@ func (c *InteractionConsumer) Start(ctx context.Context) error {
 		return err
 	}
 
-	go c.recoverLoop(ctx)
-	go c.consumeLoop(ctx)
+	safe.Go(c.l, "interaction-consumer.recoverLoop", func() { c.recoverLoop(ctx) })
+	safe.Go(c.l, "interaction-consumer.consumeLoop", func() { c.consumeLoop(ctx) })
 	return nil
 }
 
@@ -70,39 +71,48 @@ func (c *InteractionConsumer) consumeLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		default:
-			msgs, err := c.mq.ConsumeGroup(ctx, StreamKey, c.group, c.consumer, ConsumeCount, ConsumeBlock)
-			if err != nil {
-				if errors.Is(err, context.Canceled) {
-					return
-				}
-				c.l.Error("Consume failed", zap.Error(err))
-				time.Sleep(time.Second)
-				continue
-			}
-			if len(msgs) == 0 {
-				continue
-			}
-			c.processMessages(ctx, msgs)
+			// 逐轮隔离：单轮 panic 只丢弃本轮，循环继续，不会永久停掉消费。
+			safe.Run(c.l, "interaction-consumer.consume", func() { c.consumeOnce(ctx) })
 		}
 	}
+}
+
+// consumeOnce 读取并处理一批消息。
+func (c *InteractionConsumer) consumeOnce(ctx context.Context) {
+	msgs, err := c.mq.ConsumeGroup(ctx, StreamKey, c.group, c.consumer, ConsumeCount, ConsumeBlock)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			return
+		}
+		c.l.Error("Consume failed", zap.Error(err))
+		time.Sleep(time.Second)
+		return
+	}
+	if len(msgs) == 0 {
+		return
+	}
+	c.processMessages(ctx, msgs)
 }
 
 // recoverLoop 定时扫描 PEL 中的_pending 消息
 func (c *InteractionConsumer) recoverLoop(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			c.recoverPending(ctx)
+			// 逐轮隔离：单轮 panic 不影响后续轮次。
+			safe.Run(c.l, "interaction-consumer.recover", func() { c.recoverPending(ctx) })
 		}
 	}
 }
 
 // recoverPending 使用 XAUTOCLAIM 捡回空闲超_RecoverIdle_秒的消息
 func (c *InteractionConsumer) recoverPending(ctx context.Context) {
-	start := ""
+	// XAUTOCLAIM 起始游标必须是合法 stream ID（"0-0" 从最早开始），空串会被 Redis 拒绝。
+	start := "0-0"
 	for {
 		msgs, nextStart, err := c.mq.AutoClaim(ctx, StreamKey, c.group, c.consumer, RecoverIdle, start)
 		if err != nil {
@@ -123,94 +133,120 @@ func (c *InteractionConsumer) recoverPending(ctx context.Context) {
 	}
 }
 
-// processRecoveredMessages 处理从 PEL 捡回的消息，超限则入 DLQ
+// processRecoveredMessages 处理从 PEL 捡回的消息，超限则入 DLQ。
+// 逐条隔离：单条 panic 不影响本批其余消息。
 func (c *InteractionConsumer) processRecoveredMessages(ctx context.Context, msgs []redis.XMessage) {
 	for _, msg := range msgs {
-		// 查 delivery count
-		pending, err := c.mq.ListPendingExt(ctx, StreamKey, c.group, 0, msg.ID, msg.ID, 1)
-		if err != nil {
-			c.l.Error("ListPendingExt failed", zap.Error(err), zap.String("msg_id", msg.ID))
-			continue
-		}
-		var event InteractionEvent
-		data, ok := msg.Values["data"].(string)
-		if !ok {
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-			continue
-		}
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			c.l.Error("Unmarshal failed", zap.Error(err), zap.String("data", data))
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-			continue
-		}
-
-		// delivery count 超过阈值，进入 DLQ
-		if len(pending) > 0 && pending[0].RetryCount >= MaxRetryCount {
-			c.l.Warn("Message delivery count exceeded, moving to DLQ",
-				zap.String("msg_id", msg.ID),
-				zap.Int64("retry_count", pending[0].RetryCount),
-				zap.Any("event", event))
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-			c.mq.Publish(ctx, DLQKey, event)
-			continue
-		}
-
-		// 未超限，正常处理
-		if err := c.handleEvent(ctx, &event); err != nil {
-			if isNonRetryable(err) {
-				c.l.Warn("Non-retryable error, ack and skip",
-					zap.String("msg_id", msg.ID),
-					zap.Error(err),
-					zap.Any("event", event))
-				c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-				continue
-			}
-			// 可重试错误：留在 PEL，等待下次 recoverLoop
-			c.l.Warn("Retryable error, will retry via PEL",
-				zap.String("msg_id", msg.ID),
-				zap.Error(err),
-				zap.Any("event", event))
-			continue
-		}
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+		safe.Run(c.l, "interaction-consumer.processRecoveredMessage", func() { c.processRecoveredMessage(ctx, msg) })
 	}
 }
 
-// processMessages 处理消息列表
-func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.XMessage) {
-	for _, msg := range msgs {
-		var event InteractionEvent
-		data, ok := msg.Values["data"].(string)
-		if !ok {
-			c.l.Warn("Invalid message format", zap.Any("msg", msg))
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-			continue
-		}
-		if err := json.Unmarshal([]byte(data), &event); err != nil {
-			c.l.Error("Unmarshal failed", zap.Error(err), zap.String("data", data))
-			c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-			continue
-		}
+// processRecoveredMessage 处理从 PEL 捡回的单条消息，超限则入 DLQ
+func (c *InteractionConsumer) processRecoveredMessage(ctx context.Context, msg redis.XMessage) {
+	// 查 delivery count
+	pending, err := c.mq.ListPendingExt(ctx, StreamKey, c.group, 0, msg.ID, msg.ID, 1)
+	if err != nil {
+		c.l.Error("ListPendingExt failed", zap.Error(err), zap.String("msg_id", msg.ID))
+		return
+	}
+	var event InteractionEvent
+	data, ok := msg.Values["data"].(string)
+	if !ok {
+		c.ack(ctx, msg.ID)
+		return
+	}
+	if err := json.Unmarshal([]byte(data), &event); err != nil {
+		c.l.Error("Unmarshal failed", zap.Error(err), zap.String("data", data))
+		c.ack(ctx, msg.ID)
+		return
+	}
 
-		if err := c.handleEvent(ctx, &event); err != nil {
-			//不可重试错误：直接 ACK丢弃
-			if isNonRetryable(err) {
-				c.l.Warn("Non-retryable error, ack and skip",
-					zap.String("msg_id", msg.ID),
-					zap.Error(err),
-					zap.Any("event", event))
-				c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
-				continue
-			}
-			// 可重试错误：留在 PEL，由 recoverLoop 的 XAUTOCLAIM 重新消费
-			c.l.Warn("Retryable error, will retry via PEL",
+	// delivery count 超过阈值，进入 DLQ
+	if len(pending) > 0 && pending[0].RetryCount >= MaxRetryCount {
+		c.l.Warn("Message delivery count exceeded, moving to DLQ",
+			zap.String("msg_id", msg.ID),
+			zap.Int64("retry_count", pending[0].RetryCount),
+			zap.Any("event", event))
+		// 先写 DLQ 再 ACK：若先 ACK 后 Publish 失败，事件会从 PEL 与 DLQ 双双丢失。
+		if err := c.mq.Publish(ctx, DLQKey, event); err != nil {
+			c.l.Error("Failed to publish to DLQ, leaving message for retry",
+				zap.Error(err), zap.String("msg_id", msg.ID))
+			return
+		}
+		if err := c.mq.Ack(ctx, StreamKey, c.group, msg.ID); err != nil {
+			// Publish 成功但 ACK 失败：消息仍在 PEL，重投后会再次入 DLQ（at-least-once，可能重复）。
+			c.l.Error("Failed to ack after DLQ publish", zap.Error(err), zap.String("msg_id", msg.ID))
+		}
+		return
+	}
+
+	// 未超限，正常处理
+	if err := c.handleEvent(ctx, &event); err != nil {
+		if isNonRetryable(err) {
+			c.l.Warn("Non-retryable error, ack and skip",
 				zap.String("msg_id", msg.ID),
 				zap.Error(err),
 				zap.Any("event", event))
-			continue
+			c.ack(ctx, msg.ID)
+			return
 		}
+		// 可重试错误：留在 PEL，等待下次 recoverLoop
+		c.l.Warn("Retryable error, will retry via PEL",
+			zap.String("msg_id", msg.ID),
+			zap.Error(err),
+			zap.Any("event", event))
+		return
+	}
+	c.ack(ctx, msg.ID)
+}
 
-		c.mq.Ack(ctx, StreamKey, c.group, msg.ID)
+// processMessages 处理消息列表。逐条隔离：单条 panic 不影响本批其余消息。
+func (c *InteractionConsumer) processMessages(ctx context.Context, msgs []redis.XMessage) {
+	for _, msg := range msgs {
+		safe.Run(c.l, "interaction-consumer.processMessage", func() { c.processMessage(ctx, msg) })
+	}
+}
+
+// processMessage 处理单条正常消费的消息
+func (c *InteractionConsumer) processMessage(ctx context.Context, msg redis.XMessage) {
+	var event InteractionEvent
+	data, ok := msg.Values["data"].(string)
+	if !ok {
+		c.l.Warn("Invalid message format", zap.Any("msg", msg))
+		c.ack(ctx, msg.ID)
+		return
+	}
+	if err := json.Unmarshal([]byte(data), &event); err != nil {
+		c.l.Error("Unmarshal failed", zap.Error(err), zap.String("data", data))
+		c.ack(ctx, msg.ID)
+		return
+	}
+
+	if err := c.handleEvent(ctx, &event); err != nil {
+		//不可重试错误：直接 ACK丢弃
+		if isNonRetryable(err) {
+			c.l.Warn("Non-retryable error, ack and skip",
+				zap.String("msg_id", msg.ID),
+				zap.Error(err),
+				zap.Any("event", event))
+			c.ack(ctx, msg.ID)
+			return
+		}
+		// 可重试错误：留在 PEL，由 recoverLoop 的 XAUTOCLAIM 重新消费
+		c.l.Warn("Retryable error, will retry via PEL",
+			zap.String("msg_id", msg.ID),
+			zap.Error(err),
+			zap.Any("event", event))
+		return
+	}
+
+	c.ack(ctx, msg.ID)
+}
+
+// ack 确认一条消息；失败仅记日志——消息会留在 PEL，由 recoverLoop 重投。
+func (c *InteractionConsumer) ack(ctx context.Context, msgID string) {
+	if err := c.mq.Ack(ctx, StreamKey, c.group, msgID); err != nil {
+		c.l.Error("Failed to ack message", zap.Error(err), zap.String("msg_id", msgID))
 	}
 }
 

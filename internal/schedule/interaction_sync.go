@@ -7,6 +7,7 @@ import (
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/safe"
 	"go.uber.org/zap"
 )
 
@@ -30,10 +31,10 @@ func NewInteractionSyncTask(lfr *cache.LikeFavoriteRedis, dao *dao.InteractionDa
 // Start 启动定时任务
 func (t *InteractionSyncTask) Start(ctx context.Context) {
 	// 每5分钟预热热点数据
-	go t.hotWarmupLoop(ctx)
+	safe.Go(t.l, "hotWarmupLoop", func() { t.hotWarmupLoop(ctx) })
 
 	// 每小时对账
-	go t.reconcileLoop(ctx)
+	safe.Go(t.l, "reconcileLoop", func() { t.reconcileLoop(ctx) })
 }
 
 // hotWarmupLoop 热点数据预热循环
@@ -41,17 +42,21 @@ func (t *InteractionSyncTask) hotWarmupLoop(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
-	// 启动时立即执行一次
-	t.warmupHotActivities(ctx)
-	t.warmupHotPosts(ctx)
+	// 启动时立即执行一次；逐轮隔离：单轮 panic 不终止整个循环。
+	safe.Run(t.l, "hotWarmup", func() {
+		t.warmupHotActivities(ctx)
+		t.warmupHotPosts(ctx)
+	})
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			t.warmupHotActivities(ctx)
-			t.warmupHotPosts(ctx)
+			safe.Run(t.l, "hotWarmup", func() {
+				t.warmupHotActivities(ctx)
+				t.warmupHotPosts(ctx)
+			})
 		}
 	}
 }
@@ -133,7 +138,8 @@ func (t *InteractionSyncTask) reconcileLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			t.reconcileAll(ctx)
+			// 逐轮隔离：单轮 panic 不终止整个对账循环。
+			safe.Run(t.l, "reconcile", func() { t.reconcileAll(ctx) })
 		}
 	}
 }

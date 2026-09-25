@@ -10,6 +10,7 @@ import (
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/safe"
 	"go.uber.org/zap"
 )
 
@@ -23,22 +24,25 @@ type pendingPostSource interface {
 }
 
 type AuditorUploadWorker struct {
-	activityRepo   pendingActivitySource
-	postRepo       pendingPostSource
-	auditorService AuditorService
-	logger         *logger.LoggerSet
-	ticker         *time.Ticker
+	activityRepo    pendingActivitySource
+	postRepo        pendingPostSource
+	auditorService  AuditorService
+	logger          *logger.LoggerSet
+	ticker          *time.Ticker
+	reconcileTicker *time.Ticker
 }
 
 func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, postRepo *repo.PostRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
 	w := &AuditorUploadWorker{
-		activityRepo:   activityRepo,
-		postRepo:       postRepo,
-		auditorService: auditorService,
-		logger:         logger,
-		ticker:         time.NewTicker(5 * time.Second),
+		activityRepo:    activityRepo,
+		postRepo:        postRepo,
+		auditorService:  auditorService,
+		logger:          logger,
+		ticker:          time.NewTicker(5 * time.Second),
+		reconcileTicker: time.NewTicker(10 * time.Minute),
 	}
-	go w.run()
+	safe.Go(logger.Auditor, "auditor-worker.upload", w.run)
+	safe.Go(logger.Auditor, "auditor-worker.reconcile", w.runReconcile)
 	return w
 }
 
@@ -46,13 +50,35 @@ func (w *AuditorUploadWorker) run() {
 	for range w.ticker.C {
 		// 活动与帖子各自独立超时：共用同一 budget 时，前者积压会把预算耗尽，
 		// 导致后者整轮被饿死并每 tick 报错。
-		w.processWithTimeout(w.processPendingAuditorActivities)
-		w.processWithTimeout(w.processPendingAuditorPosts)
+		// 每轮单独 recover：单条数据的 panic 不应让整个 worker 永久停摆。
+		safe.Run(w.logger.Auditor, "auditor-worker.activities", func() {
+			w.processWithTimeout(w.processPendingAuditorActivities)
+		})
+		safe.Run(w.logger.Auditor, "auditor-worker.posts", func() {
+			w.processWithTimeout(w.processPendingAuditorPosts)
+		})
 	}
 }
 
+// runReconcile 独立于上传循环运行：对账是慢速、逐条 HTTP 的长任务，
+// 放同一 select 里会让上传被推迟到整轮对账结束。
+func (w *AuditorUploadWorker) runReconcile() {
+	for range w.reconcileTicker.C {
+		safe.Run(w.logger.Auditor, "auditor-worker.reconcile", w.reconcile)
+	}
+}
+
+// reconcile 回查已推送但仍 pending 的表单，弥补平台回调丢失。
+func (w *AuditorUploadWorker) reconcile() {
+	w.processWithTimeoutFor(2*time.Minute, w.auditorService.ReconcilePendingForms)
+}
+
 func (w *AuditorUploadWorker) processWithTimeout(fn func(context.Context)) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	w.processWithTimeoutFor(30*time.Second, fn)
+}
+
+func (w *AuditorUploadWorker) processWithTimeoutFor(d time.Duration, fn func(context.Context)) {
+	ctx, cancel := context.WithTimeout(context.Background(), d)
 	defer cancel()
 	fn(ctx)
 }
@@ -162,5 +188,10 @@ func (w *AuditorUploadWorker) markPushedWithRetry(ctx context.Context, formId in
 }
 
 func (w *AuditorUploadWorker) Stop() {
-	w.ticker.Stop()
+	if w.ticker != nil {
+		w.ticker.Stop()
+	}
+	if w.reconcileTicker != nil {
+		w.reconcileTicker.Stop()
+	}
 }

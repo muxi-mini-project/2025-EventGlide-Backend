@@ -33,108 +33,6 @@ func NewInteractionDao(db *gorm.DB, l *logger.LoggerSet) *InteractionDao {
 	}
 }
 
-func (id *InteractionDao) LikeActivity(c context.Context, studentID string, activityId int64) error {
-	var existing model.UserActivityInteraction
-	err := id.db.WithContext(c).Where("user_id = (SELECT id FROM user WHERE student_id = ?)", studentID).
-		Where("activity_id = ? AND type = ?", activityId, "like").First(&existing).Error
-	if err == nil {
-		return errors.New("already liked")
-	}
-
-	// Create interaction record
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	interaction := &model.UserActivityInteraction{
-		Id:         tools.MustGenerateID(),
-		UserId:     userId,
-		ActivityId: activityId,
-		Type:       "like",
-	}
-	if err := id.db.WithContext(c).Create(interaction).Error; err != nil {
-		return err
-	}
-
-	// Update activity like_num
-	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
-		Update("like_num", gorm.Expr("like_num + ?", 1)).Error
-}
-
-func (id *InteractionDao) LikePost(c context.Context, studentID string, postId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	interaction := &model.UserPostInteraction{
-		Id:     tools.MustGenerateID(),
-		UserId: userId,
-		PostId: postId,
-		Type:   "like",
-	}
-	if err := id.db.WithContext(c).Create(interaction).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
-		Update("like_num", gorm.Expr("like_num + ?", 1)).Error
-}
-
-func (id *InteractionDao) LikeComment(c context.Context, studentID string, commentId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	interaction := &model.UserCommentInteraction{
-		Id:        tools.MustGenerateID(),
-		UserId:    userId,
-		CommentId: commentId,
-		Type:      "like",
-	}
-	if err := id.db.WithContext(c).Create(interaction).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Comment{}).Where("id = ?", commentId).
-		Update("like_num", gorm.Expr("like_num + ?", 1)).Error
-}
-
-func (id *InteractionDao) DislikeActivity(c context.Context, studentID string, activityId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	if err := id.db.WithContext(c).Where("user_id = ? AND activity_id = ? AND type = ?", userId, activityId, "like").
-		Delete(&model.UserActivityInteraction{}).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
-		Update("like_num", gorm.Expr("like_num - ?", 1)).Error
-}
-
-func (id *InteractionDao) DislikePost(c context.Context, studentID string, postId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	if err := id.db.WithContext(c).Where("user_id = ? AND post_id = ? AND type = ?", userId, postId, "like").
-		Delete(&model.UserPostInteraction{}).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
-		Update("like_num", gorm.Expr("like_num - ?", 1)).Error
-}
-
-func (id *InteractionDao) DislikeComment(c context.Context, studentID string, commentId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	if err := id.db.WithContext(c).Where("user_id = ? AND comment_id = ? AND type = ?", userId, commentId, "like").
-		Delete(&model.UserCommentInteraction{}).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Comment{}).Where("id = ?", commentId).
-		Update("like_num", gorm.Expr("like_num - ?", 1)).Error
-}
-
 func (id *InteractionDao) CommentActivity(c context.Context, studentID string, activityId int64) error {
 	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
 		Update("comment_num", gorm.Expr("comment_num + ?", 1)).Error
@@ -161,68 +59,6 @@ func (id *InteractionDao) DecreasePostCommentNum(c context.Context, postId int64
 		Update("comment_num", gorm.Expr(
 			"CASE WHEN comment_num >= ? THEN comment_num - ? ELSE 0 END", n, n,
 		)).Error
-}
-
-func (id *InteractionDao) CollectActivity(c context.Context, studentID string, activityId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	interaction := &model.UserActivityInteraction{
-		Id:         tools.MustGenerateID(),
-		UserId:     userId,
-		ActivityId: activityId,
-		Type:       "collect",
-	}
-	if err := id.db.WithContext(c).Create(interaction).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
-		Update("collect_num", gorm.Expr("collect_num + ?", 1)).Error
-}
-
-func (id *InteractionDao) CollectPost(c context.Context, studentID string, postId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	interaction := &model.UserPostInteraction{
-		Id:     tools.MustGenerateID(),
-		UserId: userId,
-		PostId: postId,
-		Type:   "collect",
-	}
-	if err := id.db.WithContext(c).Create(interaction).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
-		Update("collect_num", gorm.Expr("collect_num + ?", 1)).Error
-}
-
-func (id *InteractionDao) DiscollectActivity(c context.Context, studentID string, activityId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	if err := id.db.WithContext(c).Where("user_id = ? AND activity_id = ? AND type = ?", userId, activityId, "collect").
-		Delete(&model.UserActivityInteraction{}).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Activity{}).Where("id = ?", activityId).
-		Update("collect_num", gorm.Expr("collect_num - ?", 1)).Error
-}
-
-func (id *InteractionDao) DiscollectPost(c context.Context, studentID string, postId int64) error {
-	var userId int64
-	id.db.WithContext(c).Model(&model.User{}).Where("student_id = ?", studentID).Select("id").Scan(&userId)
-
-	if err := id.db.WithContext(c).Where("user_id = ? AND post_id = ? AND type = ?", userId, postId, "collect").
-		Delete(&model.UserPostInteraction{}).Error; err != nil {
-		return err
-	}
-
-	return id.db.WithContext(c).Model(&model.Post{}).Where("id = ?", postId).
-		Update("collect_num", gorm.Expr("collect_num - ?", 1)).Error
 }
 
 func (id *InteractionDao) ApproveActivity(c context.Context, studentID string, activityId int64) error {
@@ -273,20 +109,6 @@ func (id *InteractionDao) setApprovementStance(c context.Context, studentID stri
 		}
 		return nil
 	})
-}
-
-func (id *InteractionDao) InsertApprovement(c context.Context, studentID, studentName string, activityId int64) error {
-	approvement := &model.Approvement{
-		Id:          tools.MustGenerateID(),
-		StudentId:   studentID,
-		StudentName: model.EncryptedString(studentName),
-		ActivityId:  activityId,
-	}
-	if err := id.db.WithContext(c).Create(approvement).Error; err != nil {
-		id.l.Error("Failed to insert approvement", zap.Error(err))
-		return err
-	}
-	return nil
 }
 
 // 以下 IsUserLiked/Collected 系列为降级查询：查询失败时返回 false 并记日志，便于发现降级。
@@ -685,52 +507,6 @@ func (id *InteractionDao) DeleteCollect(ctx context.Context, subject string, sub
 			return ErrInvalidSubject
 		}
 	})
-}
-
-// GetLikeNumFromDB 从数据库获取点赞数（用于回源）
-func (id *InteractionDao) GetLikeNumFromDB(ctx context.Context, subject string, subjectID int64) (int64, error) {
-	switch subject {
-	case "activity":
-		var m model.Activity
-		if err := id.db.WithContext(ctx).Where("id = ?", subjectID).Select("like_num").First(&m).Error; err != nil {
-			return 0, err
-		}
-		return int64(m.LikeNum), nil
-	case "post":
-		var m model.Post
-		if err := id.db.WithContext(ctx).Where("id = ?", subjectID).Select("like_num").First(&m).Error; err != nil {
-			return 0, err
-		}
-		return int64(m.LikeNum), nil
-	case "comment":
-		var m model.Comment
-		if err := id.db.WithContext(ctx).Where("id = ?", subjectID).Select("like_num").First(&m).Error; err != nil {
-			return 0, err
-		}
-		return int64(m.LikeNum), nil
-	default:
-		return 0, ErrInvalidSubject
-	}
-}
-
-// GetCollectNumFromDB 从数据库获取收藏数（用于回源）
-func (id *InteractionDao) GetCollectNumFromDB(ctx context.Context, subject string, subjectID int64) (int64, error) {
-	switch subject {
-	case "activity":
-		var m model.Activity
-		if err := id.db.WithContext(ctx).Where("id = ?", subjectID).Select("collect_num").First(&m).Error; err != nil {
-			return 0, err
-		}
-		return int64(m.CollectNum), nil
-	case "post":
-		var m model.Post
-		if err := id.db.WithContext(ctx).Where("id = ?", subjectID).Select("collect_num").First(&m).Error; err != nil {
-			return 0, err
-		}
-		return int64(m.CollectNum), nil
-	default:
-		return 0, ErrInvalidSubject
-	}
 }
 
 // CountAllLikesFromDB 统计数据库中某目标的所有点赞数（用于对账）

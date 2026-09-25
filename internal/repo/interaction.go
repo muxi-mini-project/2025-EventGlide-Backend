@@ -37,54 +37,6 @@ func (r *InteractionRepo) GetUserIDByStudentID(ctx context.Context, studentID st
 	return int64(user.Id), nil
 }
 
-func (r *InteractionRepo) LikeActivity(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.LikeActivity(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.acts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) LikePost(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.LikePost(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.posts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) LikeComment(ctx context.Context, studentID string, targetID int64) error {
-	return r.dao.LikeComment(ctx, studentID, targetID)
-}
-
-func (r *InteractionRepo) DislikeActivity(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.DislikeActivity(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.acts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) DislikePost(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.DislikePost(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.posts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) DislikeComment(ctx context.Context, studentID string, targetID int64) error {
-	return r.dao.DislikeComment(ctx, studentID, targetID)
-}
-
 func (r *InteractionRepo) CommentActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.CommentActivity(ctx, studentID, targetID); err != nil {
 		return err
@@ -115,46 +67,6 @@ func (r *InteractionRepo) DecreasePostCommentNum(ctx context.Context, postId int
 	return r.posts.Invalidate(ctx, postId)
 }
 
-func (r *InteractionRepo) CollectActivity(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.CollectActivity(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.acts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) CollectPost(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.CollectPost(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.posts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) DiscollectActivity(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.DiscollectActivity(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.acts.Invalidate(ctx, targetID),
-	)
-}
-
-func (r *InteractionRepo) DiscollectPost(ctx context.Context, studentID string, targetID int64) error {
-	if err := r.dao.DiscollectPost(ctx, studentID, targetID); err != nil {
-		return err
-	}
-	return joinErr(
-		r.users.Invalidate(ctx, studentID),
-		r.posts.Invalidate(ctx, targetID),
-	)
-}
-
 func (r *InteractionRepo) ApproveActivity(ctx context.Context, studentID string, targetID int64) error {
 	if err := r.dao.ApproveActivity(ctx, studentID, targetID); err != nil {
 		return mapSignerDecisionErr(err)
@@ -178,10 +90,6 @@ func mapSignerDecisionErr(err error) error {
 	default:
 		return err
 	}
-}
-
-func (r *InteractionRepo) InsertApprovement(ctx context.Context, studentID, studentName string, targetID int64) error {
-	return r.dao.InsertApprovement(ctx, studentID, studentName, targetID)
 }
 
 func (r *InteractionRepo) IsUserLikedActivity(ctx context.Context, userId, activityId int64) bool {
@@ -348,13 +256,4 @@ func (r *InteractionRepo) GetUserPostInteractionStatuses(ctx context.Context, us
 	}
 
 	return likedIds, collectedIds, nil
-}
-
-func joinErr(errs ...error) error {
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

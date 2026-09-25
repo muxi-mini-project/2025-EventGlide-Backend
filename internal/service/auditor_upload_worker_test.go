@@ -23,12 +23,13 @@ func (f *fakePendingPosts) FindPendingAuditorPosts(context.Context) ([]model.Pos
 
 // fakeAuditorSvc 以单个内存 form 模拟审核服务，用于验证 worker 的幂等与重试序列。
 type fakeAuditorSvc struct {
-	form        *model.AuditorForm
-	nextId      int64
-	uploadErr   error
-	uploadCnt   int
-	lastSub     string
-	lastFormUrl string
+	form         *model.AuditorForm
+	nextId       int64
+	uploadErr    error
+	uploadCnt    int
+	reconcileCnt int
+	lastSub      string
+	lastFormUrl  string
 }
 
 var _ AuditorService = (*fakeAuditorSvc)(nil)
@@ -80,6 +81,10 @@ func (f *fakeAuditorSvc) MarkPushed(_ context.Context, _ int64, pushedAt time.Ti
 
 func (f *fakeAuditorSvc) CreateAuditorForm(context.Context, int64, string, string) (*model.AuditorForm, error) {
 	return nil, errors.New("not used")
+}
+
+func (f *fakeAuditorSvc) ReconcilePendingForms(context.Context) {
+	f.reconcileCnt++
 }
 
 func newWorkerForTest(posts *fakePendingPosts, svc AuditorService) *AuditorUploadWorker {
@@ -135,5 +140,16 @@ func TestPostUpload_RetriesAfterFailure(t *testing.T) {
 	}
 	if svc.form.PushedAt == nil {
 		t.Fatalf("form should be marked pushed after a successful retry")
+	}
+}
+
+// TestWorkerReconcileInvokesService 对账 tick 应把控制权交给 AuditorService.ReconcilePendingForms。
+func TestWorkerReconcileInvokesService(t *testing.T) {
+	svc := &fakeAuditorSvc{}
+	w := newWorkerForTest(&fakePendingPosts{}, svc)
+
+	w.reconcile()
+	if svc.reconcileCnt != 1 {
+		t.Fatalf("expected reconcile invoked once, got %d", svc.reconcileCnt)
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/encrypt"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/safe"
 	"github.com/raiki02/EG/tools"
 	"go.uber.org/zap"
 )
@@ -112,7 +113,12 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 		}
 	}
 
-	if !us.udh.CheckUserExist(ctx, studentId) {
+	exists, err := us.udh.CheckUserExist(ctx, studentId)
+	if err != nil {
+		us.l.Error("Check user exist failed", zap.Error(err), zap.String("studentId", studentId))
+		return nil, "", errs.ErrInternal.Wrap(err)
+	}
+	if !exists {
 		err = us.CreateUser(ctx, studentId, name, department)
 		if err != nil {
 			us.l.Error("Create user failed", zap.Error(err), zap.String("studentId", studentId))
@@ -137,7 +143,7 @@ func (us *UserService) Login(ctx context.Context, studentId string, password str
 	}
 
 	if supportsUserInfo && (user.RealName == "" || user.College == "") {
-		go us.loadUserInfoAsync(client, studentId)
+		safe.Go(us.l, "loadUserInfoAsync", func() { us.loadUserInfoAsync(client, studentId) })
 	}
 
 	return &user, token, nil

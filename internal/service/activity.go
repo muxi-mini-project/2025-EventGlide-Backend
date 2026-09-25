@@ -11,6 +11,7 @@ import (
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
+	"github.com/raiki02/EG/pkg/safe"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -59,7 +60,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 		return errs.ErrActivityCreateFailed.Wrap(err)
 	}
 
-	go as.publishFeeds(act, signers, studentID)
+	safe.Go(as.l, "publishFeeds", func() { as.publishFeeds(act, signers, studentID) })
 
 	as.l.Info("create activity tx",
 		zap.Int64("actId", act.Id),

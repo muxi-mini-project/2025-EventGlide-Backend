@@ -14,7 +14,7 @@ type UserDaoHdl interface {
 	UpdateUsername(context.Context, string, string) error
 	UpdateRealName(context.Context, string, string) error
 	Create(context.Context, *model.User) error
-	CheckUserExist(context.Context, string) bool
+	CheckUserExist(context.Context, string) (bool, error)
 	GetUserInfo(context.Context, string) (model.User, error)
 	FindUserByID(context.Context, string) model.User
 	UpdateCollege(context.Context, string, string) error
@@ -45,9 +45,18 @@ func (ud *UserDao) Create(ctx context.Context, user *model.User) error {
 	return ud.db.WithContext(ctx).Create(user).Error
 }
 
-func (ud *UserDao) CheckUserExist(ctx context.Context, student_id string) bool {
-	res := ud.db.WithContext(ctx).Where("student_id = ?", student_id).Find(&model.User{}).RowsAffected
-	return res != 0
+// CheckUserExist 判断用户是否存在。查询失败返回 error，调用方据此区分
+// "用户不存在" 与 "数据库故障"，避免把故障误判为不存在而走建号写路径。
+// 只取 id 列，避免为存在性判断解密 real_name（加密列损坏不应影响登录）。
+func (ud *UserDao) CheckUserExist(ctx context.Context, student_id string) (bool, error) {
+	var ids []int
+	err := ud.db.WithContext(ctx).Model(&model.User{}).
+		Where("student_id = ?", student_id).Limit(1).Pluck("id", &ids).Error
+	if err != nil {
+		ud.l.Error("Failed to check user exist", zap.Error(err), zap.String("student_id", student_id))
+		return false, err
+	}
+	return len(ids) > 0, nil
 }
 
 func (ud *UserDao) GetUserInfo(ctx context.Context, student_id string) (model.User, error) {

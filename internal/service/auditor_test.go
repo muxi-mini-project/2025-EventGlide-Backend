@@ -5,22 +5,25 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/client"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 // fakeAuditorRepo 记录 Insert 调用次数，用于锁定后台轮询的幂等契约。
 type fakeAuditorRepo struct {
-	existing   *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
-	insertCnt  int
-	lastFormId int64
-	insertDup  *model.AuditorForm // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
-	updatedTo  string             // Update 写入的最后一个状态
+	existing      *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
+	insertCnt     int
+	lastFormId    int64
+	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
+	updatedTo     string              // Update 写入的最后一个状态
+	pushedPending []model.AuditorForm // FindPushedPending 的返回值
 }
 
 var _ dao.AuditorRepository = (*fakeAuditorRepo)(nil)
@@ -43,6 +46,11 @@ func (f *fakeAuditorRepo) Insert(_ context.Context, activityId int64, formUrl st
 }
 
 func (f *fakeAuditorRepo) Update(_ context.Context, _ int64, status string) error {
+	f.updatedTo = status
+	return nil
+}
+
+func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status string) error {
 	f.updatedTo = status
 	return nil
 }
@@ -77,6 +85,21 @@ func (f *fakeAuditorRepo) ClaimForUpload(_ context.Context, formId int64, now, l
 	}
 	f.existing.ClaimedAt = &leaseUntil
 	return true, nil
+}
+
+func (f *fakeAuditorRepo) FindPushedPending(_ context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
+	forms := append([]model.AuditorForm(nil), f.pushedPending...)
+	sort.Slice(forms, func(i, j int) bool { return forms[i].Id < forms[j].Id })
+	var out []model.AuditorForm
+	for _, form := range forms {
+		if form.Id > afterID {
+			out = append(out, form)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (f *fakeAuditorRepo) ReleaseClaim(_ context.Context, formId int64, leaseUntil time.Time) error {
@@ -283,5 +306,69 @@ func TestSyncExistingFormStatus_EmptyItems(t *testing.T) {
 	}
 	if ok {
 		t.Fatalf("empty items should be treated as not existing")
+	}
+}
+
+// TestReconcilePendingForms_SyncsConclusion 平台已出结论时，对账应把状态落库。
+func TestReconcilePendingForms_SyncsConclusion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// status=1 -> Pass
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1,"hook_id":42}]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{pushedPending: []model.AuditorForm{{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"}}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.ReconcilePendingForms(context.Background())
+
+	if repo.updatedTo != "pass" {
+		t.Fatalf("expected synced status pass, got %q", repo.updatedTo)
+	}
+}
+
+// TestReconcilePendingForms_SkipsMissing 平台无该条目时仅告警，不重推、不落库。
+func TestReconcilePendingForms_SkipsMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{pushedPending: []model.AuditorForm{{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"}}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.ReconcilePendingForms(context.Background())
+
+	if repo.updatedTo != "" {
+		t.Fatalf("missing item must not be written back, got %q", repo.updatedTo)
+	}
+}
+
+// TestReconcilePendingForms_CursorWrapsAfterShortBatch 不足一批（已到尾部）时游标应回绕到 0。
+func TestReconcilePendingForms_CursorWrapsAfterShortBatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{pushedPending: []model.AuditorForm{{Id: 42, Subject: SubjectActivity, Status: "pending"}}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.ReconcilePendingForms(context.Background())
+
+	if svc.reconcileCursor != 0 {
+		t.Fatalf("cursor should wrap to 0 after a short batch, got %d", svc.reconcileCursor)
 	}
 }
