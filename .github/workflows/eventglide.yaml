@@ -25,6 +25,29 @@ jobs:
         with:
           go-version: '1.26'
 
+      - name: Check formatting
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未格式化，请本地执行 gofmt -w . 后提交：" >&2
+            echo "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Check swagger docs are up to date
+        run: |
+          # 与 go.mod 保持同一版本，避免生成结果因版本漂移产生假差异
+          SWAG_VERSION=$(go list -m -f '{{.Version}}' github.com/swaggo/swag)
+          go install github.com/swaggo/swag/cmd/swag@"${SWAG_VERSION}"
+          "$(go env GOPATH)/bin/swag" init
+          if ! git diff --exit-code docs/; then
+            echo "docs/ 与接口注释不同步，请本地执行 swag init 后提交。" >&2
+            exit 1
+          fi
+
       - name: Build
         run: go build -v ./...
 
@@ -34,7 +57,8 @@ jobs:
         run: go test -v ./...
 
   build:
-    if : github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # 限定主仓库，避免 fork 同步 master 时误触发发布（fork 无 secrets，构建会失败）
+    if : github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository_owner == 'muxi-mini-project'
     runs-on: ubuntu-latest
     # 跨国推送镜像偶发卡死，设置上限避免无限挂起。
     timeout-minutes: 30
@@ -128,7 +152,8 @@ jobs:
           fi
 
   deploy:
-    if : github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # 限定主仓库，避免 fork 同步 master 时误触发发布（fork 无 secrets，构建会失败）
+    if : github.event_name == 'push' && github.ref == 'refs/heads/master' && github.repository_owner == 'muxi-mini-project'
     runs-on: ubuntu-latest
     needs:
       - test

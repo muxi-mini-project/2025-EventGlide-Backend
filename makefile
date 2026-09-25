@@ -9,4 +9,10 @@ run:
 stop:
 	pkill -f EG || echo "No process found"
 
-.PHONY: build run stop
+fmt:
+	gofmt -w .
+
+docs:
+	swag init
+
+.PHONY: build run stop fmt docs
