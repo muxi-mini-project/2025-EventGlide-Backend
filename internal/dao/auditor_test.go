@@ -91,16 +91,16 @@ func TestReleaseClaimSQL(t *testing.T) {
 	}
 }
 
-// TestFindPushedPendingSQL 断言对账查询只取"已推送但平台仍 pending"的表单。
+// TestFindPushedPendingSQL 断言对账查询按 id 游标只取"已推送但平台仍 pending"的表单。
 func TestFindPushedPendingSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\?").
-		WithArgs("pending").
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\? AND id > \\? ORDER BY id ASC LIMIT \\?").
+		WithArgs("pending", int64(10), 100).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "pending"))
 
-	forms, err := repo.FindPushedPending(context.Background())
+	forms, err := repo.FindPushedPending(context.Background(), 10, 100)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

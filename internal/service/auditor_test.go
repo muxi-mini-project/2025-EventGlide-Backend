@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"testing"
 	"time"
 
@@ -86,11 +87,19 @@ func (f *fakeAuditorRepo) ClaimForUpload(_ context.Context, formId int64, now, l
 	return true, nil
 }
 
-func (f *fakeAuditorRepo) FindPushedPending(context.Context) ([]model.AuditorForm, error) {
-	if f.pushedPending == nil {
-		return nil, nil
+func (f *fakeAuditorRepo) FindPushedPending(_ context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
+	forms := append([]model.AuditorForm(nil), f.pushedPending...)
+	sort.Slice(forms, func(i, j int) bool { return forms[i].Id < forms[j].Id })
+	var out []model.AuditorForm
+	for _, form := range forms {
+		if form.Id > afterID {
+			out = append(out, form)
+		}
 	}
-	return f.pushedPending, nil
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (f *fakeAuditorRepo) ReleaseClaim(_ context.Context, formId int64, leaseUntil time.Time) error {
@@ -340,5 +349,26 @@ func TestReconcilePendingForms_SkipsMissing(t *testing.T) {
 
 	if repo.updatedTo != "" {
 		t.Fatalf("missing item must not be written back, got %q", repo.updatedTo)
+	}
+}
+
+// TestReconcilePendingForms_CursorWrapsAfterShortBatch 不足一批（已到尾部）时游标应回绕到 0。
+func TestReconcilePendingForms_CursorWrapsAfterShortBatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{pushedPending: []model.AuditorForm{{Id: 42, Subject: SubjectActivity, Status: "pending"}}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.ReconcilePendingForms(context.Background())
+
+	if svc.reconcileCursor != 0 {
+		t.Fatalf("cursor should wrap to 0 after a short batch, got %d", svc.reconcileCursor)
 	}
 }

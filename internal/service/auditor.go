@@ -47,7 +47,15 @@ type auditorService struct {
 	AuditorRepo dao.AuditorRepository
 
 	l *zap.Logger
+
+	// reconcileCursor 是入站对账的分批游标（表单 id）。仅对账 goroutine 读写，
+	// 无并发访问；服务重启后归零从头扫，多实例各持一份会重复回查但幂等无害。
+	reconcileCursor int64
 }
+
+// reconcileBatchSize 单批对账条数：用于限制每批 DB 读取与 HTTP 回查量，
+// 配合游标在轮次间推进，避免一次拉全表。
+const reconcileBatchSize = 100
 
 func NewAuditorService(repo dao.AuditorRepository, cfg *config.Conf, l *logger.LoggerSet) AuditorService {
 	muxiCli, err := client.NewClient(client.Config{
@@ -202,31 +210,42 @@ func (a *auditorService) ReleaseClaim(c context.Context, FormId int64, leaseUnti
 	return a.AuditorRepo.ReleaseClaim(c, FormId, leaseUntil)
 }
 
-// ReconcilePendingForms 回查所有"已推送但平台仍 pending"的表单，拉取平台结论并落库。
+// ReconcilePendingForms 回查"已推送但平台仍 pending"的表单，拉取平台结论并落库。
 // 平台回调可能丢失，此前的实现只在"上传被拒"时回查，导致丢失回调的表单永久停在 pending。
 // 对账只同步平台已有结论；若平台根本没有该条目（历史推送丢失），仅告警不自动重推——
 // 自动重推有重复创建风险（参见历史 "该条目已被创建" 事故），属需产品单独决策的扩展项。
-// 当前全量读取待对账表单；若平台长期不出结论导致积压，需再评估分页/限流。
+//
+// 分批游标：按 id 升序每批取 reconcileBatchSize 条，处理后推进游标；取空或不足一批即回绕到 0。
+// 这样无论集合里是否有"平台永不结论"的钉子，都能在若干轮内覆盖全体，且单轮读取量有界。
 func (a *auditorService) ReconcilePendingForms(c context.Context) {
-	forms, err := a.AuditorRepo.FindPushedPending(c)
-	if err != nil {
-		a.l.Error("Reconcile pending forms: find failed", zap.Error(err))
-		return
-	}
-	for _, form := range forms {
+	for {
 		if c.Err() != nil {
-			a.l.Warn("Reconcile pending forms aborted: context done", zap.Int("total", len(forms)))
+			a.l.Warn("Reconcile pending forms aborted: context done", zap.Int64("cursor", a.reconcileCursor))
 			return
 		}
-		ok, err := a.syncExistingFormStatus(c, form.Id)
+		forms, err := a.AuditorRepo.FindPushedPending(c, a.reconcileCursor, reconcileBatchSize)
 		if err != nil {
-			a.l.Error("Reconcile pending form failed", zap.Error(err), zap.Int64("formId", form.Id))
-			continue
+			a.l.Error("Reconcile pending forms: find failed", zap.Error(err))
+			return
 		}
-		if !ok {
-			a.l.Warn("Pushed auditor form missing on platform, not re-pushing",
-				zap.Int64("formId", form.Id), zap.Int64("targetId", form.ActivityId), zap.String("subject", form.Subject))
+		for _, form := range forms {
+			if c.Err() != nil {
+				a.l.Warn("Reconcile pending forms aborted: context done", zap.Int64("cursor", a.reconcileCursor))
+				return
+			}
+			ok, err := a.syncExistingFormStatus(c, form.Id)
+			if err != nil {
+				a.l.Error("Reconcile pending form failed", zap.Error(err), zap.Int64("formId", form.Id))
+			} else if !ok {
+				a.l.Warn("Pushed auditor form missing on platform, not re-pushing",
+					zap.Int64("formId", form.Id), zap.Int64("targetId", form.ActivityId), zap.String("subject", form.Subject))
+			}
+			// 逐条推进游标：即使本批中途因 ctx 到期中断，下轮也从此处继续，不丢进度。
+			a.reconcileCursor = form.Id
+		}
+		if len(forms) < reconcileBatchSize {
+			a.reconcileCursor = 0
+			return
 		}
 	}
-	a.l.Info("Reconcile pending auditor forms done", zap.Int("count", len(forms)))
 }

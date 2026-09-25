@@ -22,7 +22,7 @@ type AuditorRepository interface {
 	MarkPushed(c context.Context, formId int64, pushedAt time.Time) error
 	ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error)
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
-	FindPushedPending(c context.Context) ([]model.AuditorForm, error)
+	FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error)
 	UpdateIfPending(c context.Context, formId int64, status string) error
 }
 type AuditorRepo struct {
@@ -138,12 +138,15 @@ func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil t
 	return nil
 }
 
-// FindPushedPending 返回已成功推送但平台尚未给出结论的表单，
-// 供定时回查平台状态（回调可能丢失，导致表单永久停在 pending）。
-func (a *AuditorRepo) FindPushedPending(c context.Context) ([]model.AuditorForm, error) {
+// FindPushedPending 按 id 游标分批返回"已推送但平台仍未给结论"的表单，
+// 供定时对账分批回查（回调可能丢失，导致表单永久停在 pending）。
+// 以 id 升序、取 id > afterID 的前 limit 条；调用方处理完后推进游标，取完回绕。
+func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
 	var forms []model.AuditorForm
 	err := a.db.WithContext(c).
-		Where("pushed_at IS NOT NULL AND status = ?", "pending").
+		Where("pushed_at IS NOT NULL AND status = ? AND id > ?", "pending", afterID).
+		Order("id ASC").
+		Limit(limit).
 		Find(&forms).Error
 	if err != nil {
 		a.l.Error("failed to find pushed pending auditor forms", zap.Error(err))
