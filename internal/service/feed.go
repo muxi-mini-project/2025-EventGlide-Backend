@@ -18,6 +18,7 @@ import (
 	"github.com/raiki02/EG/pkg/logger"
 	"github.com/raiki02/EG/pkg/safe"
 	"github.com/raiki02/EG/tools"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -47,6 +48,17 @@ var feedConsumerLifecycle struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 }
+
+const (
+	feedStream       = "feed_stream"
+	feedGroup        = "feed_consumers"
+	feedDLQKey       = "feed_dlq"
+	feedBatch        = int64(15)
+	feedBlockFor     = 30 * time.Second
+	feedRecoverEvery = 30 * time.Second
+	feedRecoverIdle  = 2 * time.Minute
+	feedMaxRetry     = 3
+)
 
 func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *logger.LoggerSet) *FeedService {
 	fs := &FeedService{
@@ -106,94 +118,151 @@ func (fs *FeedService) ConsumeFeedStream() {
 	feedConsumerLifecycle.cancel = cancel
 	feedConsumerLifecycle.mu.Unlock()
 
-	safe.Go(fs.l, "feed-consumer", func() {
-		const (
-			stream   = "feed_stream"
-			group    = "feed_consumers"
-			batch    = int64(15)
-			blockFor = 30 * time.Second
-		)
+	host, err := os.Hostname()
+	if err != nil {
+		host = "unknown-host"
+	}
+	consumer := fmt.Sprintf("%s-%d", host, time.Now().UnixNano())
 
-		host, err := os.Hostname()
-		if err != nil {
-			host = "unknown-host"
-		}
-		consumer := fmt.Sprintf("%s-%d", host, time.Now().UnixNano())
+	if err := fs.mq.EnsureConsumerGroup(ctx, feedStream, feedGroup); err != nil {
+		fs.l.Error("Failed to ensure feed consumer group", zap.Error(err))
+		return
+	}
 
-		if err := fs.mq.EnsureConsumerGroup(ctx, stream, group); err != nil {
-			fs.l.Error("Failed to ensure feed consumer group", zap.Error(err))
+	safe.Go(fs.l, "feed-consumer", func() { fs.consumeFeedLoop(ctx, consumer) })
+	safe.Go(fs.l, "feed-consumer.recover", func() { fs.recoverFeedLoop(ctx, consumer) })
+}
+
+// consumeFeedLoop 持续读取 feed_stream 的新消息。
+func (fs *FeedService) consumeFeedLoop(ctx context.Context, consumer string) {
+	for {
+		if ctx.Err() != nil {
 			return
 		}
+		// 逐轮隔离：单轮（含读流）panic 不终止整个消费循环。
+		safe.Run(fs.l, "feed-consumer.consume", func() { fs.consumeFeedOnce(ctx, consumer) })
+	}
+}
 
-		for {
-			if ctx.Err() != nil {
+func (fs *FeedService) consumeFeedOnce(ctx context.Context, consumer string) {
+	msgs, err := fs.mq.ConsumeGroup(ctx, feedStream, feedGroup, consumer, feedBatch, feedBlockFor)
+	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			fs.l.Info("Feed consumer stopped")
+			return
+		}
+		fs.l.Error("Failed to read feed stream", zap.Error(err))
+		time.Sleep(time.Second)
+		return
+	}
+	for _, msg := range msgs {
+		safe.Run(fs.l, "feed-consumer.processMessage", func() { fs.processFeedMessage(ctx, msg) })
+	}
+}
+
+// recoverFeedLoop 定期认领 feed_stream 中空闲超时、未 ACK 的消息重投，
+// 弥补消费失败后消息滞留在 PEL 而无人捞取。
+func (fs *FeedService) recoverFeedLoop(ctx context.Context, consumer string) {
+	ticker := time.NewTicker(feedRecoverEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			safe.Run(fs.l, "feed-consumer.recover", func() { fs.recoverFeedPending(ctx, consumer) })
+		}
+	}
+}
+
+func (fs *FeedService) recoverFeedPending(ctx context.Context, consumer string) {
+	// XAUTOCLAIM 的起始游标必须是合法 stream ID，"0-0" 表示从最早开始；
+	// 空串会被 Redis 拒绝（ERR Invalid stream ID）。
+	start := "0-0"
+	for {
+		msgs, nextStart, err := fs.mq.AutoClaim(ctx, feedStream, feedGroup, consumer, feedRecoverIdle, start)
+		if err != nil {
+			if errors.Is(err, redis.Nil) {
 				return
 			}
-			// 逐轮隔离：单轮（含读流）panic 不终止整个消费循环。
-			safe.Run(fs.l, "feed-consumer.consume", func() {
-				msgs, err := fs.mq.ConsumeGroup(ctx, stream, group, consumer, batch, blockFor)
-				if err != nil {
-					if errors.Is(err, context.Canceled) {
-						fs.l.Info("Feed consumer stopped")
-						return
-					}
-					fs.l.Error("Failed to read feed stream", zap.Error(err))
-					time.Sleep(time.Second)
-					return
-				}
-
-				if len(msgs) == 0 {
-					return
-				}
-
-				// 逐条隔离：单条消息的 panic 只丢弃该条并记日志，不终止整个消费循环。
-				// 注意 feed_stream 无 XAUTOCLAIM 兜底，被 panic 打断的这条消息不会自动重投。
-				for _, msg := range msgs {
-					safe.Run(fs.l, "feed-consumer.processMessage", func() {
-						data, ok := msg.Values["data"].(string)
-						if !ok {
-							fs.l.Warn("Message data is not String", zap.Any("msg", msg))
-							if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-								fs.l.Error("Failed to ack invalid feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
-							}
-							return
-						}
-
-						var feed model.Feed
-						if err := json.Unmarshal([]byte(data), &feed); err != nil {
-							fs.l.Error("Failed to unmarshal feed", zap.Error(err))
-							if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-								fs.l.Error("Failed to ack malformed feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
-							}
-							return
-						}
-
-						feed.CreatedAt = time.Now()
-						feed.Status = "未读"
-						if feed.Object == SubjectComment {
-							rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
-							if resolveErr != nil {
-								fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
-							} else {
-								feed.RootID = rootID
-								feed.RootType = rootType
-							}
-						}
-
-						if err := fs.fd.CreateFeed(ctx, &feed); err != nil {
-							fs.l.Error("Failed to consume feed", zap.Error(err), zap.String("msgID", msg.ID))
-						} else {
-							fs.l.Info("Feed processed", zap.Any("feed", feed))
-						}
-
-						if ackErr := fs.mq.Ack(ctx, stream, group, msg.ID); ackErr != nil {
-							fs.l.Error("Failed to ack feed message", zap.Error(ackErr), zap.String("msgID", msg.ID))
-						}
-					})
-				}
-			})
+			fs.l.Error("AutoClaim feed failed", zap.Error(err))
+			return
 		}
-	})
+		for _, msg := range msgs {
+			safe.Run(fs.l, "feed-consumer.recoverMessage", func() { fs.recoverFeedMessage(ctx, msg) })
+		}
+		start = nextStart
+		if nextStart == "" || nextStart == "0-0" {
+			return
+		}
+	}
+}
+
+// recoverFeedMessage 处理重投的消息：超过重试上限转死信；否则按正常逻辑再处理。
+func (fs *FeedService) recoverFeedMessage(ctx context.Context, msg redis.XMessage) {
+	pending, err := fs.mq.ListPendingExt(ctx, feedStream, feedGroup, 0, msg.ID, msg.ID, 1)
+	if err != nil {
+		fs.l.Error("ListPendingExt feed failed", zap.Error(err), zap.String("msgID", msg.ID))
+		return
+	}
+	if len(pending) > 0 && pending[0].RetryCount >= feedMaxRetry {
+		fs.l.Warn("Feed message delivery count exceeded, moving to DLQ", zap.String("msgID", msg.ID))
+		// 先写 DLQ 再 ACK：若先 ACK 后 Publish 失败，消息会从 PEL 与 DLQ 双双丢失。
+		if data, ok := msg.Values["data"].(string); ok {
+			var feed model.Feed
+			if json.Unmarshal([]byte(data), &feed) == nil {
+				if err := fs.mq.Publish(ctx, feedDLQKey, feed); err != nil {
+					fs.l.Error("Failed to publish feed to DLQ, leaving for retry", zap.Error(err), zap.String("msgID", msg.ID))
+					return
+				}
+			}
+		}
+		fs.ackFeed(ctx, msg.ID)
+		return
+	}
+	fs.processFeedMessage(ctx, msg)
+}
+
+// processFeedMessage 处理单条消息；入库失败不 ACK，留在 PEL 由 recoverLoop 重投。
+func (fs *FeedService) processFeedMessage(ctx context.Context, msg redis.XMessage) {
+	data, ok := msg.Values["data"].(string)
+	if !ok {
+		fs.l.Warn("Feed message data is not string", zap.Any("msg", msg))
+		fs.ackFeed(ctx, msg.ID)
+		return
+	}
+	var feed model.Feed
+	if err := json.Unmarshal([]byte(data), &feed); err != nil {
+		fs.l.Error("Failed to unmarshal feed", zap.Error(err))
+		fs.ackFeed(ctx, msg.ID)
+		return
+	}
+
+	feed.CreatedAt = time.Now()
+	feed.Status = "未读"
+	if feed.Object == SubjectComment {
+		rootID, rootType, resolveErr := fs.fd.ResolveRootMetaByCommentID(ctx, feed.TargetId)
+		if resolveErr != nil {
+			fs.l.Warn("Failed to resolve feed root id", zap.Error(resolveErr), zap.Int64("targetId", feed.TargetId))
+		} else {
+			feed.RootID = rootID
+			feed.RootType = rootType
+		}
+	}
+
+	if err := fs.fd.CreateFeed(ctx, &feed); err != nil {
+		// 入库失败：不 ACK，留在 PEL，由 recoverLoop 重投；达上限后转 DLQ。
+		fs.l.Error("Failed to consume feed, left in PEL for retry", zap.Error(err), zap.String("msgID", msg.ID))
+		return
+	}
+	fs.l.Info("Feed processed", zap.Any("feed", feed))
+	fs.ackFeed(ctx, msg.ID)
+}
+
+func (fs *FeedService) ackFeed(ctx context.Context, msgID string) {
+	if err := fs.mq.Ack(ctx, feedStream, feedGroup, msgID); err != nil {
+		fs.l.Error("Failed to ack feed message", zap.Error(err), zap.String("msgID", msgID))
+	}
 }
 
 func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.FeedLikeDetail, error) {

@@ -111,7 +111,8 @@ func (c *InteractionConsumer) recoverLoop(ctx context.Context) {
 
 // recoverPending 使用 XAUTOCLAIM 捡回空闲超_RecoverIdle_秒的消息
 func (c *InteractionConsumer) recoverPending(ctx context.Context) {
-	start := ""
+	// XAUTOCLAIM 起始游标必须是合法 stream ID（"0-0" 从最早开始），空串会被 Redis 拒绝。
+	start := "0-0"
 	for {
 		msgs, nextStart, err := c.mq.AutoClaim(ctx, StreamKey, c.group, c.consumer, RecoverIdle, start)
 		if err != nil {

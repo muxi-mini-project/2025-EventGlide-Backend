@@ -36,13 +36,14 @@ func (mq *MQ) Publish(ctx context.Context, stream string, message interface{}) e
 		return err
 	}
 
+	// 不设 MaxLen：Redis Stream 的裁剪是物理删除，会连同未 ACK 的消息一起裁掉，
+	// 造成消费侧静默丢消息。当前规模下不做自动裁剪；若未来量级变大需引入
+	// 基于消费延迟的监控/裁剪策略，而不是让生产端盲目近似裁剪。
 	return mq.rdb.XAdd(ctx, &redis.XAddArgs{
 		Stream: stream,
 		Values: map[string]interface{}{
 			"data": jsonReq,
 		},
-		MaxLen: 10000,
-		Approx: true,
 	}).Err()
 }
 
