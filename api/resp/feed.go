@@ -25,57 +25,61 @@ type FeedUserInfo struct {
 type FeedLikeResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"Message"`
-	PublishedAt string            `json:"PublishedAt"`
-	TargetId    utils.SnowflakeID `json:"TargetId"`
-	RootID      utils.SnowflakeID `json:"RootId,omitempty"`
-	RootType    string            `json:"RootType,omitempty"`
-	Subject     string            `json:"Subject"`
-	FirstPic    string            `json:"FirstPic,omitempty"`
-	Status      string            `json:"status"`
+	Id            utils.SnowflakeID `json:"id"`
+	Message       string            `json:"Message"`
+	PublishedAt   string            `json:"PublishedAt"`
+	TargetId      utils.SnowflakeID `json:"TargetId"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	RootType      string            `json:"RootType,omitempty"`
+	Subject       string            `json:"Subject"`
+	FirstPic      string            `json:"FirstPic,omitempty"`
+	Status        string            `json:"status"`
+	TargetDeleted bool              `json:"targetDeleted"`
 }
 
 type FeedCommentResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"Message"`
-	PublishedAt string            `json:"PublishedAt"`
-	TargetId    utils.SnowflakeID `json:"TargetId"`
-	RootID      utils.SnowflakeID `json:"RootId,omitempty"`
-	RootType    string            `json:"RootType,omitempty"`
-	Subject     string            `json:"Subject"`
-	FirstPic    string            `json:"FirstPic,omitempty"`
-	Status      string            `json:"status"`
+	Id            utils.SnowflakeID `json:"id"`
+	Message       string            `json:"Message"`
+	PublishedAt   string            `json:"PublishedAt"`
+	TargetId      utils.SnowflakeID `json:"TargetId"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	RootType      string            `json:"RootType,omitempty"`
+	Subject       string            `json:"Subject"`
+	FirstPic      string            `json:"FirstPic,omitempty"`
+	Status        string            `json:"status"`
+	TargetDeleted bool              `json:"targetDeleted"`
 }
 
 type FeedAtResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"Message"`
-	PublishedAt string            `json:"PublishedAt"`
-	TargetId    utils.SnowflakeID `json:"TargetId"`
-	RootID      utils.SnowflakeID `json:"RootId,omitempty"`
-	RootType    string            `json:"RootType,omitempty"`
-	Subject     string            `json:"Subject"`
-	FirstPic    string            `json:"FirstPic,omitempty"`
-	Status      string            `json:"status"`
+	Id            utils.SnowflakeID `json:"id"`
+	Message       string            `json:"Message"`
+	PublishedAt   string            `json:"PublishedAt"`
+	TargetId      utils.SnowflakeID `json:"TargetId"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	RootType      string            `json:"RootType,omitempty"`
+	Subject       string            `json:"Subject"`
+	FirstPic      string            `json:"FirstPic,omitempty"`
+	Status        string            `json:"status"`
+	TargetDeleted bool              `json:"targetDeleted"`
 }
 
 type FeedCollectResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id          utils.SnowflakeID `json:"id"`
-	Message     string            `json:"Message"`
-	PublishedAt string            `json:"PublishedAt"`
-	FirstPic    string            `json:"FirstPic,omitempty"`
-	TargetId    utils.SnowflakeID `json:"TargetId"`
-	RootID      utils.SnowflakeID `json:"RootId,omitempty"`
-	RootType    string            `json:"RootType,omitempty"`
-	Subject     string            `json:"Subject"`
-	Status      string            `json:"status"`
+	Id            utils.SnowflakeID `json:"id"`
+	Message       string            `json:"Message"`
+	PublishedAt   string            `json:"PublishedAt"`
+	FirstPic      string            `json:"FirstPic,omitempty"`
+	TargetId      utils.SnowflakeID `json:"TargetId"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	RootType      string            `json:"RootType,omitempty"`
+	Subject       string            `json:"Subject"`
+	Status        string            `json:"status"`
+	TargetDeleted bool              `json:"targetDeleted"`
 }
 
 type FeedInvitationResp struct {

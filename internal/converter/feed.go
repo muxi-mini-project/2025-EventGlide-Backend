@@ -32,15 +32,16 @@ func ToGetLikeFeedResp(feeds []model.FeedLikeDetail) []resp.FeedLikeResp {
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedLikeResp{
-			Id:          utils.SnowflakeID(v.Id),
-			Message:     v.Message,
-			PublishedAt: v.PublishedAt,
-			TargetId:    utils.SnowflakeID(v.TargetId),
-			RootID:      utils.SnowflakeID(v.RootID),
-			RootType:    v.RootType,
-			Subject:     v.Subject,
-			Status:      v.Status,
-			FirstPic:    v.FirstPic,
+			Id:            utils.SnowflakeID(v.Id),
+			Message:       v.Message,
+			PublishedAt:   v.PublishedAt,
+			TargetId:      utils.SnowflakeID(v.TargetId),
+			RootID:        utils.SnowflakeID(v.RootID),
+			RootType:      v.RootType,
+			Subject:       v.Subject,
+			Status:        v.Status,
+			FirstPic:      v.FirstPic,
+			TargetDeleted: v.TargetDeleted,
 			Userinfo: resp.FeedUserInfo{
 				StudentID: v.Userinfo.StudentID,
 				Avatar:    v.Userinfo.Avatar,
@@ -57,15 +58,16 @@ func ToGetCollectFeedResp(feeds []model.FeedCollectDetail) []resp.FeedCollectRes
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedCollectResp{
-			Id:          utils.SnowflakeID(v.Id),
-			Message:     v.Message,
-			PublishedAt: v.PublishedAt,
-			TargetId:    utils.SnowflakeID(v.TargetId),
-			RootID:      utils.SnowflakeID(v.RootID),
-			RootType:    v.RootType,
-			Subject:     v.Subject,
-			Status:      v.Status,
-			FirstPic:    v.FirstPic,
+			Id:            utils.SnowflakeID(v.Id),
+			Message:       v.Message,
+			PublishedAt:   v.PublishedAt,
+			TargetId:      utils.SnowflakeID(v.TargetId),
+			RootID:        utils.SnowflakeID(v.RootID),
+			RootType:      v.RootType,
+			Subject:       v.Subject,
+			Status:        v.Status,
+			FirstPic:      v.FirstPic,
+			TargetDeleted: v.TargetDeleted,
 			Userinfo: resp.FeedUserInfo{
 				StudentID: v.Userinfo.StudentID,
 				Avatar:    v.Userinfo.Avatar,
@@ -82,15 +84,16 @@ func ToGetCommentFeedResp(feeds []model.FeedCommentDetail) []resp.FeedCommentRes
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedCommentResp{
-			Id:          utils.SnowflakeID(v.Id),
-			Message:     v.Message,
-			PublishedAt: v.PublishedAt,
-			TargetId:    utils.SnowflakeID(v.TargetId),
-			RootID:      utils.SnowflakeID(v.RootID),
-			RootType:    v.RootType,
-			Subject:     v.Subject,
-			Status:      v.Status,
-			FirstPic:    v.FirstPic,
+			Id:            utils.SnowflakeID(v.Id),
+			Message:       v.Message,
+			PublishedAt:   v.PublishedAt,
+			TargetId:      utils.SnowflakeID(v.TargetId),
+			RootID:        utils.SnowflakeID(v.RootID),
+			RootType:      v.RootType,
+			Subject:       v.Subject,
+			Status:        v.Status,
+			FirstPic:      v.FirstPic,
+			TargetDeleted: v.TargetDeleted,
 			Userinfo: resp.FeedUserInfo{
 				StudentID: v.Userinfo.StudentID,
 				Avatar:    v.Userinfo.Avatar,
@@ -107,15 +110,16 @@ func ToGetAtFeedResp(feeds []model.FeedAtDetail) []resp.FeedAtResp {
 
 	for _, v := range feeds {
 		res = append(res, resp.FeedAtResp{
-			Id:          utils.SnowflakeID(v.Id),
-			Message:     v.Message,
-			PublishedAt: v.PublishedAt,
-			TargetId:    utils.SnowflakeID(v.TargetId),
-			RootID:      utils.SnowflakeID(v.RootID),
-			RootType:    v.RootType,
-			Subject:     v.Subject,
-			Status:      v.Status,
-			FirstPic:    v.FirstPic,
+			Id:            utils.SnowflakeID(v.Id),
+			Message:       v.Message,
+			PublishedAt:   v.PublishedAt,
+			TargetId:      utils.SnowflakeID(v.TargetId),
+			RootID:        utils.SnowflakeID(v.RootID),
+			RootType:      v.RootType,
+			Subject:       v.Subject,
+			Status:        v.Status,
+			FirstPic:      v.FirstPic,
+			TargetDeleted: v.TargetDeleted,
 			Userinfo: resp.FeedUserInfo{
 				StudentID: v.Userinfo.StudentID,
 				Avatar:    v.Userinfo.Avatar,
