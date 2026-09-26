@@ -2792,6 +2792,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2827,6 +2830,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2862,6 +2868,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2932,6 +2941,9 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },

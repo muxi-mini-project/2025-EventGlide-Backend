@@ -38,57 +38,61 @@ type UserInfo struct {
 type FeedLikeDetail struct {
 	Userinfo UserInfo
 
-	Id          int64
-	Message     string
-	PublishedAt string
-	TargetId    int64
-	RootID      int64
-	RootType    string
-	Subject     string
-	FirstPic    string
-	Status      string
+	Id            int64
+	Message       string
+	PublishedAt   string
+	TargetId      int64
+	RootID        int64
+	RootType      string
+	Subject       string
+	FirstPic      string
+	Status        string
+	TargetDeleted bool
 }
 
 type FeedCommentDetail struct {
 	Userinfo UserInfo
 
-	Id          int64
-	Message     string
-	PublishedAt string
-	TargetId    int64
-	RootID      int64
-	RootType    string
-	Subject     string
-	FirstPic    string
-	Status      string
+	Id            int64
+	Message       string
+	PublishedAt   string
+	TargetId      int64
+	RootID        int64
+	RootType      string
+	Subject       string
+	FirstPic      string
+	Status        string
+	TargetDeleted bool
 }
 
 type FeedAtDetail struct {
 	Userinfo UserInfo
 
-	Id          int64
-	Message     string
-	PublishedAt string
-	TargetId    int64
-	RootID      int64
-	RootType    string
-	Subject     string
-	FirstPic    string
-	Status      string
+	Id            int64
+	Message       string
+	PublishedAt   string
+	TargetId      int64
+	RootID        int64
+	RootType      string
+	Subject       string
+	FirstPic      string
+	Status        string
+	TargetDeleted bool
 }
 
 type FeedCollectDetail struct {
 	Userinfo UserInfo
 
-	Id          int64
-	Message     string
-	PublishedAt string
-	FirstPic    string
-	TargetId    int64
-	RootID      int64
-	RootType    string
-	Subject     string
-	Status      string
+	Id            int64
+	Message       string
+	PublishedAt   string
+	FirstPic      string
+	TargetId      int64
+	RootID        int64
+	RootType      string
+	Subject       string
+	Status        string
+	TargetDeleted bool
 }
 
 type FeedInvitationDetail struct {

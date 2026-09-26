@@ -428,6 +428,8 @@ definitions:
         type: integer
       status:
         type: string
+      targetDeleted:
+        type: boolean
     type: object
   resp.FeedCollectResp:
     properties:
@@ -451,6 +453,8 @@ definitions:
         type: integer
       status:
         type: string
+      targetDeleted:
+        type: boolean
     type: object
   resp.FeedCommentResp:
     properties:
@@ -474,6 +478,8 @@ definitions:
         type: integer
       status:
         type: string
+      targetDeleted:
+        type: boolean
     type: object
   resp.FeedInvitationResp:
     properties:
@@ -520,6 +526,8 @@ definitions:
         type: integer
       status:
         type: string
+      targetDeleted:
+        type: boolean
     type: object
   resp.FeedResp:
     properties:

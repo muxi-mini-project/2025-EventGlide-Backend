@@ -80,6 +80,21 @@ func TestResolveFeedTargetsNoPostSkipsQuery(t *testing.T) {
 	}
 }
 
+// TestFeedTargetDeleted 只有指向帖子且该帖已删时为 true；非帖子目标（postID=0）恒为 false。
+func TestFeedTargetDeleted(t *testing.T) {
+	deleted := map[int64]bool{1001: true}
+
+	if !feedTargetDeleted(feedTarget{postID: 1001}, deleted) {
+		t.Fatalf("deleted post target should be true")
+	}
+	if feedTargetDeleted(feedTarget{postID: 1002}, deleted) {
+		t.Fatalf("still-existing post target should be false")
+	}
+	if feedTargetDeleted(feedTarget{postID: 0, rootType: SubjectActivity}, deleted) {
+		t.Fatalf("non-post target should be false")
+	}
+}
+
 // TestFeedMessageMarksDeletedPost 目标帖子已删时，feed 文案改为"帖子已不存在"。
 func TestFeedMessageMarksDeletedPost(t *testing.T) {
 	fs, _, _ := newFeedServiceForTest(t)

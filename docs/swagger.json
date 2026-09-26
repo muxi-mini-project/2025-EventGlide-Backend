@@ -2784,6 +2784,9 @@
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2819,6 +2822,9 @@
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2854,6 +2860,9 @@
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },
@@ -2924,6 +2933,9 @@
                 },
                 "status": {
                     "type": "string"
+                },
+                "targetDeleted": {
+                    "type": "boolean"
                 }
             }
         },

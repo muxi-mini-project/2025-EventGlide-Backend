@@ -289,15 +289,16 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 				Avatar:    user.Avatar,
 				Username:  user.Name,
 			},
-			Id:          v.Id,
-			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
-			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetId:    v.TargetId,
-			RootID:      targets[i].rootID,
-			RootType:    targets[i].rootType,
-			Subject:     v.Object,
-			Status:      v.Status,
-			FirstPic:    getFirstPic(pics),
+			Id:            v.Id,
+			Message:       fs.feedMessage(v, targets[i], user.Name, deleted),
+			PublishedAt:   tools.ParseTime(v.CreatedAt),
+			TargetId:      v.TargetId,
+			RootID:        targets[i].rootID,
+			RootType:      targets[i].rootType,
+			Subject:       v.Object,
+			Status:        v.Status,
+			FirstPic:      getFirstPic(pics),
+			TargetDeleted: feedTargetDeleted(targets[i], deleted),
 		})
 	}
 	return res, nil
@@ -327,15 +328,16 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 				Avatar:    user.Avatar,
 				Username:  user.Name,
 			},
-			Id:          v.Id,
-			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
-			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetId:    v.TargetId,
-			RootID:      targets[i].rootID,
-			RootType:    targets[i].rootType,
-			Subject:     v.Object,
-			Status:      v.Status,
-			FirstPic:    getFirstPic(pics),
+			Id:            v.Id,
+			Message:       fs.feedMessage(v, targets[i], user.Name, deleted),
+			PublishedAt:   tools.ParseTime(v.CreatedAt),
+			TargetId:      v.TargetId,
+			RootID:        targets[i].rootID,
+			RootType:      targets[i].rootType,
+			Subject:       v.Object,
+			Status:        v.Status,
+			FirstPic:      getFirstPic(pics),
+			TargetDeleted: feedTargetDeleted(targets[i], deleted),
 		})
 	}
 	return res, nil
@@ -365,15 +367,16 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 				Avatar:    user.Avatar,
 				Username:  user.Name,
 			},
-			Id:          v.Id,
-			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
-			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetId:    v.TargetId,
-			RootID:      targets[i].rootID,
-			RootType:    targets[i].rootType,
-			Subject:     v.Object,
-			Status:      v.Status,
-			FirstPic:    getFirstPic(pics),
+			Id:            v.Id,
+			Message:       fs.feedMessage(v, targets[i], user.Name, deleted),
+			PublishedAt:   tools.ParseTime(v.CreatedAt),
+			TargetId:      v.TargetId,
+			RootID:        targets[i].rootID,
+			RootType:      targets[i].rootType,
+			Subject:       v.Object,
+			Status:        v.Status,
+			FirstPic:      getFirstPic(pics),
+			TargetDeleted: feedTargetDeleted(targets[i], deleted),
 		})
 	}
 	return res, nil
@@ -403,15 +406,16 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 				Avatar:    user.Avatar,
 				Username:  user.Name,
 			},
-			Id:          v.Id,
-			Message:     fs.feedMessage(v, targets[i], user.Name, deleted),
-			PublishedAt: tools.ParseTime(v.CreatedAt),
-			TargetId:    v.TargetId,
-			RootID:      targets[i].rootID,
-			RootType:    targets[i].rootType,
-			Subject:     v.Object,
-			Status:      v.Status,
-			FirstPic:    getFirstPic(pics),
+			Id:            v.Id,
+			Message:       fs.feedMessage(v, targets[i], user.Name, deleted),
+			PublishedAt:   tools.ParseTime(v.CreatedAt),
+			TargetId:      v.TargetId,
+			RootID:        targets[i].rootID,
+			RootType:      targets[i].rootType,
+			Subject:       v.Object,
+			Status:        v.Status,
+			FirstPic:      getFirstPic(pics),
+			TargetDeleted: feedTargetDeleted(targets[i], deleted),
 		})
 	}
 	return res, nil
@@ -519,9 +523,14 @@ func (fs *FeedService) deletedPostSet(ctx context.Context, postIDs []int64) (map
 	return deleted, nil
 }
 
+// feedTargetDeleted 判断该 feed 的目标帖子是否已删除。
+func feedTargetDeleted(t feedTarget, deleted map[int64]bool) bool {
+	return t.postID != 0 && deleted[t.postID]
+}
+
 // feedMessage 生成 feed 文案；目标帖子已删时统一改为"帖子已不存在"。
 func (fs *FeedService) feedMessage(f *model.Feed, t feedTarget, name string, deleted map[int64]bool) string {
-	if t.postID != 0 && deleted[t.postID] {
+	if feedTargetDeleted(t, deleted) {
 		return feedTargetDeletedMsg
 	}
 	return processMsg(f, name)
