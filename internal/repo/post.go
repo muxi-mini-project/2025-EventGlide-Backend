@@ -7,6 +7,8 @@ import (
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/model"
+	"github.com/raiki02/EG/pkg/logger"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -14,13 +16,15 @@ type PostRepo struct {
 	dao *dao.PostDao
 	ch  *cache.MultiLevelCache
 	kb  cache.KeyBuilder
+	l   *zap.Logger
 }
 
-func NewPostRepo(dao *dao.PostDao, ch *cache.MultiLevelCache) *PostRepo {
+func NewPostRepo(dao *dao.PostDao, ch *cache.MultiLevelCache, l *logger.LoggerSet) *PostRepo {
 	return &PostRepo{
 		dao: dao,
 		ch:  ch,
 		kb:  cache.NewKeyBuilder("post"),
+		l:   l.Post.Named("repo"),
 	}
 }
 
@@ -48,14 +52,20 @@ func (r *PostRepo) FindPostByName(ctx context.Context, name string, page, limit 
 	return r.dao.FindPostByName(ctx, name, page, limit)
 }
 
-func (r *PostRepo) DeletePost(ctx context.Context, post *model.Post) error {
-	if err := r.dao.DeletePost(ctx, post); err != nil {
-		return err
+func (r *PostRepo) DeletePost(ctx context.Context, post *model.Post) (bool, []int64, error) {
+	deleted, commentIDs, err := r.dao.DeletePost(ctx, post)
+	if err != nil {
+		return false, nil, err
 	}
-	if post.Id == 0 {
-		return nil
+	if !deleted || post.Id == 0 {
+		return deleted, commentIDs, nil
 	}
-	return r.Invalidate(ctx, post.Id)
+	// 缓存失效尽力而为：DB 删除已提交，失效失败只记录，不改变删除结果，
+	// 也不阻断 service 后续的互动缓存清理。
+	if err := r.Invalidate(ctx, post.Id); err != nil {
+		r.l.Error("Failed to invalidate post cache", zap.Error(err), zap.Int64("id", post.Id))
+	}
+	return deleted, commentIDs, nil
 }
 
 func (r *PostRepo) FindPostByUser(ctx context.Context, sid, keyword string, page, limit int) (*model.PaginatedPosts, error) {

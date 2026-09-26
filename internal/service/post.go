@@ -71,12 +71,25 @@ func (ps *PostService) FindPostByName(c context.Context, name string, page, limi
 }
 
 func (ps *PostService) DeletePost(c context.Context, id int64, studentID string) error {
-	if err := ps.pdh.DeletePost(c, &model.Post{
+	deleted, commentIDs, err := ps.pdh.DeletePost(c, &model.Post{
 		Id:        id,
 		StudentID: studentID,
-	}); err != nil {
+	})
+	if err != nil {
 		ps.l.Error("Failed to delete post", zap.Error(err), zap.Int64("id", id))
 		return errs.ErrInternal.Wrap(err)
+	}
+	if !deleted {
+		return nil
+	}
+	// 帖子已删，清掉 Redis 里对应的点赞/收藏 Set 与计数 key。失败只告警，不回滚已提交的删除。
+	if err := ps.id.DeletePostInteractionCache(c, id); err != nil {
+		ps.l.Error("Failed to clear post interaction cache", zap.Error(err), zap.Int64("id", id))
+	}
+	if len(commentIDs) > 0 {
+		if err := ps.id.DeleteCommentInteractionCache(c, commentIDs); err != nil {
+			ps.l.Error("Failed to clear comment interaction cache", zap.Error(err), zap.Int64("id", id))
+		}
 	}
 	return nil
 }

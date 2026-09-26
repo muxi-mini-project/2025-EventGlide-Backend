@@ -24,6 +24,9 @@ type AuditorRepository interface {
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
 	FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error)
 	UpdateIfPending(c context.Context, formId int64, status string) error
+	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
+	FindByID(c context.Context, formId int64) (model.AuditorForm, error)
+	Delete(c context.Context, formId int64) error
 }
 type AuditorRepo struct {
 	db *gorm.DB
@@ -55,6 +58,11 @@ func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string
 func (a *AuditorRepo) Update(c context.Context, formId int64, status string) error {
 	var form model.AuditorForm
 	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).Where("id = ?", formId).First(&form).Error; err != nil {
+		// 表单已被撤销删除（帖子已删）：迟到的审核回调视为幂等成功，避免平台无休止重试。
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			a.l.Info("auditor form already gone on update, treated as success", zap.Int64("formId", formId))
+			return nil
+		}
 		a.l.Error("auditor form not found", zap.Error(err))
 		return err
 	}
@@ -164,6 +172,11 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 		var form model.AuditorForm
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("id = ?", formId).First(&form).Error; err != nil {
+			// 表单已被撤销删除（帖子已删）：对账视为幂等成功，避免与撤销并发时对已删行报错刷日志。
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				a.l.Info("auditor form already gone on reconcile update, treated as success", zap.Int64("formId", formId))
+				return nil
+			}
 			a.l.Error("auditor form not found", zap.Error(err), zap.Int64("formId", formId))
 			return err
 		}
@@ -179,4 +192,36 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 		}
 		return nil
 	})
+}
+
+// FindOrphanPostForms 捞出"帖子已不存在"的帖子审核表单（孤儿）。
+// 帖子为硬删除，故 subject='post' 且 post 表无对应 id 精确等价于"帖子已被删"，
+// 用作待撤销队列，无需额外状态列。
+func (a *AuditorRepo) FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error) {
+	var forms []model.AuditorForm
+	err := a.db.WithContext(c).
+		Where("subject = ?", model.SubjectPost).
+		Where("NOT EXISTS (SELECT 1 FROM post p WHERE p.id = auditor_form.activity_id)").
+		Find(&forms).Error
+	if err != nil {
+		a.l.Error("failed to find orphan auditor forms", zap.Error(err))
+		return nil, err
+	}
+	return forms, nil
+}
+
+// FindByID 按主键回查表单最新状态（撤销前取，避免用到过期快照）。
+func (a *AuditorRepo) FindByID(c context.Context, formId int64) (model.AuditorForm, error) {
+	var form model.AuditorForm
+	err := a.db.WithContext(c).Where("id = ?", formId).First(&form).Error
+	return form, err
+}
+
+// Delete 删除本地表单行。
+func (a *AuditorRepo) Delete(c context.Context, formId int64) error {
+	if err := a.db.WithContext(c).Where("id = ?", formId).Delete(&model.AuditorForm{}).Error; err != nil {
+		a.l.Error("failed to delete auditor form", zap.Error(err), zap.Int64("formId", formId))
+		return err
+	}
+	return nil
 }

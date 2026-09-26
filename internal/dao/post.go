@@ -17,7 +17,7 @@ type PostDaoHdl interface {
 	CreatePost(ctx context.Context, tx *gorm.DB, post *model.Post) error
 	DeleteDraftByStudent(ctx context.Context, tx *gorm.DB, sid string) error
 	FindPostByName(ctx context.Context, name string, page, limit int) (*model.PaginatedPosts, error)
-	DeletePost(ctx context.Context, post *model.Post) error
+	DeletePost(ctx context.Context, post *model.Post) (bool, []int64, error)
 	FindPostByUser(ctx context.Context, sid string, keyword string, page, limit int) (*model.PaginatedPosts, error)
 	CreateDraft(ctx context.Context, tx *gorm.DB, draft *model.PostDraft) error
 	LoadDraft(ctx context.Context, sid string) (model.PostDraft, error)
@@ -101,18 +101,54 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit 
 	}, nil
 }
 
-func (pd *PostDao) DeletePost(ctx context.Context, post *model.Post) error {
-	return pd.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+// DeletePost 删除本人帖子并级联清理评论、评论互动、帖子互动与图片，返回是否确实删除
+// 以及被删评论的 id（供上层清理评论的 Redis 点赞缓存）。
+// 未命中（帖子不存在或非本人）时不触碰任何从属数据，交由上层做幂等处理。
+func (pd *PostDao) DeletePost(ctx context.Context, post *model.Post) (bool, []int64, error) {
+	var deleted bool
+	var commentIDs []int64
+	err := pd.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		res := tx.Where("id = ? and student_id = ?", post.Id, post.StudentID).Delete(&model.Post{})
 		if res.Error != nil {
 			return res.Error
 		}
-		// 仅当帖子确属该学生（删除命中）时才清图片，避免越权删他人帖子的图片。
 		if res.RowsAffected == 0 {
 			return nil
 		}
+		deleted = true
+		ids, err := pd.deletePostComments(ctx, tx, post.Id)
+		if err != nil {
+			return err
+		}
+		commentIDs = ids
+		if err := tx.WithContext(ctx).Where("post_id = ?", post.Id).Delete(&model.UserPostInteraction{}).Error; err != nil {
+			return err
+		}
 		return deleteImagesByOwner(ctx, tx, "post", []int64{post.Id})
 	})
+	return deleted, commentIDs, err
+}
+
+// deletePostComments 删除帖子下的全部评论（一级与回复，按 root_object_id/root_object_type 归属）
+// 及其评论互动，返回被删评论 id。评论无外键且为硬删，不级联清会残留孤儿行与悬空点赞。
+func (pd *PostDao) deletePostComments(ctx context.Context, tx *gorm.DB, postId int64) ([]int64, error) {
+	var ids []int64
+	if err := tx.WithContext(ctx).Model(&model.Comment{}).
+		Where("root_object_id = ? AND root_object_type = ?", postId, model.SubjectPost).
+		Pluck("id", &ids).Error; err != nil {
+		return nil, err
+	}
+	if len(ids) > 0 {
+		if err := tx.WithContext(ctx).Where("comment_id IN ?", ids).Delete(&model.UserCommentInteraction{}).Error; err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.WithContext(ctx).
+		Where("root_object_id = ? AND root_object_type = ?", postId, model.SubjectPost).
+		Delete(&model.Comment{}).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
 }
 
 func (pd *PostDao) FindPostByUser(ctx context.Context, sid string, keyword string, page, limit int) (*model.PaginatedPosts, error) {

@@ -57,7 +57,7 @@ func newCommentServiceForTest(t *testing.T) (*CommentService, sqlmock.Sqlmock) {
 	cfg := &config.Conf{}
 	cfg.Auditor.Effect = "fast"
 	ar := repo.NewActivityRepo(dao.NewActDao(gdb, cfg, ls), cache.NewCache(rdb))
-	pr := repo.NewPostRepo(dao.NewPostDao(gdb, cfg, ls), cache.NewCache(rdb))
+	pr := repo.NewPostRepo(dao.NewPostDao(gdb, cfg, ls), cache.NewCache(rdb), ls)
 	ir := repo.NewInteractionRepo(dao.NewInteractionDao(gdb, ls), nil, ar, pr, lfr)
 	sg := NewSubjectGetter(ar, pr, cd)
 	testMQ := mq.NewMQ(rdb)

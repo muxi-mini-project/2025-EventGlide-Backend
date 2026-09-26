@@ -150,3 +150,97 @@ func TestUpdateIfPendingUpdatesWhenPending(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestUpdateIfPendingMissingIsIdempotent 表单已被撤销删除时，对账更新应幂等成功（与 Update 一致），
+// 避免撤销与对账并发时对已删行报错刷日志。
+func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "pass"); err != nil {
+		t.Fatalf("missing form on reconcile update must be idempotent success, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindOrphanPostFormsSQL 锁定"待撤销表单"的判据：subject='post' 且对应帖子已不存在（孤儿）。
+// 帖子是硬删除，故该判据精确等价于"帖子已被删"，不会误撤活帖子的表单。
+func TestFindOrphanPostFormsSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE subject = \\? AND NOT EXISTS \\(SELECT 1 FROM post p WHERE p.id = auditor_form.activity_id\\)").
+		WithArgs("post").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "pushed_at"}).
+			AddRow(9, 1001, "post", nil))
+
+	forms, err := repo.FindOrphanPostForms(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(forms) != 1 || forms[0].Id != 9 {
+		t.Fatalf("expected the single orphan form, got %+v", forms)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormMissingIsIdempotent 撤销后表单行已消失，迟到的审核回调应视为幂等成功，
+// 而不是报错让平台无休止重试。
+func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(9), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	if err := repo.Update(context.Background(), 9, "pass"); err != nil {
+		t.Fatalf("missing form on update must be idempotent success, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAuditorFormFindByIDSQL 断言按 id 回查表单（撤销前取最新状态）。
+func TestAuditorFormFindByIDSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(9), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject"}).AddRow(9, 1001, "post"))
+
+	form, err := repo.FindByID(context.Background(), 9)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if form.Id != 9 {
+		t.Fatalf("expected form 9, got %d", form.Id)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAuditorFormDeleteSQL 断言按 id 删除本地表单行。
+func TestAuditorFormDeleteSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectExec("DELETE FROM `auditor_form` WHERE id = \\?").
+		WithArgs(int64(9)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Delete(context.Background(), 9); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -57,6 +57,9 @@ func (w *AuditorUploadWorker) run() {
 		safe.Run(w.logger.Auditor, "auditor-worker.posts", func() {
 			w.processWithTimeout(w.processPendingAuditorPosts)
 		})
+		safe.Run(w.logger.Auditor, "auditor-worker.revokes", func() {
+			w.processWithTimeout(w.processPendingAuditorRevokes)
+		})
 	}
 }
 
@@ -119,6 +122,22 @@ func (w *AuditorUploadWorker) processPendingAuditorPosts(ctx context.Context) {
 			CpostReq:  converter.PostToAuditReq(&post),
 		}
 		w.uploadPendingForm(ctx, post.Id, "", SubjectPost, aw, zap.Int64("postId", post.Id))
+	}
+}
+
+// processPendingAuditorRevokes 撤销"帖子已不存在"的审核表单（远端条目 + 本地行）。
+// 单个失败只记日志、不中断整轮；失败的行仍是孤儿，下一轮自动重试。
+func (w *AuditorUploadWorker) processPendingAuditorRevokes(ctx context.Context) {
+	forms, err := w.auditorService.FindOrphanPostForms(ctx)
+	if err != nil {
+		w.logger.Auditor.Error("Failed to find orphan auditor forms", zap.Error(err))
+		return
+	}
+
+	for _, form := range forms {
+		if err := w.auditorService.RevokeForm(ctx, form); err != nil {
+			w.logger.Auditor.Error("Failed to revoke auditor form", zap.Error(err), zap.Int64("formId", form.Id))
+		}
 	}
 }
 

@@ -190,6 +190,26 @@ func (fd *FeedDao) GetPictureFromRootID(ctx context.Context, rootId int64) (stri
 	return "", gorm.ErrRecordNotFound
 }
 
+// PostExistsBatch 一次查询返回给定帖子 id 中仍存在的集合（feed 标记已删内容用，避免逐条 COUNT）。
+func (fd *FeedDao) PostExistsBatch(ctx context.Context, postIds []int64) (map[int64]bool, error) {
+	exists := make(map[int64]bool, len(postIds))
+	if len(postIds) == 0 {
+		return exists, nil
+	}
+	var found []int64
+	if err := fd.db.WithContext(ctx).
+		Table(TableNamePost).
+		Where("id IN ?", postIds).
+		Pluck("id", &found).Error; err != nil {
+		fd.l.Error("Batch check post exists failed", zap.Error(err))
+		return nil, err
+	}
+	for _, id := range found {
+		exists[id] = true
+	}
+	return exists, nil
+}
+
 func (fd *FeedDao) ResolveRootSubjectByID(ctx context.Context, rootId int64) (string, error) {
 	if ok, err := fd.existsByTableAndId(ctx, TableNamePost, rootId); err != nil {
 		return "", err

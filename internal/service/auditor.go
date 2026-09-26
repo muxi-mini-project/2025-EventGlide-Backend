@@ -38,6 +38,8 @@ type AuditorService interface {
 	ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error
 	MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error
 	ReconcilePendingForms(c context.Context)
+	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
+	RevokeForm(c context.Context, form model.AuditorForm) error
 }
 
 type auditorService struct {
@@ -192,6 +194,49 @@ func reuseOrSkip(form model.AuditorForm) (*model.AuditorForm, error) {
 
 func (a *auditorService) MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error {
 	return a.AuditorRepo.MarkPushed(c, FormId, pushedAt)
+}
+
+// FindOrphanPostForms 返回帖子已不存在的审核表单（待撤销队列）。
+func (a *auditorService) FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error) {
+	return a.AuditorRepo.FindOrphanPostForms(c)
+}
+
+// RevokeForm 撤销一条帖子审核表单：远端可能存在的条目调用 DeleteItem 删除，成功后删本地行。
+// 远端失败时保留本地行，交由后台下一轮重试。
+//
+// 判据不用调用方传入的快照，而是按 id 回查最新状态：
+//   - 行已被其它实例撤销 → 幂等成功；
+//   - pushed_at 或 claimed_at 任一非空即视为"可能已上传到远端"（上传成功但标记 pushed_at
+//     失败会保留 claimed_at），据此决定是否调远端；
+//   - 二者皆空 = 从未占用，直接删本地行。
+func (a *auditorService) RevokeForm(c context.Context, form model.AuditorForm) error {
+	current, err := a.AuditorRepo.FindByID(c, form.Id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return err
+	}
+	if current.PushedAt != nil || current.ClaimedAt != nil {
+		req, err := request.NewDeleteReq(uint(current.Id))
+		if err != nil {
+			return errs.ErrUploadFormFailed.Wrap(err)
+		}
+		resp, err := a.MuxiCli.DeleteItem(c, req)
+		if err != nil {
+			a.l.Error("Revoke auditor form failed", zap.Error(err), zap.Int64("formId", current.Id))
+			return err
+		}
+		if resp.Basic.Code != sdkerrorx.SuccessCode {
+			a.l.Error("Auditor delete not accepted",
+				zap.Int("code", resp.Basic.Code),
+				zap.String("msg", resp.Basic.Msg),
+				zap.Int64("formId", current.Id),
+			)
+			return fmt.Errorf("auditor rejected delete: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
+		}
+	}
+	return a.AuditorRepo.Delete(c, current.Id)
 }
 
 // ClaimForUpload 上传前原子占用该表单的上传权；返回租约到期时间与是否获得占用
