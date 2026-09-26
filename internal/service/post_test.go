@@ -42,7 +42,7 @@ func newPostServiceForTest(t *testing.T) (*PostService, *miniredis.Miniredis, sq
 	}
 
 	ls := logger.NewLoggerSet()
-	postRepo := repo.NewPostRepo(dao.NewPostDao(gdb, &config.Conf{}, ls), cache.NewCache(rdb))
+	postRepo := repo.NewPostRepo(dao.NewPostDao(gdb, &config.Conf{}, ls), cache.NewCache(rdb), ls)
 	interRepo := repo.NewInteractionRepo(dao.NewInteractionDao(gdb, ls), nil, nil, nil, cache.NewLikeFavoriteRedis(rdb))
 	return &PostService{pdh: postRepo, id: interRepo, l: ls.Post}, mr, mock
 }

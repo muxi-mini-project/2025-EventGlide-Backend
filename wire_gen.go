@@ -39,7 +39,7 @@ func InitApp() *server.Server {
 	actDao := dao.NewActDao(db, conf, loggerSet)
 	activityRepo := repo.NewActivityRepo(actDao, multiLevelCache)
 	postDao := dao.NewPostDao(db, conf, loggerSet)
-	postRepo := repo.NewPostRepo(postDao, multiLevelCache)
+	postRepo := repo.NewPostRepo(postDao, multiLevelCache, loggerSet)
 	interactionDao := dao.NewInteractionDao(db, loggerSet)
 	likeFavoriteRedis := ioc.NewLikeFavoriteRedis(client)
 	interactionRepo := repo.NewInteractionRepo(interactionDao, userRepo, activityRepo, postRepo, likeFavoriteRedis)
