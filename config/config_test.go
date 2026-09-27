@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -65,7 +66,9 @@ func TestUnmarshalConf(t *testing.T) {
 mysql:
   dsn: "user:pass@tcp(127.0.0.1:3306)/eg?charset=utf8mb4"
   maxIdleConns: 20
-  maxOpenConns: 10
+  maxOpenConns: 100
+  connMaxLifetime: 1h
+  connMaxIdleTime: 10m
 redis:
   addr: "127.0.0.1:6379"
   password: "rpass"
@@ -105,8 +108,11 @@ piiKey: "test-pii-key"
 	if c.Mysql.DSN != "user:pass@tcp(127.0.0.1:3306)/eg?charset=utf8mb4" {
 		t.Fatalf("mysql.dsn = %q", c.Mysql.DSN)
 	}
-	if c.Mysql.MaxIdleConns != 20 || c.Mysql.MaxOpenConns != 10 {
+	if c.Mysql.MaxIdleConns != 20 || c.Mysql.MaxOpenConns != 100 {
 		t.Fatalf("mysql conns = %d/%d", c.Mysql.MaxIdleConns, c.Mysql.MaxOpenConns)
+	}
+	if c.Mysql.ConnMaxLifetime != time.Hour || c.Mysql.ConnMaxIdleTime != 10*time.Minute {
+		t.Fatalf("mysql lifetimes = %v/%v", c.Mysql.ConnMaxLifetime, c.Mysql.ConnMaxIdleTime)
 	}
 	if c.Redis.Addr != "127.0.0.1:6379" {
 		t.Fatalf("redis.addr = %q", c.Redis.Addr)

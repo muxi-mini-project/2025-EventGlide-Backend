@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -31,9 +32,11 @@ type Conf struct {
 }
 
 type MysqlConf struct {
-	DSN          string `yaml:"dsn"`
-	MaxIdleConns int    `yaml:"maxIdleConns"`
-	MaxOpenConns int    `yaml:"maxOpenConns"`
+	DSN             string        `yaml:"dsn"`
+	MaxIdleConns    int           `yaml:"maxIdleConns"`
+	MaxOpenConns    int           `yaml:"maxOpenConns"`
+	ConnMaxLifetime time.Duration `yaml:"connMaxLifetime"`
+	ConnMaxIdleTime time.Duration `yaml:"connMaxIdleTime"`
 }
 
 type RedisConf struct {

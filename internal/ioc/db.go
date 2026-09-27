@@ -22,6 +22,17 @@ import (
 
 const migrateLockName = "eg:migrate"
 
+// 连接生命周期默认值。nacos 未下发这两个键时回退到此处，
+// 保证池中连接会被定期回收，避免被服务端 wait_timeout 或链路代理
+// idle timeout 掐断后残留死连接、复用时抛 invalid connection。
+const (
+	defaultConnMaxLifetime = time.Hour
+	defaultConnMaxIdleTime = 10 * time.Minute
+	// 小于此值视为误配：yaml 里把 duration 写成裸数字（如 3600）会被
+	// viper 解析成 3600ns，回退默认比让连接每次归还即被回收更安全。
+	minConnLifetime = time.Second
+)
+
 func InitDB(cfg *config.Conf) *gorm.DB {
 	model.SetDecryptErrorLogf(func(format string, args ...interface{}) {
 		logger.GetLogger("bff").Warn(fmt.Sprintf(format, args...))
@@ -53,6 +64,9 @@ func InitDB(cfg *config.Conf) *gorm.DB {
 	}
 	sqldb.SetMaxIdleConns(cfg.Mysql.MaxIdleConns)
 	sqldb.SetMaxOpenConns(cfg.Mysql.MaxOpenConns)
+	lifetime, idleTime := connLifetimeOrDefaults(cfg.Mysql.ConnMaxLifetime, cfg.Mysql.ConnMaxIdleTime)
+	sqldb.SetConnMaxLifetime(lifetime)
+	sqldb.SetConnMaxIdleTime(idleTime)
 
 	err = migrate(db)
 	if err != nil {
@@ -60,6 +74,18 @@ func InitDB(cfg *config.Conf) *gorm.DB {
 	}
 
 	return db
+}
+
+// connLifetimeOrDefaults 对未配置或明显误配的连接生命周期回退到默认值，
+// 显式配置的合法值原样透传，便于按链路实际最小超时调优。
+func connLifetimeOrDefaults(lifetime, idle time.Duration) (time.Duration, time.Duration) {
+	if lifetime < minConnLifetime {
+		lifetime = defaultConnMaxLifetime
+	}
+	if idle < minConnLifetime {
+		idle = defaultConnMaxIdleTime
+	}
+	return lifetime, idle
 }
 
 func migrate(db *gorm.DB) error {
