@@ -1,7 +1,9 @@
 mysql:
   dsn: username:password@tcp(addr)/dbname?options
   maxIdleConns: 20 # max-idle-connections
-  maxOpenConns: 10 # max-open-connections
+  maxOpenConns: 100 # max-open-connections
+  connMaxLifetime: 1h # 连接最长存活时间，需小于链路最小超时（wait_timeout / 代理 idle timeout），建议取其 0.7 左右
+  connMaxIdleTime: 10m # 空闲连接最长保留时间
 
 redis:
   addr: addr
