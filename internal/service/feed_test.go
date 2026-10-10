@@ -197,6 +197,28 @@ func TestResolveFeedTargetsNoPostSkipsQuery(t *testing.T) {
 	}
 }
 
+// TestResolveFeedTargetsFailClosedOnQueryError 可访问性批量查询失败时必须 fail-closed：
+// 把所有目标帖标为不可访问，避免 DB 抖动时回吐他人私密帖的文案与缩略图。
+func TestResolveFeedTargetsFailClosedOnQueryError(t *testing.T) {
+	fs, _, mock := newFeedServiceForTest(t)
+	const viewer = "S_viewer"
+	feeds := []*model.Feed{
+		{Object: SubjectPost, TargetId: 1001},
+		{Object: SubjectComment, TargetId: 9009, RootType: SubjectPost, RootID: 1002},
+	}
+
+	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
+		WillReturnError(errors.New("db down"))
+
+	_, deleted := fs.resolveFeedTargets(context.Background(), viewer, feeds)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if !deleted[1001] || !deleted[1002] {
+		t.Fatalf("query error must fail closed (all targets inaccessible), got %+v", deleted)
+	}
+}
+
 // TestFeedTargetDeleted 只有指向帖子且该帖已删时为 true；非帖子目标（postID=0）恒为 false。
 func TestFeedTargetDeleted(t *testing.T) {
 	deleted := map[int64]bool{1001: true}

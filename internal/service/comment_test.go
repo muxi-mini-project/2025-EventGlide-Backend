@@ -642,8 +642,8 @@ func TestCreateCommentOnPrivateOthersPostRejected(t *testing.T) {
 		WithArgs(postID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "owner_id", "owner_type", "url"}))
 	// 可见性判定：userB 非作者，命中 0 行
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND \\(visibility = \\? OR student_id = \\?\\)").
-		WithArgs(postID, model.PostVisibilityPublic, userB).
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND is_checking != \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(postID, "reject", model.PostVisibilityPublic, userB).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	cmt := &model.Comment{
@@ -672,8 +672,8 @@ func TestLoadCommentsOnPrivateOthersPostEmpty(t *testing.T) {
 		WithArgs(postID).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "parent_id", "subject"}).
 			AddRow(1, userA, postID, model.SubjectPost))
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND \\(visibility = \\? OR student_id = \\?\\)").
-		WithArgs(postID, model.PostVisibilityPublic, userB).
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND is_checking != \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(postID, "reject", model.PostVisibilityPublic, userB).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	cmts, err := cs.LoadComments(ctx, postID, userB)

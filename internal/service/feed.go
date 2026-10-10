@@ -523,7 +523,12 @@ func (fs *FeedService) resolveFeedTargets(ctx context.Context, viewer string, fe
 	deleted, err := fs.deletedPostSet(ctx, viewer, postIDs)
 	if err != nil {
 		fs.l.Error("Batch check feed target posts failed", zap.Error(err))
-		return targets, map[int64]bool{}
+		// fail-closed：可访问性查询失败时不能把目标当作可访问，否则会回吐他人私密帖的缩略图与文案。
+		failClosed := make(map[int64]bool, len(postIDs))
+		for _, id := range postIDs {
+			failClosed[id] = true
+		}
+		return targets, failClosed
 	}
 	return targets, deleted
 }

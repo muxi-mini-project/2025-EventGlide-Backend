@@ -253,21 +253,21 @@ func (pd *PostDao) FindPostById(ctx context.Context, id int64) (model.Post, erro
 	return post, nil
 }
 
-// FindVisiblePostById 取 viewer 有权查看的帖子：公开帖，或 viewer 本人发布的帖子。
+// FindVisiblePostById 取 viewer 有权查看的帖子：审核可见（SetEffect）且（公开帖或 viewer 本人帖）。
 // 不可见与不存在同样返回 gorm.ErrRecordNotFound，不区分，避免泄露私密帖存在性。
 func (pd *PostDao) FindVisiblePostById(ctx context.Context, id int64, viewer string) (model.Post, error) {
 	var post model.Post
-	err := pd.db.WithContext(ctx).Scopes(pd.VisibleTo(viewer)).Preload("Images").Where("id = ?", id).First(&post).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.VisibleTo(viewer)).Preload("Images").Where("id = ?", id).First(&post).Error
 	if err != nil {
 		return model.Post{}, err
 	}
 	return post, nil
 }
 
-// IsPostVisibleTo 判断 viewer 是否可查看指定帖子（公开或本人帖）。帖子不存在返回 false。
+// IsPostVisibleTo 判断 viewer 是否可查看指定帖子（审核可见且公开或本人帖）。帖子不存在返回 false。
 func (pd *PostDao) IsPostVisibleTo(ctx context.Context, id int64, viewer string) (bool, error) {
 	var count int64
-	err := pd.db.WithContext(ctx).Model(&model.Post{}).Scopes(pd.VisibleTo(viewer)).Where("id = ?", id).Count(&count).Error
+	err := pd.db.WithContext(ctx).Model(&model.Post{}).Scopes(pd.SetEffect(), pd.VisibleTo(viewer)).Where("id = ?", id).Count(&count).Error
 	if err != nil {
 		return false, err
 	}
