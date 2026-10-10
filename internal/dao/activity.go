@@ -273,6 +273,31 @@ func (ad *ActDao) FindActByOwnerID(c context.Context, s string, page, limit int)
 	}, nil
 }
 
+// FindActByOwnerIDAll 仅用于本人查看自己全部活动：返回其全部审核状态（含 pending_signers/
+// pending_auditor/pass/reject），不套 SetEffect——本人应能看到自己的审核中与被拒活动。
+// 仍限定 end_time > now，与既有"我的活动"列表的时间维度一致。勿用于查看他人。
+func (ad *ActDao) FindActByOwnerIDAll(c context.Context, s string, page, limit int) (*model.PaginatedActivities, error) {
+	var as []model.Activity
+	var total int64
+	offset := (page - 1) * limit
+
+	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ?", s).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
+	if err != nil {
+		return nil, err
+	}
+	err = ad.db.WithContext(c).Where("student_id = ?", s).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &model.PaginatedActivities{
+		Total: total,
+		Page:  page,
+		Limit: limit,
+		Acts:  as,
+	}, nil
+}
+
 func (ad *ActDao) FindActBySearches(c context.Context, a *req.ActSearchReq) (*model.PaginatedActivities, error) {
 	var as []model.Activity
 	var total int64

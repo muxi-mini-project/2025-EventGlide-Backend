@@ -316,7 +316,7 @@
                 "tags": [
                     "Activity"
                 ],
-                "summary": "通过创建者id查找活动",
+                "summary": "通过创建者id查找活动（本人全部状态，含审核中与被拒）",
                 "parameters": [
                     {
                         "type": "string",
