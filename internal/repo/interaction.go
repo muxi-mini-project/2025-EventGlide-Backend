@@ -37,6 +37,11 @@ func (r *InteractionRepo) GetUserIDByStudentID(ctx context.Context, studentID st
 	return int64(user.Id), nil
 }
 
+// IsPostVisibleTo 判断 viewer 是否可查看指定帖子（公开或本人帖），供互动的写兜底校验。
+func (r *InteractionRepo) IsPostVisibleTo(ctx context.Context, postID int64, viewer string) (bool, error) {
+	return r.posts.IsPostVisibleTo(ctx, postID, viewer)
+}
+
 // DeletePostInteractionCache 清掉帖子在 Redis 的点赞/收藏 Set 与计数 key（帖子被删时调用）。
 func (r *InteractionRepo) DeletePostInteractionCache(ctx context.Context, postID int64) error {
 	return r.lfr.DeleteInteractions(ctx, cache.SubjectPost, []int64{postID})
@@ -213,12 +218,12 @@ func (r *InteractionRepo) GetUserLikedActivityIds(ctx context.Context, userId in
 	return r.dao.GetUserLikedActivityIds(ctx, userId, page, limit)
 }
 
-func (r *InteractionRepo) GetUserCollectedPostIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
-	return r.dao.GetUserCollectedPostIds(ctx, userId, page, limit)
+func (r *InteractionRepo) GetUserCollectedPostIds(ctx context.Context, userId int64, viewer string, page, limit int) (*model.PaginatedPostIds, error) {
+	return r.dao.GetUserCollectedPostIds(ctx, userId, viewer, page, limit)
 }
 
-func (r *InteractionRepo) GetUserLikedPostIds(ctx context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
-	return r.dao.GetUserLikedPostIds(ctx, userId, page, limit)
+func (r *InteractionRepo) GetUserLikedPostIds(ctx context.Context, userId int64, viewer string, page, limit int) (*model.PaginatedPostIds, error) {
+	return r.dao.GetUserLikedPostIds(ctx, userId, viewer, page, limit)
 }
 
 func (r *InteractionRepo) GetUserActivityInteractionStatuses(ctx context.Context, userId int64, activityIds []int64) ([]int64, []int64, error) {

@@ -289,7 +289,7 @@ func (us *UserService) LoadCollectPost(ctx context.Context, studentId string, pa
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 
-	paginatedIds, err := us.idh.GetUserCollectedPostIds(ctx, int64(user.Id), page, limit)
+	paginatedIds, err := us.idh.GetUserCollectedPostIds(ctx, int64(user.Id), studentId, page, limit)
 	if err != nil {
 		us.l.Error("Failed to get collected post ids", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrInternal.Wrap(err)
@@ -299,7 +299,7 @@ func (us *UserService) LoadCollectPost(ctx context.Context, studentId string, pa
 		return &model.PaginatedPosts{Total: paginatedIds.Total, Page: page, Limit: limit, Posts: []model.Post{}}, nil
 	}
 
-	posts, err := us.pdh.FindPostsByIds(ctx, paginatedIds.Ids)
+	posts, err := us.pdh.FindPostsByIds(ctx, paginatedIds.Ids, studentId)
 	if err != nil {
 		us.l.Error("Failed to find posts by ids", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
@@ -345,7 +345,7 @@ func (us *UserService) LoadLikePost(ctx context.Context, studentId string, page,
 		return nil, errs.ErrUserNotFound.Wrap(err)
 	}
 
-	paginatedIds, err := us.idh.GetUserLikedPostIds(ctx, int64(user.Id), page, limit)
+	paginatedIds, err := us.idh.GetUserLikedPostIds(ctx, int64(user.Id), studentId, page, limit)
 	if err != nil {
 		us.l.Error("Failed to get liked post ids", zap.Error(err), zap.String("studentId", studentId))
 		return nil, errs.ErrInternal.Wrap(err)
@@ -355,7 +355,7 @@ func (us *UserService) LoadLikePost(ctx context.Context, studentId string, page,
 		return &model.PaginatedPosts{Total: paginatedIds.Total, Page: page, Limit: limit, Posts: []model.Post{}}, nil
 	}
 
-	posts, err := us.pdh.FindPostsByIds(ctx, paginatedIds.Ids)
+	posts, err := us.pdh.FindPostsByIds(ctx, paginatedIds.Ids, studentId)
 	if err != nil {
 		us.l.Error("Failed to find posts by ids", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)

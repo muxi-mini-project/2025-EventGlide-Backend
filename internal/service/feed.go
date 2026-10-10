@@ -271,7 +271,7 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 		fs.l.Error("Get Like Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	targets, deleted := fs.resolveFeedTargets(ctx, likes)
+	targets, deleted := fs.resolveFeedTargets(ctx, sid, likes)
 	var res []model.FeedLikeDetail
 	for i, v := range likes {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
@@ -279,9 +279,14 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 			fs.l.Error("Get User Info when get like feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
-		if err != nil {
-			fs.l.Error("Get Picture From Obj when get like feed Failed", zap.Error(err))
+		targetDeleted := feedTargetDeleted(targets[i], deleted)
+		firstPic := ""
+		if !targetDeleted {
+			pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
+			if err != nil {
+				fs.l.Error("Get Picture From Obj when get like feed Failed", zap.Error(err))
+			}
+			firstPic = getFirstPic(pics)
 		}
 		res = append(res, model.FeedLikeDetail{
 			Userinfo: model.UserInfo{
@@ -297,8 +302,8 @@ func (fs *FeedService) GetLikeFeed(ctx context.Context, sid string) ([]model.Fee
 			RootType:      targets[i].rootType,
 			Subject:       v.Object,
 			Status:        v.Status,
-			FirstPic:      getFirstPic(pics),
-			TargetDeleted: feedTargetDeleted(targets[i], deleted),
+			FirstPic:      firstPic,
+			TargetDeleted: targetDeleted,
 		})
 	}
 	return res, nil
@@ -310,7 +315,7 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 		fs.l.Error("Get Collect Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	targets, deleted := fs.resolveFeedTargets(ctx, collects)
+	targets, deleted := fs.resolveFeedTargets(ctx, sid, collects)
 	var res []model.FeedCollectDetail
 	for i, v := range collects {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
@@ -318,9 +323,14 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 			fs.l.Error("Get User Info when get collect feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		pics, err := fs.fd.GetPictureFromObj(ctx, v.TargetId, v.Object)
-		if err != nil {
-			fs.l.Error("Get Picture From Obj when get collect feed Failed", zap.Error(err))
+		targetDeleted := feedTargetDeleted(targets[i], deleted)
+		firstPic := ""
+		if !targetDeleted {
+			pics, err := fs.fd.GetPictureFromObj(ctx, v.TargetId, v.Object)
+			if err != nil {
+				fs.l.Error("Get Picture From Obj when get collect feed Failed", zap.Error(err))
+			}
+			firstPic = getFirstPic(pics)
 		}
 		res = append(res, model.FeedCollectDetail{
 			Userinfo: model.UserInfo{
@@ -336,8 +346,8 @@ func (fs *FeedService) GetCollectFeed(ctx context.Context, sid string) ([]model.
 			RootType:      targets[i].rootType,
 			Subject:       v.Object,
 			Status:        v.Status,
-			FirstPic:      getFirstPic(pics),
-			TargetDeleted: feedTargetDeleted(targets[i], deleted),
+			FirstPic:      firstPic,
+			TargetDeleted: targetDeleted,
 		})
 	}
 	return res, nil
@@ -349,7 +359,7 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 		fs.l.Error("Get Comment Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	targets, deleted := fs.resolveFeedTargets(ctx, comments)
+	targets, deleted := fs.resolveFeedTargets(ctx, sid, comments)
 	var res []model.FeedCommentDetail
 	for i, v := range comments {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
@@ -357,9 +367,14 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 			fs.l.Error("Get User Info when get comment feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
-		if err != nil {
-			fs.l.Error("Get Picture From Obj when get comment feed Failed", zap.Error(err))
+		targetDeleted := feedTargetDeleted(targets[i], deleted)
+		firstPic := ""
+		if !targetDeleted {
+			pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
+			if err != nil {
+				fs.l.Error("Get Picture From Obj when get comment feed Failed", zap.Error(err))
+			}
+			firstPic = getFirstPic(pics)
 		}
 		res = append(res, model.FeedCommentDetail{
 			Userinfo: model.UserInfo{
@@ -375,8 +390,8 @@ func (fs *FeedService) GetCommentFeed(ctx context.Context, sid string) ([]model.
 			RootType:      targets[i].rootType,
 			Subject:       v.Object,
 			Status:        v.Status,
-			FirstPic:      getFirstPic(pics),
-			TargetDeleted: feedTargetDeleted(targets[i], deleted),
+			FirstPic:      firstPic,
+			TargetDeleted: targetDeleted,
 		})
 	}
 	return res, nil
@@ -388,7 +403,7 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 		fs.l.Error("Get At Feed List Failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	targets, deleted := fs.resolveFeedTargets(ctx, ats)
+	targets, deleted := fs.resolveFeedTargets(ctx, sid, ats)
 	var res []model.FeedAtDetail
 	for i, v := range ats {
 		user, err := fs.ud.GetUserInfo(ctx, v.StudentID)
@@ -396,9 +411,14 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 			fs.l.Error("Get User Info when get at feed Failed", zap.Error(err))
 			return nil, errs.ErrUserNotFound.Wrap(err)
 		}
-		pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
-		if err != nil {
-			fs.l.Error("Get Picture From Obj when get at feed Failed", zap.Error(err))
+		targetDeleted := feedTargetDeleted(targets[i], deleted)
+		firstPic := ""
+		if !targetDeleted {
+			pics, err := fs.loadFeedPicture(ctx, v, targets[i].rootID, targets[i].rootType)
+			if err != nil {
+				fs.l.Error("Get Picture From Obj when get at feed Failed", zap.Error(err))
+			}
+			firstPic = getFirstPic(pics)
 		}
 		res = append(res, model.FeedAtDetail{
 			Userinfo: model.UserInfo{
@@ -414,8 +434,8 @@ func (fs *FeedService) GetAtFeed(ctx context.Context, sid string) ([]model.FeedA
 			RootType:      targets[i].rootType,
 			Subject:       v.Object,
 			Status:        v.Status,
-			FirstPic:      getFirstPic(pics),
-			TargetDeleted: feedTargetDeleted(targets[i], deleted),
+			FirstPic:      firstPic,
+			TargetDeleted: targetDeleted,
 		})
 	}
 	return res, nil
@@ -482,9 +502,10 @@ func feedPostID(f *model.Feed, rootID int64, rootType string) int64 {
 	}
 }
 
-// resolveFeedTargets 解析每条 feed 的根对象，并一次性批量判断其帖子是否存在（单次 IN 查询），
-// 返回与 feeds 对齐的目标信息与"已删除帖子"集合，供逐条渲染文案时使用。
-func (fs *FeedService) resolveFeedTargets(ctx context.Context, feeds []*model.Feed) ([]feedTarget, map[int64]bool) {
+// resolveFeedTargets 解析每条 feed 的根对象，并一次性批量判断其帖子对 viewer 是否可访问（单次 IN 查询），
+// 返回与 feeds 对齐的目标信息与"不可访问帖子"集合，供逐条渲染文案时使用。
+// viewer 为 feed 列表的接收者；私密帖对其作者本人仍可访问，对其他人按"不存在"处理。
+func (fs *FeedService) resolveFeedTargets(ctx context.Context, viewer string, feeds []*model.Feed) ([]feedTarget, map[int64]bool) {
 	targets := make([]feedTarget, len(feeds))
 	postIDs := make([]int64, 0, len(feeds))
 	seen := make(map[int64]struct{}, len(feeds))
@@ -499,26 +520,31 @@ func (fs *FeedService) resolveFeedTargets(ctx context.Context, feeds []*model.Fe
 			}
 		}
 	}
-	deleted, err := fs.deletedPostSet(ctx, postIDs)
+	deleted, err := fs.deletedPostSet(ctx, viewer, postIDs)
 	if err != nil {
 		fs.l.Error("Batch check feed target posts failed", zap.Error(err))
-		return targets, map[int64]bool{}
+		// fail-closed：可访问性查询失败时不能把目标当作可访问，否则会回吐他人私密帖的缩略图与文案。
+		failClosed := make(map[int64]bool, len(postIDs))
+		for _, id := range postIDs {
+			failClosed[id] = true
+		}
+		return targets, failClosed
 	}
 	return targets, deleted
 }
 
-// deletedPostSet 批量查询帖子是否存在，返回"已删除"的帖子 id 集合。
-func (fs *FeedService) deletedPostSet(ctx context.Context, postIDs []int64) (map[int64]bool, error) {
+// deletedPostSet 批量查询帖子对 viewer 是否可访问，返回"不可访问"（已删或私密他人帖）的帖子 id 集合。
+func (fs *FeedService) deletedPostSet(ctx context.Context, viewer string, postIDs []int64) (map[int64]bool, error) {
 	if len(postIDs) == 0 {
 		return map[int64]bool{}, nil
 	}
-	existing, err := fs.fd.PostExistsBatch(ctx, postIDs)
+	accessible, err := fs.fd.AccessiblePostBatch(ctx, viewer, postIDs)
 	if err != nil {
 		return nil, err
 	}
 	deleted := make(map[int64]bool, len(postIDs))
 	for _, id := range postIDs {
-		deleted[id] = !existing[id]
+		deleted[id] = !accessible[id]
 	}
 	return deleted, nil
 }

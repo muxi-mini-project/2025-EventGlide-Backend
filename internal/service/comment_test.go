@@ -11,6 +11,7 @@ import (
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/mq"
 	"github.com/raiki02/EG/internal/repo"
@@ -618,6 +619,69 @@ func TestCreateSelfCommentStillCounts(t *testing.T) {
 	_, err := cs.CreateComment(ctx, cmt, userA)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestCreateCommentOnPrivateOthersPostRejected 评论他人私密帖按"帖子不存在"拒绝，
+// 且不得写入评论（写兜底：读路径挡住入口后，防旧 id 直连绕过）。
+func TestCreateCommentOnPrivateOthersPostRejected(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+	const postID = int64(5001)
+
+	mockGetUserInfo(mock, userB, "Bob")
+	// SubjectGetter 取帖子（作者 A，私密）
+	mock.ExpectQuery("SELECT \\* FROM `post` WHERE id = \\? ORDER BY `post`\\.`id` LIMIT \\?").
+		WithArgs(postID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "title", "introduce", "visibility", "is_checking"}).
+			AddRow(postID, userA, "私密帖", "正文", model.PostVisibilityPrivate, "pass"))
+	mock.ExpectQuery("SELECT \\* FROM `image` WHERE `image`.`owner_id` = \\?").
+		WithArgs(postID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "owner_id", "owner_type", "url"}))
+	// 可见性判定：userB 非作者，命中 0 行
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND is_checking != \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(postID, "reject", model.PostVisibilityPublic, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	cmt := &model.Comment{
+		Id:        20,
+		StudentID: userB,
+		Content:   "偷偷评论",
+		ParentID:  postID,
+		Subject:   SubjectPost,
+	}
+	_, err := cs.CreateComment(ctx, cmt, userB)
+	if !errors.Is(err, errs.ErrPostNotFound) {
+		t.Fatalf("expected ErrPostNotFound, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestLoadCommentsOnPrivateOthersPostEmpty 加载他人私密帖的评论返回空，避免通过评论列表泄露其存在与内容。
+func TestLoadCommentsOnPrivateOthersPostEmpty(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+	const postID = int64(5001)
+
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE parent_id = \\? AND subject <> 'comment' ORDER BY created_at ASC, id ASC").
+		WithArgs(postID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "parent_id", "subject"}).
+			AddRow(1, userA, postID, model.SubjectPost))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND is_checking != \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(postID, "reject", model.PostVisibilityPublic, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	cmts, err := cs.LoadComments(ctx, postID, userB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmts) != 0 {
+		t.Fatalf("private post comments must be hidden from non-author, got %d", len(cmts))
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)

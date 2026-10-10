@@ -51,7 +51,6 @@ func TestFeedListTargetDeletedFlag(t *testing.T) {
 		feedSQL = "SELECT \\* FROM `feed` WHERE receiver = \\? and action = \\? and student_id != \\? ORDER BY created_at ASC, id ASC"
 		userSQL = "SELECT \\* FROM `user` WHERE student_id = \\? ORDER BY `user`.`id` LIMIT \\?"
 		postSQL = "SELECT `id` FROM `post` WHERE id IN \\(\\?\\)"
-		imgSQL  = "SELECT `url` FROM `image` WHERE owner_id = \\? AND owner_type = \\? ORDER BY id ASC LIMIT \\?"
 	)
 
 	cases := []struct {
@@ -100,15 +99,13 @@ func TestFeedListTargetDeletedFlag(t *testing.T) {
 			mock.ExpectQuery(feedSQL).WithArgs(viewer, tc.action, viewer).
 				WillReturnRows(sqlmock.NewRows([]string{"id", "target_id", "root_id", "root_type", "object", "student_id", "receiver", "created_at", "action", "status"}).
 					AddRow(1, tc.targetID, tc.rootID, tc.rootType, tc.object, actor, viewer, time.Now(), tc.action, "未读"))
-			// resolveFeedTargets 先批量判断目标帖子是否存在：已删返回空
-			mock.ExpectQuery(postSQL).WithArgs(postID).
+			// resolveFeedTargets 批量判断目标帖子对 viewer 是否可访问：已删返回空
+			mock.ExpectQuery(postSQL).WithArgs(postID, model.PostVisibilityPublic, viewer, "reject").
 				WillReturnRows(sqlmock.NewRows([]string{"id"}))
 			mock.ExpectQuery(userSQL).WithArgs(actor, 1).
 				WillReturnRows(sqlmock.NewRows([]string{"id", "college", "student_id", "name", "real_name", "avatar", "school"}).
 					AddRow(1, "", actor, "张三", "", "http://avatar", ""))
-			// 帖子图片也随级联删除
-			mock.ExpectQuery(imgSQL).WithArgs(postID, "post", 1).
-				WillReturnRows(sqlmock.NewRows([]string{"url"}))
+			// 目标帖已不可访问：不再取图（避免泄露私密/已删帖缩略图）
 
 			deleted, msg, err := tc.run(fs)
 			if err != nil {
@@ -127,10 +124,11 @@ func TestFeedListTargetDeletedFlag(t *testing.T) {
 	}
 }
 
-// TestResolveFeedTargetsBatchesPostExistence 一次批量查询判断所有 feed 目标帖子是否存在，
+// TestResolveFeedTargetsBatchesPostExistence 一次批量查询判断所有 feed 目标帖子对 viewer 是否可访问，
 // 而不是逐条 COUNT（feed 列表 N+1 回归点）。activity 目标不参与查询。
 func TestResolveFeedTargetsBatchesPostExistence(t *testing.T) {
 	fs, _, mock := newFeedServiceForTest(t)
+	const viewer = "S_viewer"
 	feeds := []*model.Feed{
 		{Object: SubjectPost, TargetId: 1001},
 		{Object: SubjectComment, TargetId: 9009, RootType: SubjectPost, RootID: 1002},
@@ -138,10 +136,10 @@ func TestResolveFeedTargetsBatchesPostExistence(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
-		WithArgs(int64(1001), int64(1002)).
+		WithArgs(int64(1001), int64(1002), model.PostVisibilityPublic, viewer, "reject").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
 
-	targets, deleted := fs.resolveFeedTargets(context.Background(), feeds)
+	targets, deleted := fs.resolveFeedTargets(context.Background(), viewer, feeds)
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
@@ -150,26 +148,27 @@ func TestResolveFeedTargetsBatchesPostExistence(t *testing.T) {
 		t.Fatalf("unexpected targets: %+v", targets)
 	}
 	if deleted[1001] {
-		t.Fatalf("1001 exists, must not be marked deleted")
+		t.Fatalf("1001 accessible, must not be marked deleted")
 	}
 	if !deleted[1002] {
-		t.Fatalf("1002 missing, must be marked deleted")
+		t.Fatalf("1002 inaccessible, must be marked deleted")
 	}
 }
 
-// TestResolveFeedTargetsDedupsPostIDs 同一帖子被多条 feed 引用时，存在性查询只带去重后的 id。
+// TestResolveFeedTargetsDedupsPostIDs 同一帖子被多条 feed 引用时，可访问性查询只带去重后的 id。
 func TestResolveFeedTargetsDedupsPostIDs(t *testing.T) {
 	fs, _, mock := newFeedServiceForTest(t)
+	const viewer = "S_viewer"
 	feeds := []*model.Feed{
 		{Object: SubjectPost, TargetId: 1001},
 		{Object: SubjectComment, TargetId: 9009, RootType: SubjectPost, RootID: 1001},
 	}
 
 	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?\\)").
-		WithArgs(int64(1001)).
+		WithArgs(int64(1001), model.PostVisibilityPublic, viewer, "reject").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
 
-	targets, deleted := fs.resolveFeedTargets(context.Background(), feeds)
+	targets, deleted := fs.resolveFeedTargets(context.Background(), viewer, feeds)
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
@@ -177,11 +176,11 @@ func TestResolveFeedTargetsDedupsPostIDs(t *testing.T) {
 		t.Fatalf("unexpected targets: %+v", targets)
 	}
 	if deleted[1001] {
-		t.Fatalf("1001 exists, must not be marked deleted")
+		t.Fatalf("1001 accessible, must not be marked deleted")
 	}
 }
 
-// TestResolveFeedTargetsNoPostSkipsQuery 没有任何帖子目标时不发起存在性查询。
+// TestResolveFeedTargetsNoPostSkipsQuery 没有任何帖子目标时不发起可访问性查询。
 func TestResolveFeedTargetsNoPostSkipsQuery(t *testing.T) {
 	fs, _, mock := newFeedServiceForTest(t)
 	feeds := []*model.Feed{{Object: SubjectActivity, TargetId: 3003}}
@@ -189,12 +188,34 @@ func TestResolveFeedTargetsNoPostSkipsQuery(t *testing.T) {
 	// 注册一个匹配任意 SQL 且不应被消费的期望：任何查询（无论形状）都会消费它，ExpectationsWereMet 将返回 nil。
 	mock.ExpectQuery(".*").WillReturnError(errors.New("no query expected when there are no post targets"))
 
-	_, deleted := fs.resolveFeedTargets(context.Background(), feeds)
+	_, deleted := fs.resolveFeedTargets(context.Background(), "S_viewer", feeds)
 	if len(deleted) != 0 {
 		t.Fatalf("expected empty deleted set, got %+v", deleted)
 	}
 	if mock.ExpectationsWereMet() == nil {
-		t.Fatalf("post-existence query must be skipped when there are no post targets")
+		t.Fatalf("post-accessibility query must be skipped when there are no post targets")
+	}
+}
+
+// TestResolveFeedTargetsFailClosedOnQueryError 可访问性批量查询失败时必须 fail-closed：
+// 把所有目标帖标为不可访问，避免 DB 抖动时回吐他人私密帖的文案与缩略图。
+func TestResolveFeedTargetsFailClosedOnQueryError(t *testing.T) {
+	fs, _, mock := newFeedServiceForTest(t)
+	const viewer = "S_viewer"
+	feeds := []*model.Feed{
+		{Object: SubjectPost, TargetId: 1001},
+		{Object: SubjectComment, TargetId: 9009, RootType: SubjectPost, RootID: 1002},
+	}
+
+	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
+		WillReturnError(errors.New("db down"))
+
+	_, deleted := fs.resolveFeedTargets(context.Background(), viewer, feeds)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if !deleted[1001] || !deleted[1002] {
+		t.Fatalf("query error must fail closed (all targets inaccessible), got %+v", deleted)
 	}
 }
 

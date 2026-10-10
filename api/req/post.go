@@ -28,6 +28,11 @@ type FindPostByIdReq struct {
 	Id utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
 }
 
+type SetPostVisibilityReq struct {
+	Id         utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
+	Visibility string            `json:"visibility" validate:"required,oneof=public private"`
+}
+
 type FindByUserIDReq struct {
 	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
 	Page   int    `json:"page,omitempty"`

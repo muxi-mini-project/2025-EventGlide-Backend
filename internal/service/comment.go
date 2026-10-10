@@ -21,7 +21,7 @@ type CommentServiceHdl interface {
 	CreateComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error)
 	DeleteComment(c context.Context, targetID int64, studentID string) error
 	AnswerComment(c context.Context, cmt *model.Comment, studentID string) (*model.Comment, error)
-	LoadComments(c context.Context, parentID int64) ([]model.Comment, error)
+	LoadComments(c context.Context, parentID int64, viewer string) ([]model.Comment, error)
 	EnrichComments(c context.Context, cmts []model.Comment, viewerID string) []model.CommentDetail
 	EnrichComment(c context.Context, cmt *model.Comment, viewerID string) model.CommentDetail
 	EnrichReply(c context.Context, cmt *model.Comment, viewerID string) model.ReplyDetail
@@ -109,6 +109,18 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		if err != nil {
 			cs.l.Error("Error get root subject failed", zap.Error(err))
 			return nil, err
+		}
+	}
+
+	// 可见性兜底：评论/回复所属的帖子若为他人私密帖，按不存在拒绝，避免用旧 id 直连写入。
+	if targetPostID := commentTargetPostID(subject, rootSubject); targetPostID != 0 {
+		visible, err := cs.id.IsPostVisibleTo(c, targetPostID, studentID)
+		if err != nil {
+			cs.l.Error("Failed to check post visibility when commenting", zap.Error(err), zap.Int64("postId", targetPostID))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return nil, errs.ErrPostNotFound
 		}
 	}
 
@@ -282,6 +294,18 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		return nil, err
 	}
 
+	// 可见性兜底：根对象为他人私密帖时按不存在拒绝，避免用旧 id 直连写入。
+	if root.Subject == SubjectPost {
+		visible, err := cs.id.IsPostVisibleTo(c, root.Id, studentID)
+		if err != nil {
+			cs.l.Error("Failed to check post visibility when answering", zap.Error(err), zap.Int64("postId", root.Id))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return nil, errs.ErrPostNotFound
+		}
+	}
+
 	err = cs.cd.AnswerComment(c, cmt)
 	if err != nil {
 		cs.l.Error("Error comment answer failed", zap.Error(err))
@@ -325,11 +349,24 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	return cmt, nil
 }
 
-func (cs *CommentService) LoadComments(c context.Context, parentID int64) ([]model.Comment, error) {
+// LoadComments 加载目标（帖子/活动）下的一级评论。目标为他人私密帖时返回空，
+// 与"帖子不存在"表现一致，避免通过评论列表泄露私密帖的存在与内容。
+func (cs *CommentService) LoadComments(c context.Context, parentID int64, viewer string) ([]model.Comment, error) {
 	cmts, err := cs.cd.LoadComments(c, parentID)
 	if err != nil {
 		cs.l.Error("Error load comments failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
+	}
+	if len(cmts) == 0 || cmts[0].Subject != SubjectPost {
+		return cmts, nil
+	}
+	visible, err := cs.id.IsPostVisibleTo(c, parentID, viewer)
+	if err != nil {
+		cs.l.Error("Failed to check post visibility when loading comments", zap.Error(err), zap.Int64("postId", parentID))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	if !visible {
+		return []model.Comment{}, nil
 	}
 	return cmts, nil
 }
@@ -486,6 +523,17 @@ func liveParentUserName(cmt *model.Comment, userMap map[string]*model.User) stri
 		return user.Name
 	}
 	return ""
+}
+
+// commentTargetPostID 返回评论/回复所挂靠的帖子 id；目标不是帖子（活动等）时返回 0。
+func commentTargetPostID(subject, rootSubject SubjectInfo) int64 {
+	if subject.Subject == SubjectPost {
+		return subject.Id
+	}
+	if rootSubject.Subject == SubjectPost {
+		return rootSubject.Id
+	}
+	return 0
 }
 
 func (cs *CommentService) IncreaseCommentNum(ctx context.Context, subject SubjectInfo, commenterID string) error {

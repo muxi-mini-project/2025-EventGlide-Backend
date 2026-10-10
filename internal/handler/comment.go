@@ -100,7 +100,7 @@ func (ch *CommentHandler) DeleteComment(ctx *gin.Context, req_ req.DeleteComment
 // @Success 200 {object} resp.Resp{data=[]resp.CommentResp}
 // @Router /comment/load/{id} [get]
 func (ch *CommentHandler) LoadComments(ctx *gin.Context, req_ req.LoadCommentsReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	cmts, err := ch.cs.LoadComments(ctx, int64(req_.Id))
+	cmts, err := ch.cs.LoadComments(ctx, int64(req_.Id), claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

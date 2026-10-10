@@ -268,6 +268,19 @@ definitions:
     - password
     - studentId
     type: object
+  req.SetPostVisibilityReq:
+    properties:
+      id:
+        type: integer
+      visibility:
+        enum:
+        - public
+        - private
+        type: string
+    required:
+    - id
+    - visibility
+    type: object
   req.Signer:
     properties:
       name:
@@ -665,6 +678,8 @@ definitions:
         type: string
       userInfo:
         $ref: '#/definitions/resp.UserInfo'
+      visibility:
+        type: string
     type: object
   resp.LoadActivitiesDraftResp:
     properties:
@@ -1508,6 +1523,37 @@ paths:
                   $ref: '#/definitions/resp.ListPostsResp'
               type: object
       summary: 通过bid返回帖子详情
+      tags:
+      - Post
+  /post/{id}/visibility:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 帖子id
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 可见性
+        in: body
+        name: req
+        required: true
+        schema:
+          $ref: '#/definitions/req.SetPostVisibilityReq'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/resp.Resp'
+      summary: 设置帖子可见性（公开/私密），仅作者可操作
       tags:
       - Post
   /post/all:

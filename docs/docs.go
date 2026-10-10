@@ -1527,6 +1527,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/post/{id}/visibility": {
+            "patch": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Post"
+                ],
+                "summary": "设置帖子可见性（公开/私密），仅作者可操作",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "帖子id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "可见性",
+                        "name": "req",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.SetPostVisibilityReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/resp.Resp"
+                        }
+                    }
+                }
+            }
+        },
         "/user/avatar": {
             "post": {
                 "description": "not finished",
@@ -2549,6 +2596,25 @@ const docTemplate = `{
                 }
             }
         },
+        "req.SetPostVisibilityReq": {
+            "type": "object",
+            "required": [
+                "id",
+                "visibility"
+            ],
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "visibility": {
+                    "type": "string",
+                    "enum": [
+                        "public",
+                        "private"
+                    ]
+                }
+            }
+        },
         "req.Signer": {
             "type": "object",
             "properties": {
@@ -3152,6 +3218,9 @@ const docTemplate = `{
                 },
                 "userInfo": {
                     "$ref": "#/definitions/resp.UserInfo"
+                },
+                "visibility": {
+                    "type": "string"
                 }
             }
         },

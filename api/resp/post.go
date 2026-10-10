@@ -11,6 +11,7 @@ type CreatePostResp struct {
 	Introduce  string   `json:"introduce"`
 	ShowImg    []string `json:"showImg"`
 	IsChecking string   `json:"isChecking"`
+	Visibility string   `json:"visibility"`
 
 	UserInfo UserInfo `json:"userInfo"`
 }
@@ -31,6 +32,7 @@ type ListPostsResp struct {
 	IsLike     string `json:"isLike"`
 	IsCollect  string `json:"isCollect"`
 	IsChecking string `json:"isChecking"`
+	Visibility string `json:"visibility"`
 }
 
 type LoadPostDraftResp struct {

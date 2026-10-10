@@ -41,6 +41,7 @@ func (ph *PostHandler) RegisterPostHandlers(e *gin.Engine, handlerFunc gin.Handl
 		post.GET("/load", ginx.WrapWithClaims(ph.LoadDraft))
 		post.POST("/own", ginx.WrapRequestWithClaims(ph.FindPostByOwnerID))
 		post.POST("/student/:studentId", ginx.WrapRequestWithClaims(ph.FindPostByStudentID))
+		post.PATCH("/:id/visibility", ginx.WrapRequestWithClaims(ph.SetVisibility))
 		post.GET("/:id", ginx.WrapRequestWithClaims(ph.FindPostById))
 	}
 }
@@ -77,7 +78,7 @@ func (ph *PostHandler) CreatePost(ctx *gin.Context, req_ req.CreatePostReq, clai
 	if err := ph.ps.CreatePost(ctx, post); err != nil {
 		return ginx.ReturnError(err)
 	}
-	loadedPost, err := ph.ps.FindPostById(ctx, post.Id)
+	loadedPost, err := ph.ps.FindPostById(ctx, post.Id, claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
@@ -164,7 +165,7 @@ func (ph *PostHandler) LoadDraft(ctx *gin.Context, claims jwt.RegisteredClaims) 
 // @Router /post/own [post]
 func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, req_ req.FindPostByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
-	paginated, err := ph.ps.FindPostByOwnerID(ctx, claims.Subject, req_.Page, req_.Limit)
+	paginated, err := ph.ps.FindPostByOwnerID(ctx, claims.Subject, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
@@ -184,7 +185,7 @@ func (ph *PostHandler) FindPostByOwnerID(ctx *gin.Context, req_ req.FindPostByOw
 // @Router /post/student/{studentId} [post]
 func (ph *PostHandler) FindPostByStudentID(ctx *gin.Context, req_ req.FindPostByStudentIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
-	paginated, err := ph.ps.FindPostByOwnerID(ctx, req_.StudentID, req_.Page, req_.Limit)
+	paginated, err := ph.ps.FindPostByOwnerID(ctx, req_.StudentID, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
@@ -200,10 +201,27 @@ func (ph *PostHandler) FindPostByStudentID(ctx *gin.Context, req_ req.FindPostBy
 // @Success 200 {object} resp.Resp{data=resp.ListPostsResp}
 // @Router /post/{id} [get]
 func (ph *PostHandler) FindPostById(ctx *gin.Context, req_ req.FindPostByIdReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
-	posts, err := ph.ps.FindPostById(ctx, int64(req_.Id))
+	posts, err := ph.ps.FindPostById(ctx, int64(req_.Id), claims.Subject)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
 	details := ph.ps.EnrichOneForSearcher(ctx, &posts, claims.Subject)
 	return ginx.ReturnSuccess(converter.ToListPostResp(details))
+}
+
+// SetVisibility
+// @Tags Post
+// @Summary 设置帖子可见性（公开/私密），仅作者可操作
+// @Produce json
+// @Accept json
+// @Param Authorization header string true "token"
+// @Param id path string true "帖子id"
+// @Param req body req.SetPostVisibilityReq true "可见性"
+// @Success 200 {object} resp.Resp
+// @Router /post/{id}/visibility [patch]
+func (ph *PostHandler) SetVisibility(ctx *gin.Context, req_ req.SetPostVisibilityReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	if err := ph.ps.SetVisibility(ctx, int64(req_.Id), claims.Subject, req_.Visibility); err != nil {
+		return ginx.ReturnError(err)
+	}
+	return ginx.ReturnSuccess(nil)
 }
