@@ -23,6 +23,11 @@ type pendingPostSource interface {
 	FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error)
 }
 
+// perRecordUploadTimeout 单条记录送审序列（取/建 form -> 占用租约 -> 上传 -> 标记）的超时预算。
+// 每条记录独立成 ctx：上传可能挂死，不能与整轮 tick 共享 deadline，否则同 tick 后续记录的
+// DB 操作会复用一个已过期的 ctx（历史事故：一批 "Failed to get or create auditor form: context deadline exceeded"）。
+const perRecordUploadTimeout = 30 * time.Second
+
 type AuditorUploadWorker struct {
 	activityRepo    pendingActivitySource
 	postRepo        pendingPostSource
@@ -104,7 +109,7 @@ func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Contex
 			StudentId: act.StudentID,
 			CactReq:   converter.ActivityToAuditReq(&act),
 		}
-		w.uploadPendingForm(ctx, act.Id, act.ActiveForm, SubjectActivity, aw, zap.Int64("actId", act.Id))
+		w.uploadPendingForm(act.Id, act.ActiveForm, SubjectActivity, aw, zap.Int64("actId", act.Id))
 	}
 }
 
@@ -121,7 +126,7 @@ func (w *AuditorUploadWorker) processPendingAuditorPosts(ctx context.Context) {
 			StudentId: post.StudentID,
 			CpostReq:  converter.PostToAuditReq(&post),
 		}
-		w.uploadPendingForm(ctx, post.Id, "", SubjectPost, aw, zap.Int64("postId", post.Id))
+		w.uploadPendingForm(post.Id, "", SubjectPost, aw, zap.Int64("postId", post.Id))
 	}
 }
 
@@ -135,15 +140,22 @@ func (w *AuditorUploadWorker) processPendingAuditorRevokes(ctx context.Context) 
 	}
 
 	for _, form := range forms {
-		if err := w.auditorService.RevokeForm(ctx, form); err != nil {
+		// 每条记录独立超时，与整轮 tick 的 ctx 解耦：单个挂死的远端删除不应拖垮同 tick 后续撤销。
+		rctx, cancel := context.WithTimeout(context.Background(), perRecordUploadTimeout)
+		if err := w.auditorService.RevokeForm(rctx, form); err != nil {
 			w.logger.Auditor.Error("Failed to revoke auditor form", zap.Error(err), zap.Int64("formId", form.Id))
 		}
+		cancel()
 	}
 }
 
 // uploadPendingForm 对单条待送审记录执行「取/建 form -> 占用租约 -> 上传 -> 标记」的幂等序列。
 // idField 用于区分活动/帖子的日志字段（actId / postId）。
-func (w *AuditorUploadWorker) uploadPendingForm(ctx context.Context, id int64, formUrl, subject string, aw *req.AuditWrapper, idField zap.Field) {
+func (w *AuditorUploadWorker) uploadPendingForm(id int64, formUrl, subject string, aw *req.AuditWrapper, idField zap.Field) {
+	// 每条记录独立超时，与整轮 tick 的 ctx 解耦：单条挂死的上传不应拖垮同 tick 后续记录。
+	ctx, cancel := context.WithTimeout(context.Background(), perRecordUploadTimeout)
+	defer cancel()
+
 	// 复用尚未成功推送的 form；若该记录已送审成功则跳过，避免回调到达前每个 tick 重复送审。
 	form, err := w.auditorService.GetOrCreatePendingForm(ctx, id, formUrl, subject)
 	if err != nil {
@@ -169,7 +181,7 @@ func (w *AuditorUploadWorker) uploadPendingForm(ctx context.Context, id int64, f
 	}
 	// 上传已成功，标记本地状态失败不应触发远端重传：本地重试标记；仍失败则保留占用，
 	// 由租约到期后再兜底（最坏为 at-least-once，不会每 5s 重传）。
-	if err := w.markPushedWithRetry(ctx, form.Id); err != nil {
+	if err := w.markPushedWithRetry(form.Id); err != nil {
 		w.logger.Auditor.Error("Failed to mark form pushed after retries", zap.Error(err), idField, zap.Int64("formId", form.Id))
 		return
 	}
@@ -186,8 +198,11 @@ func (w *AuditorUploadWorker) releaseClaim(formId int64, idField zap.Field, leas
 }
 
 // markPushedWithRetry 本地重试标记送审成功，避免因一次 DB 抖动导致下个 tick 重新远端上传。
-func (w *AuditorUploadWorker) markPushedWithRetry(ctx context.Context, formId int64) error {
+// 用独立短超时 ctx：此时上传已成功，标记不应因上传消耗了本条记录的 ctx 预算而失败。
+func (w *AuditorUploadWorker) markPushedWithRetry(formId int64) error {
 	const attempts = 3
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
 	var err error
 	for i := 1; i <= attempts; i++ {
 		err = w.auditorService.MarkPushed(ctx, formId, time.Now())

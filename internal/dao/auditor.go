@@ -58,9 +58,10 @@ func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string
 func (a *AuditorRepo) Update(c context.Context, formId int64, status string) error {
 	var form model.AuditorForm
 	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).Where("id = ?", formId).First(&form).Error; err != nil {
-		// 表单已被撤销删除（帖子已删）：迟到的审核回调视为幂等成功，避免平台无休止重试。
+		// 回调查不到本地表单行：帖子撤销删除后迟到回调和"hook_id 与本地行对不上"都落在这里。
+		// 均返回成功（避免平台无休止重试），但升到 Warn 以便观测异常回调，而非静默 Info。
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			a.l.Info("auditor form already gone on update, treated as success", zap.Int64("formId", formId))
+			a.l.Warn("auditor form not found on update, treated as success", zap.Int64("formId", formId), zap.String("status", status))
 			return nil
 		}
 		a.l.Error("auditor form not found", zap.Error(err))

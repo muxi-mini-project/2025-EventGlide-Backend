@@ -2,6 +2,8 @@ package dao
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -53,6 +55,49 @@ func TestDeleteDraftsByStudentIDRemovesImages(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindActByOwnerIDAll_NoAuditStatusFilter 本人"全部活动"列表不得按 is_checking 过滤，
+// 否则审核中(pending_*)与被拒(reject)的活动对本人不可见（前端 review 页拿不到被拒活动）。
+// 与 FindActByOwnerID 的区别正是去掉 SetEffect；本测试断言 SQL 不含 is_checking。
+func TestFindActByOwnerIDAll_NoAuditStatusFilter(t *testing.T) {
+	sqlDB, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherFunc(
+		func(_, actualSQL string) error {
+			if strings.Contains(actualSQL, "is_checking") {
+				return fmt.Errorf("own-all list must not filter by is_checking, got: %s", actualSQL)
+			}
+			return nil
+		},
+	)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	gdb, err := gorm.Open(mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true}), &gorm.Config{
+		NamingStrategy:         schema.NamingStrategy{SingularTable: true},
+		SkipDefaultTransaction: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// effect=slow 时 SetEffect 会加 is_checking='pass'；FindActByOwnerIDAll 必须不套它，
+	// 否则 matcher 会因 SQL 含 is_checking 报错——这正是本测试要守住的点。
+	dao := &ActDao{db: gdb, l: logger.NewLoggerSet().Activity, effect: "slow"}
+
+	mock.ExpectQuery("SELECT").WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	got, err := dao.FindActByOwnerIDAll(context.Background(), "S20250001", 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Total != 0 || len(got.Acts) != 0 {
+		t.Fatalf("unexpected result: %+v", got)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

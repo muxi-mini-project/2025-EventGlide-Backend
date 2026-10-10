@@ -25,6 +25,7 @@ type ActivityServiceHdl interface {
 	FindActByName(c context.Context, name string, page, limit int) (*model.PaginatedActivities, error)
 	FindActById(c context.Context, id int64) (model.Activity, error)
 	FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error)
+	FindActByOwnerIDAll(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error)
 	ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error)
 	EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail
 	EnrichOneForSearcher(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail
@@ -138,6 +139,16 @@ func (as *ActivityService) ListAllActs(c context.Context, page, limit int) (*mod
 	acts, err := as.ad.ListAllActs(c, page, limit)
 	if err != nil {
 		as.l.Error("Failed to list all acts", zap.Error(err))
+		return nil, errs.ErrInternal.Wrap(err)
+	}
+	return acts, nil
+}
+
+// FindActByOwnerIDAll 返回本人全部审核状态的活动（含审核中与被拒），供 review 页展示本人全部活动。
+func (as *ActivityService) FindActByOwnerIDAll(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error) {
+	acts, err := as.ad.FindActByOwnerIDAll(c, studentID, page, limit)
+	if err != nil {
+		as.l.Error("Failed to find all acts by owner id", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
 	return acts, nil

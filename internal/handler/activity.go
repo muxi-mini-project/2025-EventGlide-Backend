@@ -166,7 +166,7 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 
 // FindActByOwnerID
 // @Tags Activity
-// @Summary 通过创建者id查找活动
+// @Summary 通过创建者id查找活动（本人全部状态，含审核中与被拒）
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
@@ -175,7 +175,7 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 // @Router /act/own [post]
 func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
-	paginated, err := ah.as.FindActByOwnerID(ctx, claims.Subject, req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActByOwnerIDAll(ctx, claims.Subject, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

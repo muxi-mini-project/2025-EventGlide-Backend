@@ -196,3 +196,86 @@ func TestProcessPendingAuditorRevokes_ContinuesAfterFailure(t *testing.T) {
 		t.Fatalf("worker should attempt every orphan even if one fails, got %v", svc.revoked)
 	}
 }
+
+// tickCtxKey 标记"整轮 tick 的 ctx"。记录处理必须使用独立 ctx，不能携带该标记。
+type tickCtxKey struct{}
+
+// ctxCheckingSvc 在每一步校验：入参 ctx 若携带 tickCtxKey（即复用了整轮 tick 的 ctx）则失败，
+// 用于验证单条记录使用独立 ctx（历史事故：一条挂死的上传耗尽整轮预算，后续记录全报 ctx deadline exceeded）。
+type ctxCheckingSvc struct {
+	form       *model.AuditorForm
+	uploadCnt  int
+	sawTickCtx bool
+}
+
+var _ AuditorService = (*ctxCheckingSvc)(nil)
+
+func (f *ctxCheckingSvc) GetOrCreatePendingForm(ctx context.Context, id int64, formUrl, sub string) (*model.AuditorForm, error) {
+	if ctx.Value(tickCtxKey{}) != nil {
+		f.sawTickCtx = true
+		return nil, errors.New("record processing must not reuse the tick ctx")
+	}
+	if f.form == nil {
+		f.form = &model.AuditorForm{Id: 1, ActivityId: id, Subject: sub, FormUrl: formUrl}
+	}
+	return f.form, nil
+}
+
+func (f *ctxCheckingSvc) ClaimForUpload(ctx context.Context, _ int64) (time.Time, bool, error) {
+	if ctx.Value(tickCtxKey{}) != nil {
+		f.sawTickCtx = true
+		return time.Time{}, false, errors.New("record processing must not reuse the tick ctx")
+	}
+	return time.Now().Add(time.Minute), true, nil
+}
+
+func (f *ctxCheckingSvc) ReleaseClaim(context.Context, int64, time.Time) error { return nil }
+
+func (f *ctxCheckingSvc) UploadForm(ctx context.Context, _ *req.AuditWrapper, _ int64) error {
+	if ctx.Value(tickCtxKey{}) != nil {
+		f.sawTickCtx = true
+		return errors.New("record processing must not reuse the tick ctx")
+	}
+	f.uploadCnt++
+	return nil
+}
+
+func (f *ctxCheckingSvc) MarkPushed(ctx context.Context, _ int64, pushedAt time.Time) error {
+	if ctx.Value(tickCtxKey{}) != nil {
+		f.sawTickCtx = true
+		return errors.New("record processing must not reuse the tick ctx")
+	}
+	now := pushedAt
+	f.form.PushedAt = &now
+	return nil
+}
+
+func (f *ctxCheckingSvc) CreateAuditorForm(context.Context, int64, string, string) (*model.AuditorForm, error) {
+	return nil, errors.New("not used")
+}
+
+func (f *ctxCheckingSvc) ReconcilePendingForms(context.Context) {}
+
+func (f *ctxCheckingSvc) FindOrphanPostForms(context.Context) ([]model.AuditorForm, error) {
+	return nil, nil
+}
+
+func (f *ctxCheckingSvc) RevokeForm(context.Context, model.AuditorForm) error { return nil }
+
+// TestUpload_IndependentContextPerRecord 整轮 tick 的 ctx（带 tickCtxKey 标记）不得传入单条记录的
+// 送审序列；回归点：修复前 uploadPendingForm 复用整轮 ctx，同 tick 内一条挂死会拖垮后续记录。
+func TestUpload_IndependentContextPerRecord(t *testing.T) {
+	posts := &fakePendingPosts{posts: []model.Post{{Id: 1001, StudentID: "S1", Title: "t", IsChecking: "checking"}}}
+	svc := &ctxCheckingSvc{}
+	w := newWorkerForTest(posts, svc)
+
+	tickCtx := context.WithValue(context.Background(), tickCtxKey{}, true)
+	w.processPendingAuditorPosts(tickCtx)
+
+	if svc.sawTickCtx {
+		t.Fatalf("record processing received the tick ctx; it must use an independent ctx")
+	}
+	if svc.uploadCnt != 1 {
+		t.Fatalf("record upload must complete on an independent ctx, got %d uploads", svc.uploadCnt)
+	}
+}
