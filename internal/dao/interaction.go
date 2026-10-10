@@ -214,23 +214,31 @@ func (id *InteractionDao) GetUserLikedActivityIds(c context.Context, userId int6
 	return &model.PaginatedActivityIds{Total: total, Page: page, Limit: limit, Ids: ids}, nil
 }
 
-func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
+// GetUserCollectedPostIds 分页返回用户收藏的帖子 id。与帖子表 join 并按 viewer 可见性过滤
+// （公开 或 viewer 本人帖），使 Total 与当页 ids 口径一致，避免分页出现不足/空页。
+func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int64, viewer string, page, limit int) (*model.PaginatedPostIds, error) {
 	offset := (page - 1) * limit
 	var ids []int64
 	var total int64
 
-	err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
-		Where("user_id = ? AND type = ?", userId, "collect").
+	err := id.db.WithContext(c).
+		Table("user_post_interaction AS upi").
+		Joins("JOIN post p ON p.id = upi.post_id").
+		Where("upi.user_id = ? AND upi.type = ?", userId, "collect").
+		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
 		Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
 
-	err = id.db.WithContext(c).Model(&model.UserPostInteraction{}).
-		Where("user_id = ? AND type = ?", userId, "collect").
-		Order("id DESC").
+	err = id.db.WithContext(c).
+		Table("user_post_interaction AS upi").
+		Joins("JOIN post p ON p.id = upi.post_id").
+		Where("upi.user_id = ? AND upi.type = ?", userId, "collect").
+		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
+		Order("upi.id DESC").
 		Limit(limit).Offset(offset).
-		Pluck("post_id", &ids).Error
+		Pluck("upi.post_id", &ids).Error
 	if err != nil {
 		return nil, err
 	}
@@ -238,23 +246,30 @@ func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int6
 	return &model.PaginatedPostIds{Total: total, Page: page, Limit: limit, Ids: ids}, nil
 }
 
-func (id *InteractionDao) GetUserLikedPostIds(c context.Context, userId int64, page, limit int) (*model.PaginatedPostIds, error) {
+// GetUserLikedPostIds 分页返回用户点赞的帖子 id，过滤口径同 GetUserCollectedPostIds。
+func (id *InteractionDao) GetUserLikedPostIds(c context.Context, userId int64, viewer string, page, limit int) (*model.PaginatedPostIds, error) {
 	offset := (page - 1) * limit
 	var ids []int64
 	var total int64
 
-	err := id.db.WithContext(c).Model(&model.UserPostInteraction{}).
-		Where("user_id = ? AND type = ?", userId, "like").
+	err := id.db.WithContext(c).
+		Table("user_post_interaction AS upi").
+		Joins("JOIN post p ON p.id = upi.post_id").
+		Where("upi.user_id = ? AND upi.type = ?", userId, "like").
+		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
 		Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
 
-	err = id.db.WithContext(c).Model(&model.UserPostInteraction{}).
-		Where("user_id = ? AND type = ?", userId, "like").
-		Order("id DESC").
+	err = id.db.WithContext(c).
+		Table("user_post_interaction AS upi").
+		Joins("JOIN post p ON p.id = upi.post_id").
+		Where("upi.user_id = ? AND upi.type = ?", userId, "like").
+		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
+		Order("upi.id DESC").
 		Limit(limit).Offset(offset).
-		Pluck("post_id", &ids).Error
+		Pluck("upi.post_id", &ids).Error
 	if err != nil {
 		return nil, err
 	}

@@ -21,8 +21,12 @@ type PostDaoHdl interface {
 	FindPostByUser(ctx context.Context, sid string, keyword string, page, limit int) (*model.PaginatedPosts, error)
 	CreateDraft(ctx context.Context, tx *gorm.DB, draft *model.PostDraft) error
 	LoadDraft(ctx context.Context, sid string) (model.PostDraft, error)
-	FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error)
+	FindPostByOwnerID(ctx context.Context, id string, viewer string, page, limit int) (*model.PaginatedPosts, error)
 	FindPostById(ctx context.Context, id int64) (model.Post, error)
+	FindVisiblePostById(ctx context.Context, id int64, viewer string) (model.Post, error)
+	FindPostsByIds(ctx context.Context, ids []int64, viewer string) ([]model.Post, error)
+	IsPostVisibleTo(ctx context.Context, id int64, viewer string) (bool, error)
+	SetVisibility(ctx context.Context, id int64, studentID, visibility string) (bool, error)
 	FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error)
 }
 
@@ -49,11 +53,11 @@ func (pd *PostDao) GetAllPost(ctx context.Context, page, limit int) (*model.Pagi
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.PublicOnly()).Preload("Images").Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
-	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Model(&model.Post{}).Count(&total).Error
+	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.PublicOnly()).Model(&model.Post{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +89,11 @@ func (pd *PostDao) FindPostByName(ctx context.Context, name string, page, limit 
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", name)).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.PublicOnly()).Preload("Images").Where("title like ?", fmt.Sprintf("%%%s%%", name)).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
-	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Where("title like ?", fmt.Sprintf("%%%s%%", name)).Model(&model.Post{}).Count(&total).Error
+	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.PublicOnly()).Where("title like ?", fmt.Sprintf("%%%s%%", name)).Model(&model.Post{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
@@ -200,16 +204,18 @@ func (pd *PostDao) LoadDraft(ctx context.Context, sid string) (model.PostDraft, 
 	return draft, nil
 }
 
-func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error) {
+// FindPostByOwnerID 返回 id 用户主页的帖子。viewer 为当前查看者：
+// 查自己（id==viewer）时含私密帖；查他人时仅返回对方的公开帖。
+func (pd *PostDao) FindPostByOwnerID(ctx context.Context, id string, viewer string, page, limit int) (*model.PaginatedPosts, error) {
 	var posts []model.Post
 	var total int64
 	offset := (page - 1) * limit
 
-	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Preload("Images").Where("student_id = ?", id).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
+	err := pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.VisibleTo(viewer)).Preload("Images").Where("student_id = ?", id).Order("created_at DESC").Limit(limit).Offset(offset).Find(&posts).Error
 	if err != nil {
 		return nil, err
 	}
-	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect()).Where("student_id = ?", id).Model(&model.Post{}).Count(&total).Error
+	err = pd.db.WithContext(ctx).Scopes(pd.SetEffect(), pd.VisibleTo(viewer)).Where("student_id = ?", id).Model(&model.Post{}).Count(&total).Error
 	if err != nil {
 		return nil, err
 	}
@@ -247,6 +253,48 @@ func (pd *PostDao) FindPostById(ctx context.Context, id int64) (model.Post, erro
 	return post, nil
 }
 
+// FindVisiblePostById 取 viewer 有权查看的帖子：公开帖，或 viewer 本人发布的帖子。
+// 不可见与不存在同样返回 gorm.ErrRecordNotFound，不区分，避免泄露私密帖存在性。
+func (pd *PostDao) FindVisiblePostById(ctx context.Context, id int64, viewer string) (model.Post, error) {
+	var post model.Post
+	err := pd.db.WithContext(ctx).Scopes(pd.VisibleTo(viewer)).Preload("Images").Where("id = ?", id).First(&post).Error
+	if err != nil {
+		return model.Post{}, err
+	}
+	return post, nil
+}
+
+// IsPostVisibleTo 判断 viewer 是否可查看指定帖子（公开或本人帖）。帖子不存在返回 false。
+func (pd *PostDao) IsPostVisibleTo(ctx context.Context, id int64, viewer string) (bool, error) {
+	var count int64
+	err := pd.db.WithContext(ctx).Model(&model.Post{}).Scopes(pd.VisibleTo(viewer)).Where("id = ?", id).Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// SetVisibility 仅当帖子存在且属于 studentID 时更新可见性，返回是否命中。
+// 未命中（不存在或非本人）时不改任何行，交由上层按"帖子不存在"处理。
+// 先校验归属再更新：目标值与原值相同时 MySQL 影响 0 行，若以其判定命中会把幂等重试误判为不存在。
+func (pd *PostDao) SetVisibility(ctx context.Context, id int64, studentID, visibility string) (bool, error) {
+	var owned int64
+	if err := pd.db.WithContext(ctx).Model(&model.Post{}).
+		Where("id = ? AND student_id = ?", id, studentID).
+		Count(&owned).Error; err != nil {
+		return false, err
+	}
+	if owned == 0 {
+		return false, nil
+	}
+	if err := pd.db.WithContext(ctx).Model(&model.Post{}).
+		Where("id = ? AND student_id = ?", id, studentID).
+		Update("visibility", visibility).Error; err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
 	if pd.effect == "slow" {
 		return func(db *gorm.DB) *gorm.DB {
@@ -262,6 +310,21 @@ func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
 	}
 }
 
+// PublicOnly 只返回公开帖，用于发现页（广场、搜索）：私密帖对所有人（含作者）都不出现。
+func (pd *PostDao) PublicOnly() func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where("visibility = ?", model.PostVisibilityPublic)
+	}
+}
+
+// VisibleTo 返回 viewer 可查看的帖子：公开帖，或 viewer 本人发布的帖子（含私密）。
+// 个人主页、帖子详情、点赞/收藏列表等"归属相关"读路径使用。
+func (pd *PostDao) VisibleTo(viewer string) func(db *gorm.DB) *gorm.DB {
+	return func(db *gorm.DB) *gorm.DB {
+		return db.Where("visibility = ? OR student_id = ?", model.PostVisibilityPublic, viewer)
+	}
+}
+
 func (pd *PostDao) GetChecking(c context.Context, sid string) ([]model.Post, error) {
 	var posts []model.Post
 	err := pd.db.WithContext(c).Preload("Images").Where("student_id = ? AND is_checking = ?", sid, "checking").Find(&posts).Error
@@ -272,11 +335,11 @@ func (pd *PostDao) GetChecking(c context.Context, sid string) ([]model.Post, err
 	return posts, nil
 }
 
-func (pd *PostDao) FindPostsByIds(c context.Context, ids []int64) ([]model.Post, error) {
+func (pd *PostDao) FindPostsByIds(c context.Context, ids []int64, viewer string) ([]model.Post, error) {
 	if len(ids) == 0 {
 		return []model.Post{}, nil
 	}
 	var posts []model.Post
-	err := pd.db.WithContext(c).Scopes(pd.SetEffect()).Preload("Images").Where("id IN ?", ids).Find(&posts).Error
+	err := pd.db.WithContext(c).Scopes(pd.SetEffect(), pd.VisibleTo(viewer)).Preload("Images").Where("id IN ?", ids).Find(&posts).Error
 	return posts, err
 }

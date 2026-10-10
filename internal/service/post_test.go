@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -9,6 +10,7 @@ import (
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/repo"
 	"github.com/raiki02/EG/pkg/logger"
 	"github.com/redis/go-redis/v9"
@@ -187,6 +189,63 @@ func TestDeletePostClearsCommentInteractionCacheOnHit(t *testing.T) {
 		if mr.Exists(k) {
 			t.Errorf("post key %s should be cleared", k)
 		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindPostByIdHidesPrivateFromOthers 私密帖对非作者按"帖子不存在"返回：查询带可见性过滤，
+// 命中不到行时抛出 ErrPostNotFound，而非泄露其存在。
+func TestFindPostByIdHidesPrivateFromOthers(t *testing.T) {
+	ctx := context.Background()
+	svc, _, mock := newPostServiceForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `post` WHERE id = \\? AND \\(visibility = \\? OR student_id = \\?\\) ORDER BY `post`\\.`id` LIMIT \\?").
+		WithArgs(int64(1001), "public", "S_stranger", 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "title", "introduce", "visibility", "is_checking"}))
+
+	_, err := svc.FindPostById(ctx, 1001, "S_stranger")
+	if !errors.Is(err, errs.ErrPostNotFound) {
+		t.Fatalf("expected ErrPostNotFound for invisible post, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestSetVisibilityNotOwnedReturnsNotFound 非作者/帖子不存在时按"帖子不存在"返回，且不改任何行。
+func TestSetVisibilityNotOwnedReturnsNotFound(t *testing.T) {
+	ctx := context.Background()
+	svc, _, mock := newPostServiceForTest(t)
+
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND student_id = \\?").
+		WithArgs(int64(1001), "S-attacker").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	err := svc.SetVisibility(ctx, 1001, "S-attacker", "private")
+	if !errors.Is(err, errs.ErrPostNotFound) {
+		t.Fatalf("expected ErrPostNotFound, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestSetVisibilityOwnedSucceeds 作者改自己帖子可见性成功。
+func TestSetVisibilityOwnedSucceeds(t *testing.T) {
+	ctx := context.Background()
+	svc, _, mock := newPostServiceForTest(t)
+
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND student_id = \\?").
+		WithArgs(int64(1001), "S1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectExec("UPDATE `post` SET `visibility`=\\? WHERE id = \\? AND student_id = \\?").
+		WithArgs("private", int64(1001), "S1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := svc.SetVisibility(ctx, 1001, "S1", "private"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

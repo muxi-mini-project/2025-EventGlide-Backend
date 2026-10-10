@@ -25,6 +25,12 @@ type AuditorForm struct {
 }
 
 func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
+	// 帖子不审核：审核结论不再回写帖子状态。否则部署时已在审核中的帖子被回填为 pass 后，
+	// 平台迟到的 reject 回调会把它重新置为隐藏，与"帖子不审核"矛盾。
+	if af.Subject == SubjectPost {
+		return nil
+	}
+
 	if af.Status == StancePass {
 		table := af.Subject
 		if table == SubjectActivity {
@@ -48,21 +54,6 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				log.Println("auditorform AfterUpdate passed successfully for activity:", af.ActivityId)
 				return nil
 			}
-		} else if table == SubjectPost {
-			update := tx.Exec(`
-				UPDATE post
-				SET is_checking = 'pass'
-				WHERE id = ?
-				AND is_checking = 'checking'
-			`, af.ActivityId)
-			if update.Error != nil {
-				log.Println("auditorform AfterUpdate error when passing post:", update.Error)
-				return update.Error
-			}
-			if update.RowsAffected > 0 {
-				log.Println("auditorform AfterUpdate passed successfully for post:", af.ActivityId)
-				return nil
-			}
 		}
 	}
 
@@ -80,21 +71,6 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 			}
 			if update.RowsAffected > 0 {
 				log.Println("auditorform AfterUpdate rejected successfully for activity:", af.ActivityId)
-				return nil
-			}
-		} else if af.Subject == SubjectPost {
-			update := tx.Exec(`
-				UPDATE post
-				SET is_checking = 'reject'
-				WHERE id = ?
-				AND is_checking = 'checking'
-			`, af.ActivityId)
-			if update.Error != nil {
-				log.Println("auditorform AfterUpdate error when rejecting post:", update.Error)
-				return update.Error
-			}
-			if update.RowsAffected > 0 {
-				log.Println("auditorform AfterUpdate rejected successfully for post:", af.ActivityId)
 				return nil
 			}
 		}

@@ -55,12 +55,32 @@ func (is *InteractionService) getUserIDByStudentID(c context.Context, studentID 
 	return userID, nil
 }
 
+// ensurePostVisible 对"目标是帖子"的互动做可见性兜底：非本人私密帖按不存在拒绝，
+// 防止用旧 id 直连接口绕开读路径的可见性拦截。非帖子目标一律放行。
+func (is *InteractionService) ensurePostVisible(ctx context.Context, subject string, targetID int64, viewer string) error {
+	if subject != SubjectPost {
+		return nil
+	}
+	visible, err := is.id.IsPostVisibleTo(ctx, targetID, viewer)
+	if err != nil {
+		is.l.Error("Failed to check post visibility", zap.Error(err), zap.Int64("postId", targetID))
+		return errs.ErrInternal.Wrap(err)
+	}
+	if !visible {
+		return errs.ErrPostNotFound
+	}
+	return nil
+}
+
 func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid string) error {
 	ctx := c.Request.Context()
 	ap, err := is.sg.GetSubjectInfo(ctx, int64(r.TargetID), r.Subject)
 	if err != nil {
 		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
+	}
+	if err := is.ensurePostVisible(ctx, r.Subject, int64(r.TargetID), sid); err != nil {
+		return err
 	}
 
 	// 获取用户 ID
@@ -199,6 +219,9 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 	if err != nil {
 		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
+	}
+	if err := is.ensurePostVisible(c.Request.Context(), r.Subject, int64(r.TargetID), sid); err != nil {
+		return err
 	}
 
 	// 获取用户 ID

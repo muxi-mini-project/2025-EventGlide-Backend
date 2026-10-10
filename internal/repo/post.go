@@ -85,12 +85,37 @@ func (r *PostRepo) LoadDraft(ctx context.Context, sid string) (model.PostDraft, 
 	return r.dao.LoadDraft(ctx, sid)
 }
 
-func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string, page, limit int) (*model.PaginatedPosts, error) {
-	return r.dao.FindPostByOwnerID(ctx, id, page, limit)
+func (r *PostRepo) FindPostByOwnerID(ctx context.Context, id string, viewer string, page, limit int) (*model.PaginatedPosts, error) {
+	return r.dao.FindPostByOwnerID(ctx, id, viewer, page, limit)
 }
 
 func (r *PostRepo) FindPostById(ctx context.Context, id int64) (model.Post, error) {
 	return r.dao.FindPostById(ctx, id)
+}
+
+// FindVisiblePostById 取 viewer 可查看的帖子（公开或本人帖），不可见按不存在返回。
+func (r *PostRepo) FindVisiblePostById(ctx context.Context, id int64, viewer string) (model.Post, error) {
+	return r.dao.FindVisiblePostById(ctx, id, viewer)
+}
+
+// IsPostVisibleTo 判断 viewer 是否可查看指定帖子，供互动写入兜底校验。
+func (r *PostRepo) IsPostVisibleTo(ctx context.Context, id int64, viewer string) (bool, error) {
+	return r.dao.IsPostVisibleTo(ctx, id, viewer)
+}
+
+// SetVisibility 更新本人帖子的可见性；未命中（不存在或非本人）返回 false，并失效帖子缓存。
+func (r *PostRepo) SetVisibility(ctx context.Context, id int64, studentID, visibility string) (bool, error) {
+	updated, err := r.dao.SetVisibility(ctx, id, studentID, visibility)
+	if err != nil {
+		return false, err
+	}
+	if !updated {
+		return false, nil
+	}
+	if err := r.Invalidate(ctx, id); err != nil {
+		r.l.Error("Failed to invalidate post cache after visibility change", zap.Error(err), zap.Int64("id", id))
+	}
+	return true, nil
 }
 
 func (r *PostRepo) GetChecking(ctx context.Context, sid string) ([]model.Post, error) {
@@ -105,8 +130,8 @@ func (r *PostRepo) postByIdKey(id int64) string {
 	return r.kb.Build("id", fmt.Sprintf("%d", id))
 }
 
-func (r *PostRepo) FindPostsByIds(ctx context.Context, ids []int64) ([]model.Post, error) {
-	return r.dao.FindPostsByIds(ctx, ids)
+func (r *PostRepo) FindPostsByIds(ctx context.Context, ids []int64, viewer string) ([]model.Post, error) {
+	return r.dao.FindPostsByIds(ctx, ids, viewer)
 }
 
 func (r *PostRepo) FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error) {

@@ -190,3 +190,88 @@ func TestDeleteDraftByStudentRemovesImages(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestSetVisibilityOnlyOwner 只允许作者改自己的帖子：先校验归属（存在且属于本人）再更新。
+// 命中返回 true，未命中（不存在或非本人）返回 false 且不改任何行。
+func TestSetVisibilityOnlyOwner(t *testing.T) {
+	t.Run("hit", func(t *testing.T) {
+		dao, mock := newPostDaoForTest(t)
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND student_id = \\?").
+			WithArgs(int64(1001), "S20250001").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+		mock.ExpectExec("UPDATE `post` SET `visibility`=\\? WHERE id = \\? AND student_id = \\?").
+			WithArgs("private", int64(1001), "S20250001").
+			WillReturnResult(sqlmock.NewResult(0, 1))
+
+		updated, err := dao.SetVisibility(context.Background(), 1001, "S20250001", model.PostVisibilityPrivate)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !updated {
+			t.Fatalf("expected update hit to report true")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("miss", func(t *testing.T) {
+		dao, mock := newPostDaoForTest(t)
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND student_id = \\?").
+			WithArgs(int64(1001), "S-attacker").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		updated, err := dao.SetVisibility(context.Background(), 1001, "S-attacker", model.PostVisibilityPrivate)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updated {
+			t.Fatalf("non-owner must not report hit")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	// 目标值与原值相同（幂等重试）时 MySQL 影响 0 行，但归属命中即应视为成功。
+	t.Run("same-value", func(t *testing.T) {
+		dao, mock := newPostDaoForTest(t)
+		mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND student_id = \\?").
+			WithArgs(int64(1001), "S20250001").
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+		mock.ExpectExec("UPDATE `post` SET `visibility`=\\? WHERE id = \\? AND student_id = \\?").
+			WithArgs("public", int64(1001), "S20250001").
+			WillReturnResult(sqlmock.NewResult(0, 0))
+
+		updated, err := dao.SetVisibility(context.Background(), 1001, "S20250001", model.PostVisibilityPublic)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !updated {
+			t.Fatalf("idempotent re-set by owner must report success")
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// TestIsPostVisibleToSQL 可见性判定条件为"公开 或 本人发布"，供互动写入兜底使用。
+func TestIsPostVisibleToSQL(t *testing.T) {
+	dao, mock := newPostDaoForTest(t)
+
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(int64(1001), model.PostVisibilityPublic, "S_viewer").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	visible, err := dao.IsPostVisibleTo(context.Background(), 1001, "S_viewer")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !visible {
+		t.Fatalf("expected visible")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

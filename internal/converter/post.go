@@ -18,7 +18,10 @@ func CreatePostFromReq(r *req.CreatePostReq, studentID string) *model.Post {
 		StudentID: studentID,
 		Title:     r.Title,
 		Introduce: r.Introduce,
-		Images:    ImagesFromUrls(r.ShowImg, id, "post"),
+		// 帖子不送审：创建即为已通过，直接可见；可见性一律从公开起步，私密由作者事后在详情页切换。
+		IsChecking: "pass",
+		Visibility: model.PostVisibilityPublic,
+		Images:     ImagesFromUrls(r.ShowImg, id, "post"),
 	}
 }
 
@@ -85,6 +88,7 @@ func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 	res.Title = post.Title
 	res.Introduce = post.Introduce
 	res.IsChecking = post.IsChecking
+	res.Visibility = post.Visibility
 	res.ShowImg = ImagesToUrls(post.Images)
 	res.LikeNum = post.LikeNum
 	res.CommentNum = post.CommentNum
@@ -104,6 +108,7 @@ func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 		Introduce:   post.Introduce,
 		ShowImg:     ImagesToUrls(post.Images),
 		IsChecking:  post.IsChecking,
+		Visibility:  post.Visibility,
 	}
 	res.UserInfo.StudentID = d.Author.StudentID
 	res.UserInfo.Avatar = d.Author.Avatar

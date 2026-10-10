@@ -19,8 +19,9 @@ type PostServiceHdl interface {
 	DeletePost(context.Context, int64, string) error
 	CreateDraft(context.Context, *model.PostDraft) error
 	LoadDraft(context.Context, string) (model.PostDraft, error)
-	FindPostByOwnerID(context.Context, string, int, int) (*model.PaginatedPosts, error)
-	FindPostById(context.Context, int64) (model.Post, error)
+	FindPostByOwnerID(context.Context, string, string, int, int) (*model.PaginatedPosts, error)
+	FindPostById(context.Context, int64, string) (model.Post, error)
+	SetVisibility(context.Context, int64, string, string) error
 	EnrichForSearcher(context.Context, []model.Post, string) []model.PostDetail
 	EnrichOneForSearcher(context.Context, *model.Post, string) model.PostDetail
 	AuthorBrief(context.Context, string) model.UserBrief
@@ -51,8 +52,7 @@ func (ps *PostService) GetAllPost(c context.Context, page, limit int) (*model.Pa
 	return posts, nil
 }
 
-// CreatePost 先落库（is_checking 默认 checking），送审交由后台 worker 异步完成，
-// 避免请求内同步上传阻塞创建；fast 模式下帖子落库即可见。
+// CreatePost 落库即为已通过（帖子不送审），无需请求内同步上传，创建后立即可见。
 func (ps *PostService) CreatePost(c context.Context, post *model.Post) error {
 	if err := ps.pdh.CreatePost(c, post); err != nil {
 		ps.l.Error("Failed to create post", zap.Error(err), zap.Int64("id", post.Id))
@@ -111,8 +111,8 @@ func (ps *PostService) LoadDraft(c context.Context, sid string) (model.PostDraft
 	return draft, nil
 }
 
-func (ps *PostService) FindPostByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedPosts, error) {
-	posts, err := ps.pdh.FindPostByOwnerID(c, studentID, page, limit)
+func (ps *PostService) FindPostByOwnerID(c context.Context, studentID string, viewer string, page, limit int) (*model.PaginatedPosts, error) {
+	posts, err := ps.pdh.FindPostByOwnerID(c, studentID, viewer, page, limit)
 	if err != nil {
 		ps.l.Error("Failed to find posts by owner id", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
@@ -120,13 +120,27 @@ func (ps *PostService) FindPostByOwnerID(c context.Context, studentID string, pa
 	return posts, nil
 }
 
-func (ps *PostService) FindPostById(c context.Context, id int64) (model.Post, error) {
-	post, err := ps.pdh.FindPostById(c, id)
+// FindPostById 取 viewer 有权查看的帖子详情；私密帖仅作者可见，其余按"帖子不存在"返回。
+func (ps *PostService) FindPostById(c context.Context, id int64, viewer string) (model.Post, error) {
+	post, err := ps.pdh.FindVisiblePostById(c, id, viewer)
 	if err != nil {
 		ps.l.Error("Failed to find post by id", zap.Error(err), zap.Int64("id", id))
 		return model.Post{}, errs.ErrPostNotFound.Wrap(err)
 	}
 	return post, nil
+}
+
+// SetVisibility 设置本人帖子的可见性（public/private）。非作者或帖子不存在按"帖子不存在"处理，幂等。
+func (ps *PostService) SetVisibility(c context.Context, id int64, studentID, visibility string) error {
+	updated, err := ps.pdh.SetVisibility(c, id, studentID, visibility)
+	if err != nil {
+		ps.l.Error("Failed to set post visibility", zap.Error(err), zap.Int64("id", id))
+		return errs.ErrInternal.Wrap(err)
+	}
+	if !updated {
+		return errs.ErrPostNotFound
+	}
+	return nil
 }
 
 func (ps *PostService) EnrichForSearcher(c context.Context, posts []model.Post, viewerID string) []model.PostDetail {

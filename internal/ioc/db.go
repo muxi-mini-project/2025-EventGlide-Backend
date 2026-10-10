@@ -135,7 +135,36 @@ func migrate(db *gorm.DB) error {
 		return migrateErr
 	}
 
+	// 帖子不再送审：存量仍停在 checking 的帖子一次性回填为 pass，使其在 slow 模式下也立即可见，
+	// 并让送审 worker 的 FindPendingAuditorPosts 不再捞到帖子。reject 的历史帖保持隐藏。
+	if err := backfillPostAuditStatus(db); err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(&model.Feed{})
+}
+
+// backfillPostAuditStatus 把仍为 checking 的存量帖子置为 pass（帖子不送审的一次性回填）。
+// 表不存在时跳过；幂等：无匹配行则空操作。
+func backfillPostAuditStatus(db *gorm.DB) error {
+	var exists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.tables " +
+			"WHERE table_schema = DATABASE() AND table_name = 'post'",
+	).Scan(&exists).Error; err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	res := db.Exec("UPDATE post SET is_checking = 'pass' WHERE is_checking = 'checking'")
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("backfillPostAuditStatus: moved %d checking post(s) to pass\n", res.RowsAffected)
+	}
+	return nil
 }
 
 func autoMigrateAll(db *gorm.DB) error {

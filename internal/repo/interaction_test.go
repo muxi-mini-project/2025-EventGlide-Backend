@@ -8,6 +8,7 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/raiki02/EG/internal/cache"
 	"github.com/raiki02/EG/internal/dao"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
@@ -137,5 +138,33 @@ func TestGetUserPostInteractionMapsEmpty(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Errorf("expect empty map, got %d", len(got))
+	}
+}
+
+// TestGetUserLikedPostIdsFiltersByViewerVisibility 点赞列表的 Total 与当页 ids 必须在同一 SQL 内
+// 按 viewer 可见性过滤（join post，公开或本人帖），避免过滤后置导致 Total 偏大、分页不足。
+func TestGetUserLikedPostIdsFiltersByViewerVisibility(t *testing.T) {
+	ctx := context.Background()
+	r, _, mock := newInteractionRepoForTest(t)
+	const viewer = "S_owner"
+	userId := int64(9)
+
+	joinSQL := "FROM user_post_interaction AS upi JOIN post p ON p.id = upi.post_id WHERE"
+	mock.ExpectQuery("SELECT count\\(\\*\\) "+joinSQL).
+		WithArgs(userId, "like", model.PostVisibilityPublic, viewer).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	mock.ExpectQuery("SELECT .* "+joinSQL).
+		WithArgs(userId, "like", model.PostVisibilityPublic, viewer, 10).
+		WillReturnRows(sqlmock.NewRows([]string{"post_id"}).AddRow(1001))
+
+	got, err := r.GetUserLikedPostIds(ctx, userId, viewer, 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Total != 1 || len(got.Ids) != 1 || got.Ids[0] != 1001 {
+		t.Fatalf("unexpected result: %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
 	}
 }

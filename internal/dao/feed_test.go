@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -108,20 +109,21 @@ func TestFeedListQueriesAreOrderedAscending(t *testing.T) {
 	}
 }
 
-// TestPostExistsBatchSQL 断言帖子存在性批量判断按 post 主键一次 IN 查询（避免逐条 COUNT 的 N+1）。
-func TestPostExistsBatchSQL(t *testing.T) {
+// TestAccessiblePostBatchSQL 断言帖子可访问性批量判断按 post 主键一次 IN 查询（避免逐条 COUNT 的 N+1），
+// 且过滤条件带 viewer（公开或本人帖）。
+func TestAccessiblePostBatchSQL(t *testing.T) {
 	fd, mock := newFeedDaoForTest(t)
 
 	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
-		WithArgs(int64(1001), int64(1002)).
+		WithArgs(int64(1001), int64(1002), model.PostVisibilityPublic, "S_viewer").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
 
-	exists, err := fd.PostExistsBatch(context.Background(), []int64{1001, 1002})
+	accessible, err := fd.AccessiblePostBatch(context.Background(), "S_viewer", []int64{1001, 1002})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !exists[1001] || exists[1002] {
-		t.Fatalf("expected only 1001 to exist, got %+v", exists)
+	if !accessible[1001] || accessible[1002] {
+		t.Fatalf("expected only 1001 to be accessible, got %+v", accessible)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
