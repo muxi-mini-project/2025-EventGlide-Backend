@@ -13,6 +13,10 @@ import (
 )
 
 func newPostDaoForTest(t *testing.T) (*PostDao, sqlmock.Sqlmock) {
+	return newPostDaoWithEffectForTest(t, "")
+}
+
+func newPostDaoWithEffectForTest(t *testing.T, effect string) (*PostDao, sqlmock.Sqlmock) {
 	t.Helper()
 
 	sqlDB, mock, err := sqlmock.New()
@@ -29,7 +33,7 @@ func newPostDaoForTest(t *testing.T) (*PostDao, sqlmock.Sqlmock) {
 		t.Fatal(err)
 	}
 
-	return &PostDao{db: gdb, l: logger.NewLoggerSet().Post}, mock
+	return &PostDao{db: gdb, effect: effect, l: logger.NewLoggerSet().Post}, mock
 }
 
 // TestFindPendingAuditorPostsSQL 锁定待送审帖子的筛选契约：
@@ -270,6 +274,27 @@ func TestIsPostVisibleToSQL(t *testing.T) {
 	}
 	if !visible {
 		t.Fatalf("expected visible")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestIsPostVisibleToSlowEffectAddsAuditFilter slow 模式下可见性判定须叠加审核过滤（is_checking='pass'），
+// 使历史 reject 帖不可被 id 直达、也不被互动写兜底放行。
+func TestIsPostVisibleToSlowEffectAddsAuditFilter(t *testing.T) {
+	dao, mock := newPostDaoWithEffectForTest(t, "slow")
+
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND is_checking = \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(int64(1001), "pass", model.PostVisibilityPublic, "S_viewer").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	visible, err := dao.IsPostVisibleTo(context.Background(), 1001, "S_viewer")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if visible {
+		t.Fatalf("rejected post must not be visible under slow effect")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

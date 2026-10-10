@@ -115,7 +115,7 @@ func TestAccessiblePostBatchSQL(t *testing.T) {
 	fd, mock := newFeedDaoForTest(t)
 
 	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
-		WithArgs(int64(1001), int64(1002), model.PostVisibilityPublic, "S_viewer").
+		WithArgs(int64(1001), int64(1002), model.PostVisibilityPublic, "S_viewer", "reject").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
 
 	accessible, err := fd.AccessiblePostBatch(context.Background(), "S_viewer", []int64{1001, 1002})

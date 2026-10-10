@@ -215,7 +215,7 @@ func (id *InteractionDao) GetUserLikedActivityIds(c context.Context, userId int6
 }
 
 // GetUserCollectedPostIds 分页返回用户收藏的帖子 id。与帖子表 join 并按 viewer 可见性过滤
-// （公开 或 viewer 本人帖），使 Total 与当页 ids 口径一致，避免分页出现不足/空页。
+// （公开 或 viewer 本人帖，且排除历史 reject 帖），使 Total 与当页 ids 口径一致，避免分页出现不足/空页。
 func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int64, viewer string, page, limit int) (*model.PaginatedPostIds, error) {
 	offset := (page - 1) * limit
 	var ids []int64
@@ -226,6 +226,7 @@ func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int6
 		Joins("JOIN post p ON p.id = upi.post_id").
 		Where("upi.user_id = ? AND upi.type = ?", userId, "collect").
 		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
+		Where("p.is_checking != ?", "reject").
 		Count(&total).Error
 	if err != nil {
 		return nil, err
@@ -236,6 +237,7 @@ func (id *InteractionDao) GetUserCollectedPostIds(c context.Context, userId int6
 		Joins("JOIN post p ON p.id = upi.post_id").
 		Where("upi.user_id = ? AND upi.type = ?", userId, "collect").
 		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
+		Where("p.is_checking != ?", "reject").
 		Order("upi.id DESC").
 		Limit(limit).Offset(offset).
 		Pluck("upi.post_id", &ids).Error
@@ -257,6 +259,7 @@ func (id *InteractionDao) GetUserLikedPostIds(c context.Context, userId int64, v
 		Joins("JOIN post p ON p.id = upi.post_id").
 		Where("upi.user_id = ? AND upi.type = ?", userId, "like").
 		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
+		Where("p.is_checking != ?", "reject").
 		Count(&total).Error
 	if err != nil {
 		return nil, err
@@ -267,6 +270,7 @@ func (id *InteractionDao) GetUserLikedPostIds(c context.Context, userId int64, v
 		Joins("JOIN post p ON p.id = upi.post_id").
 		Where("upi.user_id = ? AND upi.type = ?", userId, "like").
 		Where("p.visibility = ? OR p.student_id = ?", model.PostVisibilityPublic, viewer).
+		Where("p.is_checking != ?", "reject").
 		Order("upi.id DESC").
 		Limit(limit).Offset(offset).
 		Pluck("upi.post_id", &ids).Error

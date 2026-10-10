@@ -191,7 +191,8 @@ func (fd *FeedDao) GetPictureFromRootID(ctx context.Context, rootId int64) (stri
 }
 
 // AccessiblePostBatch 一次查询返回给定帖子 id 中 viewer 可访问的集合（feed 标记不可访问内容用）。
-// 可访问 = 帖子存在且（公开 或 viewer 本人发布）。私密他人帖与已删帖同样不可访问。
+// 可访问 = 帖子存在、非被拒（帖子不再送审，故仅历史 reject 需排除）、且（公开 或 viewer 本人发布）。
+// 私密他人帖、已删帖、历史 reject 帖同样不可访问。
 func (fd *FeedDao) AccessiblePostBatch(ctx context.Context, viewer string, postIds []int64) (map[int64]bool, error) {
 	accessible := make(map[int64]bool, len(postIds))
 	if len(postIds) == 0 {
@@ -202,6 +203,7 @@ func (fd *FeedDao) AccessiblePostBatch(ctx context.Context, viewer string, postI
 		Table(TableNamePost).
 		Where("id IN ?", postIds).
 		Where("visibility = ? OR student_id = ?", model.PostVisibilityPublic, viewer).
+		Where("is_checking != ?", "reject").
 		Pluck("id", &found).Error; err != nil {
 		fd.l.Error("Batch check post accessible failed", zap.Error(err))
 		return nil, err

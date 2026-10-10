@@ -100,7 +100,7 @@ func TestFeedListTargetDeletedFlag(t *testing.T) {
 				WillReturnRows(sqlmock.NewRows([]string{"id", "target_id", "root_id", "root_type", "object", "student_id", "receiver", "created_at", "action", "status"}).
 					AddRow(1, tc.targetID, tc.rootID, tc.rootType, tc.object, actor, viewer, time.Now(), tc.action, "未读"))
 			// resolveFeedTargets 批量判断目标帖子对 viewer 是否可访问：已删返回空
-			mock.ExpectQuery(postSQL).WithArgs(postID, model.PostVisibilityPublic, viewer).
+			mock.ExpectQuery(postSQL).WithArgs(postID, model.PostVisibilityPublic, viewer, "reject").
 				WillReturnRows(sqlmock.NewRows([]string{"id"}))
 			mock.ExpectQuery(userSQL).WithArgs(actor, 1).
 				WillReturnRows(sqlmock.NewRows([]string{"id", "college", "student_id", "name", "real_name", "avatar", "school"}).
@@ -136,7 +136,7 @@ func TestResolveFeedTargetsBatchesPostExistence(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?,\\?\\)").
-		WithArgs(int64(1001), int64(1002), model.PostVisibilityPublic, viewer).
+		WithArgs(int64(1001), int64(1002), model.PostVisibilityPublic, viewer, "reject").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
 
 	targets, deleted := fs.resolveFeedTargets(context.Background(), viewer, feeds)
@@ -165,7 +165,7 @@ func TestResolveFeedTargetsDedupsPostIDs(t *testing.T) {
 	}
 
 	mock.ExpectQuery("SELECT `id` FROM `post` WHERE id IN \\(\\?\\)").
-		WithArgs(int64(1001), model.PostVisibilityPublic, viewer).
+		WithArgs(int64(1001), model.PostVisibilityPublic, viewer, "reject").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1001))
 
 	targets, deleted := fs.resolveFeedTargets(context.Background(), viewer, feeds)
