@@ -3,15 +3,15 @@ package req
 import "github.com/raiki02/EG/pkg/utils"
 
 type CreatePostReq struct {
-	Title     string   `json:"title"`
-	Introduce string   `json:"introduce"`
-	ShowImg   []string `json:"showImg"`
+	Title     string  `json:"title"`
+	Introduce string  `json:"introduce"`
+	ShowImg   []Image `json:"showImg"`
 }
 
 type CreatePostDraftReq struct {
-	Title     string   `json:"title"`
-	Introduce string   `json:"introduce"`
-	ShowImg   []string `json:"showImg"`
+	Title     string  `json:"title"`
+	Introduce string  `json:"introduce"`
+	ShowImg   []Image `json:"showImg"`
 }
 
 type FindPostReq struct {

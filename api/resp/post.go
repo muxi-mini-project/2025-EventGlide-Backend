@@ -7,11 +7,11 @@ type CreatePostResp struct {
 	StudentID   string            `json:"studentId"`
 	PublishTime string            `json:"publishTime"`
 
-	Title      string   `json:"title"`
-	Introduce  string   `json:"introduce"`
-	ShowImg    []string `json:"showImg"`
-	IsChecking string   `json:"isChecking"`
-	Visibility string   `json:"visibility"`
+	Title      string  `json:"title"`
+	Introduce  string  `json:"introduce"`
+	ShowImg    []Image `json:"showImg"`
+	IsChecking string  `json:"isChecking"`
+	Visibility string  `json:"visibility"`
 
 	UserInfo UserInfo `json:"userInfo"`
 }
@@ -21,9 +21,9 @@ type ListPostsResp struct {
 	UserInfo    UserInfo          `json:"userInfo"`
 	PublishTime string            `json:"publishTime"`
 
-	Introduce string   `json:"introduce"`
-	ShowImg   []string `json:"showImg"`
-	Title     string   `json:"title"`
+	Introduce string  `json:"introduce"`
+	ShowImg   []Image `json:"showImg"`
+	Title     string  `json:"title"`
 
 	LikeNum    uint `json:"likeNum"`
 	CollectNum uint `json:"collectNum"`
@@ -39,7 +39,7 @@ type LoadPostDraftResp struct {
 	Id        utils.SnowflakeID `json:"id"`
 	Title     string            `json:"title"`
 	Introduce string            `json:"introduce"`
-	ShowImg   []string          `json:"showImg"`
+	ShowImg   []Image           `json:"showImg"`
 	StudentID string            `json:"studentId"`
 	CreatedAt string            `json:"createdAt"`
 }

@@ -13,17 +13,17 @@ type ActSearchReq struct {
 }
 
 type CreateActReq struct {
-	Title     string   `json:"title" validate:"required"`
-	Introduce string   `json:"introduce" validate:"required"`
-	ShowImg   []string `json:"showImg"`
+	Title     string  `json:"title" validate:"required"`
+	Introduce string  `json:"introduce" validate:"required"`
+	ShowImg   []Image `json:"showImg"`
 
 	LabelForm CreateActLabel `json:"labelform"`
 }
 
 type CreateActDraftReq struct {
-	Title     string   `json:"title"`
-	Introduce string   `json:"introduce"`
-	ShowImg   []string `json:"showImg"`
+	Title     string  `json:"title"`
+	Introduce string  `json:"introduce"`
+	ShowImg   []Image `json:"showImg"`
 
 	LabelForm CreateDraftLabel `json:"labelform"`
 }

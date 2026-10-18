@@ -28,18 +28,20 @@ type PostServiceHdl interface {
 }
 
 type PostService struct {
-	pdh *repo.PostRepo
-	ud  *repo.UserRepo
-	id  *repo.InteractionRepo
-	l   *zap.Logger
+	pdh    *repo.PostRepo
+	ud     *repo.UserRepo
+	id     *repo.InteractionRepo
+	imgRes *ImageSizeResolver
+	l      *zap.Logger
 }
 
-func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, l *logger.LoggerSet) *PostService {
+func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, imgRes *ImageSizeResolver, l *logger.LoggerSet) *PostService {
 	return &PostService{
-		pdh: pdh,
-		ud:  ud,
-		id:  id,
-		l:   l.Post.Named("service"),
+		pdh:    pdh,
+		ud:     ud,
+		id:     id,
+		imgRes: imgRes,
+		l:      l.Post.Named("service"),
 	}
 }
 
@@ -54,6 +56,10 @@ func (ps *PostService) GetAllPost(c context.Context, page, limit int) (*model.Pa
 
 // CreatePost 落库即为已通过（帖子不送审），无需请求内同步上传，创建后立即可见。
 func (ps *PostService) CreatePost(c context.Context, post *model.Post) error {
+	// 宽高兜底：前端请求里可能不带宽高；创建后前端立即回到瀑布流
+	// 重新拉列表，创建时同步解析保证刚创建的帖子带宽高。失败行保持 0 交由回填 worker 重试。
+	ps.imgRes.ResolveMissing(c, post.Images)
+
 	if err := ps.pdh.CreatePost(c, post); err != nil {
 		ps.l.Error("Failed to create post", zap.Error(err), zap.Int64("id", post.Id))
 		return errs.ErrPostCreateFailed.Wrap(err)

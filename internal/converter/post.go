@@ -21,7 +21,7 @@ func CreatePostFromReq(r *req.CreatePostReq, studentID string) *model.Post {
 		// 帖子不送审：创建即为已通过，直接可见；可见性一律从公开起步，私密由作者事后在详情页切换。
 		IsChecking: "pass",
 		Visibility: model.PostVisibilityPublic,
-		Images:     ImagesFromUrls(r.ShowImg, id, "post"),
+		Images:     ImagesFromReq(r.ShowImg, id, "post"),
 	}
 }
 
@@ -33,7 +33,7 @@ func CreatePostDraftFromReq(r *req.CreatePostReq, studentID string) *model.PostD
 		StudentID: studentID,
 		Title:     r.Title,
 		Introduce: r.Introduce,
-		Images:    ImagesFromUrls(r.ShowImg, id, "post_draft"),
+		Images:    ImagesFromReq(r.ShowImg, id, "post_draft"),
 	}
 }
 
@@ -42,7 +42,7 @@ func ToLoadPostDraftResp(d model.PostDraft) resp.LoadPostDraftResp {
 		Id:        utils.SnowflakeID(d.Id),
 		Title:     d.Title,
 		Introduce: d.Introduce,
-		ShowImg:   ImagesToUrls(d.Images),
+		ShowImg:   ImagesToResp(d.Images),
 		StudentID: d.StudentID,
 		CreatedAt: tools.ParseTime(d.CreatedAt),
 	}
@@ -89,7 +89,7 @@ func ToListPostResp(d model.PostDetail) resp.ListPostsResp {
 	res.Introduce = post.Introduce
 	res.IsChecking = post.IsChecking
 	res.Visibility = post.Visibility
-	res.ShowImg = ImagesToUrls(post.Images)
+	res.ShowImg = ImagesToResp(post.Images)
 	res.LikeNum = post.LikeNum
 	res.CommentNum = post.CommentNum
 	res.CollectNum = post.CollectNum
@@ -106,7 +106,7 @@ func ToCreatePostResp(d model.PostDetail) resp.CreatePostResp {
 		PublishTime: tools.ParseTime(post.CreatedAt),
 		Title:       post.Title,
 		Introduce:   post.Introduce,
-		ShowImg:     ImagesToUrls(post.Images),
+		ShowImg:     ImagesToResp(post.Images),
 		IsChecking:  post.IsChecking,
 		Visibility:  post.Visibility,
 	}
@@ -122,7 +122,7 @@ func PostToAuditReq(post *model.Post) *req.CreatePostReq {
 	return &req.CreatePostReq{
 		Title:     post.Title,
 		Introduce: post.Introduce,
-		ShowImg:   ImagesToUrls(post.Images),
+		ShowImg:   ImagesToReq(post.Images),
 	}
 }
 
@@ -133,7 +133,7 @@ func ToCreatePostRespFromDraft(d model.PostDraft, author model.UserBrief) resp.C
 		PublishTime: tools.ParseTime(d.CreatedAt),
 		Title:       d.Title,
 		Introduce:   d.Introduce,
-		ShowImg:     ImagesToUrls(d.Images),
+		ShowImg:     ImagesToResp(d.Images),
 	}
 	res.UserInfo.StudentID = author.StudentID
 	res.UserInfo.Avatar = author.Avatar

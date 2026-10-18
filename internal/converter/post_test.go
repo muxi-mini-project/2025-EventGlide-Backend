@@ -14,8 +14,8 @@ func TestPostToAuditReqMapsRow(t *testing.T) {
 		Title:     "社团招新",
 		Introduce: "本周日在操场",
 		Images: []model.Image{
-			{Url: "https://img.example/a.png"},
-			{Url: "https://img.example/b.png"},
+			{Url: "https://img.example/a.png", Width: 800, Height: 600},
+			{Url: "https://img.example/b.png", Width: 400, Height: 300},
 		},
 	}
 
@@ -27,8 +27,11 @@ func TestPostToAuditReqMapsRow(t *testing.T) {
 	if got.Introduce != post.Introduce {
 		t.Errorf("Introduce = %q, want %q", got.Introduce, post.Introduce)
 	}
-	if len(got.ShowImg) != 2 || got.ShowImg[0] != "https://img.example/a.png" || got.ShowImg[1] != "https://img.example/b.png" {
+	if len(got.ShowImg) != 2 || got.ShowImg[0].Url != "https://img.example/a.png" || got.ShowImg[1].Url != "https://img.example/b.png" {
 		t.Errorf("ShowImg = %v, want the two image urls in order", got.ShowImg)
+	}
+	if got.ShowImg[0].Width != 800 || got.ShowImg[0].Height != 600 {
+		t.Errorf("ShowImg[0] = %+v, want width 800 height 600", got.ShowImg[0])
 	}
 }
 
