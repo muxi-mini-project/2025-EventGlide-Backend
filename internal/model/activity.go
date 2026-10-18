@@ -63,6 +63,8 @@ type Image struct {
 	OwnerId   int64  `gorm:"type:bigint;comment:所有者ID;column:owner_id;not null;index"`
 	OwnerType string `gorm:"type:varchar(50);comment:所有者类型;column:owner_type;not null;index"`
 	Url       string `gorm:"type:text;comment:图片链接;column:url;not null"`
+	Width     int    `gorm:"type:int;comment:图片宽度;column:width;default:0"`
+	Height    int    `gorm:"type:int;comment:图片高度;column:height;default:0"`
 }
 
 type Signer struct {

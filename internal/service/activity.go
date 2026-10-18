@@ -33,26 +33,32 @@ type ActivityServiceHdl interface {
 }
 
 type ActivityService struct {
-	ad  *repo.ActivityRepo
-	ud  *repo.UserRepo
-	id  *repo.InteractionRepo
-	mq  mq.MQHdl
-	aud AuditorService
-	l   *zap.Logger
+	ad     *repo.ActivityRepo
+	ud     *repo.UserRepo
+	id     *repo.InteractionRepo
+	mq     mq.MQHdl
+	aud    AuditorService
+	imgRes *ImageSizeResolver
+	l      *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, l *logger.LoggerSet) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgRes *ImageSizeResolver, l *logger.LoggerSet) *ActivityService {
 	return &ActivityService{
-		ad:  ad,
-		ud:  ud,
-		id:  id,
-		aud: aud,
-		mq:  mq,
-		l:   l.Activity.Named("service"),
+		ad:     ad,
+		ud:     ud,
+		id:     id,
+		aud:    aud,
+		mq:     mq,
+		imgRes: imgRes,
+		l:      l.Activity.Named("service"),
 	}
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
+	// 宽高兜底：前端请求里可能不带宽高；创建时同步解析保证
+	// 创建后立即刷新列表也能拿到宽高。解析失败的行保持 0，交由回填 worker 重试。
+	as.imgRes.ResolveMissing(c, act.Images)
+
 	err := as.ad.Transaction(c, func(tx *gorm.DB) error {
 		return as.ad.CreateActivity(c, tx, act, signers, studentID)
 	})

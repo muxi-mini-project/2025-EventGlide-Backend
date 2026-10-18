@@ -33,7 +33,7 @@ func CreateActFromReq(r *req.CreateActReq, studentID string) *model.Activity {
 		EndTime:        r.LabelForm.EndTime,
 		ActiveForm:     r.LabelForm.ActiveForm,
 		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
-		Images:         ImagesFromUrls(r.ShowImg, id, "activity"),
+		Images:         ImagesFromReq(r.ShowImg, id, "activity"),
 	}
 	return act
 }
@@ -57,19 +57,22 @@ func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.Ac
 		EndTime:        r.LabelForm.EndTime,
 		ActiveForm:     r.LabelForm.ActiveForm,
 		Signers:        SignersFromReqToActivitySigner(r.LabelForm.Signer, id),
-		Images:         ImagesFromUrls(r.ShowImg, id, "activity_draft"),
+		Images:         ImagesFromReq(r.ShowImg, id, "activity_draft"),
 	}
 }
 
-func ImagesFromUrls(urls []string, ownerId int64, ownerType string) []model.Image {
-	images := make([]model.Image, 0, len(urls))
-	for _, url := range urls {
+// ImagesFromReq 从请求 DTO 构建图片行，宽高随 URL 一起落库，供前端展示占位。
+func ImagesFromReq(imgs []req.Image, ownerId int64, ownerType string) []model.Image {
+	images := make([]model.Image, 0, len(imgs))
+	for _, img := range imgs {
 		id := tools.MustGenerateID()
 		images = append(images, model.Image{
 			Id:        id,
 			OwnerId:   ownerId,
 			OwnerType: ownerType,
-			Url:       url,
+			Url:       img.Url,
+			Width:     img.Width,
+			Height:    img.Height,
 		})
 	}
 	return images
@@ -80,7 +83,7 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 
 	res.Title = d.Title
 	res.Introduce = d.Introduce
-	res.ShowImg = ImagesToUrls(d.Images)
+	res.ShowImg = ImagesToResp(d.Images)
 
 	res.LabelForm.HolderType = d.HolderType
 	res.LabelForm.OrganizerUnit = d.OrganizerUnit
@@ -97,9 +100,28 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 	return res
 }
 
-func ImagesToUrls(images []model.Image) []string {
-	urls := make([]string, len(images))
+// ImagesToResp 将落库图片映射为响应 DTO（含宽高），供各列表/详情/创建响应使用。
+func ImagesToResp(images []model.Image) []resp.Image {
+	out := make([]resp.Image, len(images))
 	for i, img := range images {
+		out[i] = resp.Image{Url: img.Url, Width: img.Width, Height: img.Height}
+	}
+	return out
+}
+
+// ImagesToReq 将落库图片还原为请求 DTO，供草稿回显与后台送审路径使用。
+func ImagesToReq(images []model.Image) []req.Image {
+	out := make([]req.Image, len(images))
+	for i, img := range images {
+		out[i] = req.Image{Url: img.Url, Width: img.Width, Height: img.Height}
+	}
+	return out
+}
+
+// ReqImagesToUrls 提取请求 DTO 中的图片 URL，供审核 SDK 等只需 URL 的边界使用。
+func ReqImagesToUrls(imgs []req.Image) []string {
+	urls := make([]string, len(imgs))
+	for i, img := range imgs {
 		urls[i] = img.Url
 	}
 	return urls
@@ -155,7 +177,7 @@ func ToListActivityResp(d model.ActivityDetail) resp.ListActivitiesResp {
 	res.CommentNum = act.CommentNum
 	res.CollectNum = act.CollectNum
 	res.IfRegister = act.IfRegister
-	res.ShowImg = ImagesToUrls(act.Images)
+	res.ShowImg = ImagesToResp(act.Images)
 	res.Id = utils.SnowflakeID(act.Id)
 
 	return res
@@ -167,7 +189,7 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 
 	res.Title = act.Title
 	res.Introduce = act.Introduce
-	res.ShowImg = ImagesToUrls(act.Images)
+	res.ShowImg = ImagesToResp(act.Images)
 	res.Type = act.Type
 	res.Id = utils.SnowflakeID(act.Id)
 	res.ActiveForm = act.ActiveForm
@@ -190,7 +212,7 @@ func ToCreateActivityRespFromDraft(d model.ActivityDraft, author model.UserBrief
 
 	res.Title = d.Title
 	res.Introduce = d.Introduce
-	res.ShowImg = ImagesToUrls(d.Images)
+	res.ShowImg = ImagesToResp(d.Images)
 	res.Type = d.Type
 	res.Id = utils.SnowflakeID(d.Id)
 	res.OrganizerUnit = d.OrganizerUnit
@@ -255,7 +277,7 @@ func ActivityToAuditReq(act *model.Activity) *req.CreateActReq {
 	return &req.CreateActReq{
 		Title:     act.Title,
 		Introduce: act.Introduce,
-		ShowImg:   ImagesToUrls(act.Images),
+		ShowImg:   ImagesToReq(act.Images),
 		LabelForm: req.CreateActLabel{
 			HolderType:     act.HolderType,
 			OrganizerUnit:  act.OrganizerUnit,
@@ -293,7 +315,7 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 
 		ctt := dto.NewContents(
 			dto.WithTopicText(aw.CactReq.Title, aw.CactReq.Introduce),
-			dto.WithTopicPictures(aw.CactReq.ShowImg),
+			dto.WithTopicPictures(ReqImagesToUrls(aw.CactReq.ShowImg)),
 		)
 		res.Content = ctt
 
@@ -310,7 +332,7 @@ func AuditorUploadReqFromWrapper(aw *req.AuditWrapper, id int64, hookURL string)
 
 		ctt := dto.NewContents(
 			dto.WithTopicText(aw.CpostReq.Title, aw.CpostReq.Introduce),
-			dto.WithTopicPictures(aw.CpostReq.ShowImg),
+			dto.WithTopicPictures(ReqImagesToUrls(aw.CpostReq.ShowImg)),
 		)
 		res.Content = ctt
 	}
