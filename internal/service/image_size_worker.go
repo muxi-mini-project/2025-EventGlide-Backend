@@ -20,9 +20,7 @@ type imageSizeSource interface {
 	CopySizeFromDuplicates(ctx context.Context) error
 }
 
-var (
-	imageSizeDBWriteTimeout = 3 * time.Second
-)
+var imageSizeDBWriteTimeout = 3 * time.Second
 
 const (
 	imageSizeBatchSize = 50
@@ -117,4 +115,8 @@ func (w *ImageSizeWorker) processBatch() {
 		}(img)
 	}
 	wg.Wait()
+}
+
+func (w *ImageSizeWorker) Stop() {
+	w.ticker.Stop()
 }

@@ -60,6 +60,9 @@ func (s *Server) Run() (err error) {
 	s.Shutdown = func() {
 		baseShutdown()
 		cancel()
+		if s.imageWorker != nil {
+			s.imageWorker.Stop()
+		}
 	}
 	return
 }
