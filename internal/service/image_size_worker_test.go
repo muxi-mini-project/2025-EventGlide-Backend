@@ -19,23 +19,27 @@ import (
 
 // fakeImageSource 内存图片源，记录 worker 的查询与回写，便于断言。
 type fakeImageSource struct {
-	mu      sync.Mutex
-	imgs    []model.Image
-	updates map[int64][2]int
-	copied  bool
+	mu             sync.Mutex
+	imgs           []model.Image
+	updates        map[int64][2]int
+	updateDeadline time.Time // 最近一次回写收到的 ctx deadline
+	copied         bool
 }
 
 func (f *fakeImageSource) FindZeroSizeImages(context.Context, int) ([]model.Image, error) {
 	return f.imgs, nil
 }
 
-func (f *fakeImageSource) UpdateImageSize(_ context.Context, id int64, w, h int) error {
+func (f *fakeImageSource) UpdateImageSize(ctx context.Context, id int64, w, h int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.updates == nil {
 		f.updates = map[int64][2]int{}
 	}
 	f.updates[id] = [2]int{w, h}
+	if d, ok := ctx.Deadline(); ok {
+		f.updateDeadline = d
+	}
 	return nil
 }
 
@@ -216,5 +220,35 @@ func TestImageSizeWorkerProcessBatchKeepsTransientFailures(t *testing.T) {
 	defer src.mu.Unlock()
 	if len(src.updates) != 0 {
 		t.Errorf("超时失败被回写 = %v, want 无回写（保持 0 待重试）", src.updates)
+	}
+}
+
+// TestImageSizeWorkerWritesWithFreshCtx 回写必须使用独立于拉图 deadline 的 ctx：
+// 慢图耗尽拉图预算后，复用拉图 ctx 回写会随 deadline 一起失败，行保持 0 每 tick 死链重试
+func TestImageSizeWorkerWritesWithFreshCtx(t *testing.T) {
+	oldFetch, oldWrite := imageSizeFetchTimeout, imageSizeDBWriteTimeout
+	imageSizeFetchTimeout = 500 * time.Millisecond
+	imageSizeDBWriteTimeout = 2 * time.Second
+	t.Cleanup(func() { imageSizeFetchTimeout = oldFetch; imageSizeDBWriteTimeout = oldWrite })
+
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(150 * time.Millisecond) // 拉图消耗 fctx 大部分预算但能成功
+		_, _ = w.Write(pngBytes(t, 32, 16))
+	}))
+	t.Cleanup(slow.Close)
+
+	resolver := testResolver(slow)
+	src := &fakeImageSource{imgs: []model.Image{{Id: 1, Url: slow.URL + "/slow.png"}}}
+	w := &ImageSizeWorker{source: src, resolver: resolver, l: zap.NewNop()}
+
+	w.processBatch()
+
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if got := src.updates[1]; got != [2]int{32, 16} {
+		t.Fatalf("回写 = %v, want {32 16}", got)
+	}
+	if remain := time.Until(src.updateDeadline); remain < imageSizeDBWriteTimeout/2 {
+		t.Errorf("回写 ctx 剩余 %v, 期望独立的 %v 预算；复用拉图 ctx 会导致回写随拉图超时一起失败", remain, imageSizeDBWriteTimeout)
 	}
 }
