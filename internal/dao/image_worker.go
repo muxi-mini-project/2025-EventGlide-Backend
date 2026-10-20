@@ -23,7 +23,8 @@ func NewImageDao(db *gorm.DB, l *logger.LoggerSet) *ImageDao {
 func (d *ImageDao) FindZeroSizeImages(ctx context.Context, limit int) ([]model.Image, error) {
 	var imgs []model.Image
 	err := d.db.WithContext(ctx).
-		Where("width = 0 AND height = 0").
+		// 宽高任一缺失都算待解析；排除已标记 -1 的永久失败行（宽度负值）。
+		Where("(width = 0 OR height = 0) AND width >=0 AND height >=0").
 		Limit(limit).
 		Find(&imgs).Error
 	return imgs, err
@@ -45,5 +46,5 @@ func (d *ImageDao) CopySizeFromDuplicates(ctx context.Context) error {
 		`UPDATE image t JOIN image s
 		 ON t.url = s.url AND s.width > 0 AND s.height > 0
 		 SET t.width = s.width, t.height = s.height
-		 WHERE t.width = 0 AND t.height = 0`).Error
+		 WHERE (t.width = 0 OR t.height = 0) AND t.width >=0 AND t.height >= 0`).Error
 }

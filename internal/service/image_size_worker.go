@@ -97,6 +97,7 @@ func (w *ImageSizeWorker) processBatch() {
 			defer cancel()
 
 			width, height, err := w.resolver.Fetch(fctx, img.Url)
+			//回写用独立短超时 ctx：慢图/超时耗尽 fctx 预算后复用会必然失败
 			dbCtx, dbCancel := context.WithTimeout(context.Background(), imageSizeDBWriteTimeout)
 			defer dbCancel()
 			if err != nil {

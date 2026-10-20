@@ -111,7 +111,7 @@ func (r *ImageSizeResolver) ResolveMissing(ctx context.Context, imgs []model.Ima
 	sem := make(chan struct{}, imageSizeFetchConcurrent)
 	var wg sync.WaitGroup
 	for i := range imgs {
-		if imgs[i].Width != 0 || imgs[i].Height != 0 {
+		if imgs[i].Width > 0 && imgs[i].Height > 0 {
 			continue
 		}
 		wg.Add(1)
