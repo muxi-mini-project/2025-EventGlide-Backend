@@ -148,13 +148,17 @@ func TestImageSizeWorkerProcessBatchMarksFailures(t *testing.T) {
 // 已有宽高的行不重复拉取，0 宽高行原地填充，失败行保持 0。
 func TestImageSizeResolverResolveMissing(t *testing.T) {
 	var hits int32
-	srv := newImgServer(t, map[string][]byte{"/a.png": pngBytes(t, 32, 16)}, &hits)
+	srv := newImgServer(t, map[string][]byte{
+		"/a.png":       pngBytes(t, 32, 16),
+		"/partial.png": pngBytes(t, 20, 10),
+	}, &hits)
 
 	resolver := testResolver(srv)
 	imgs := []model.Image{
 		{Url: srv.URL + "/a.png"},
 		{Url: srv.URL + "/missing.png"},
 		{Url: srv.URL + "/pre.png", Width: 100, Height: 50},
+		{Url: srv.URL + "/partial.png", Width: 100, Height: 0},
 	}
 
 	resolver.ResolveMissing(context.Background(), imgs)
@@ -168,8 +172,11 @@ func TestImageSizeResolverResolveMissing(t *testing.T) {
 	if got := [2]int{imgs[2].Width, imgs[2].Height}; got != [2]int{100, 50} {
 		t.Errorf("前端已传宽高的行被覆盖 = %v, want {100 50}", got)
 	}
-	if got := atomic.LoadInt32(&hits); got != 2 {
-		t.Errorf("图床服务被请求 %d 次, want 2（已有宽高的行不得重复拉取）", got)
+	if got := [2]int{imgs[3].Width, imgs[3].Height}; got != [2]int{20, 10} {
+		t.Errorf("部分宽高行 = %v, want 补全为 {20 10}", got)
+	}
+	if got := atomic.LoadInt32(&hits); got != 3 {
+		t.Errorf("图床服务被请求 %d 次, want 3（完整宽高行不得重复拉取，部分宽高行需要拉取）", got)
 	}
 }
 
