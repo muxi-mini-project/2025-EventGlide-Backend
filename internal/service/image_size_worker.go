@@ -20,6 +20,10 @@ type imageSizeSource interface {
 	CopySizeFromDuplicates(ctx context.Context) error
 }
 
+var (
+	imageSizeDBWriteTimeout = 3 * time.Second
+)
+
 const (
 	imageSizeBatchSize = 50
 	// imageSizeFailMark 解析永久失败行的标记宽高，避免死链每 tick 重试。
@@ -93,10 +97,12 @@ func (w *ImageSizeWorker) processBatch() {
 			defer cancel()
 
 			width, height, err := w.resolver.Fetch(fctx, img.Url)
+			dbCtx, dbCancel := context.WithTimeout(context.Background(), imageSizeDBWriteTimeout)
+			defer dbCancel()
 			if err != nil {
 				// 只有永久失败才标 -1 放弃；超时/5xx 等临时失败保持 0，下轮重试。
 				if errors.Is(err, errImagePermanent) {
-					if uerr := w.source.UpdateImageSize(fctx, img.Id, imageSizeFailMark, imageSizeFailMark); uerr != nil {
+					if uerr := w.source.UpdateImageSize(dbCtx, img.Id, imageSizeFailMark, imageSizeFailMark); uerr != nil {
 						w.l.Warn("宽高回填：标记失败行出错", zap.Int64("id", img.Id), zap.Error(uerr))
 					}
 				}
@@ -104,7 +110,7 @@ func (w *ImageSizeWorker) processBatch() {
 				w.l.Warn("宽高回填：解析失败", zap.Int64("id", img.Id), zap.String("url", img.Url), zap.Error(err))
 				return
 			}
-			if uerr := w.source.UpdateImageSize(fctx, img.Id, width, height); uerr != nil {
+			if uerr := w.source.UpdateImageSize(dbCtx, img.Id, width, height); uerr != nil {
 				w.l.Warn("宽高回填：回写失败", zap.Int64("id", img.Id), zap.Error(uerr))
 			}
 		}(img)
