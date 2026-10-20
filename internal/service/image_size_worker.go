@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
@@ -93,9 +94,13 @@ func (w *ImageSizeWorker) processBatch() {
 
 			width, height, err := w.resolver.Fetch(fctx, img.Url)
 			if err != nil {
-				if uerr := w.source.UpdateImageSize(fctx, img.Id, imageSizeFailMark, imageSizeFailMark); uerr != nil {
-					w.l.Warn("宽高回填：标记失败行出错", zap.Int64("id", img.Id), zap.Error(uerr))
+				// 只有永久失败才标 -1 放弃；超时/5xx 等临时失败保持 0，下轮重试。
+				if errors.Is(err, errImagePermanent) {
+					if uerr := w.source.UpdateImageSize(fctx, img.Id, imageSizeFailMark, imageSizeFailMark); uerr != nil {
+						w.l.Warn("宽高回填：标记失败行出错", zap.Int64("id", img.Id), zap.Error(uerr))
+					}
 				}
+
 				w.l.Warn("宽高回填：解析失败", zap.Int64("id", img.Id), zap.String("url", img.Url), zap.Error(err))
 				return
 			}

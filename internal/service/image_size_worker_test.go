@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image"
 	"image/png"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
@@ -51,10 +53,10 @@ func pngBytes(t *testing.T, w, h int) []byte {
 	return buf.Bytes()
 }
 
-// testResolver 用测试图床域名构造 resolver（白名单即 httptest 地址）。
+// testResolver 用测试图床域名构造 resolver（白名单即 httptest 地址，同样拦截跨域重定向）。
 func testResolver(srv *httptest.Server) *ImageSizeResolver {
 	return &ImageSizeResolver{
-		client:      &http.Client{Timeout: imageSizeFetchTimeout},
+		client:      newImageSizeClient(hostFromURL(srv.URL)),
 		allowedHost: hostFromURL(srv.URL),
 	}
 }
@@ -164,5 +166,55 @@ func TestImageSizeResolverResolveMissing(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&hits); got != 2 {
 		t.Errorf("图床服务被请求 %d 次, want 2（已有宽高的行不得重复拉取）", got)
+	}
+}
+
+// TestImageSizeResolverBlocksCrossHostRedirect 白名单域 302 到其他域必须被拒绝且目标零请求（防 SSRF）。
+func TestImageSizeResolverBlocksCrossHostRedirect(t *testing.T) {
+	var hits int32
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		_, _ = w.Write(pngBytes(t, 8, 4))
+	}))
+	t.Cleanup(other.Close)
+
+	redirecting := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+"/b.png", http.StatusFound)
+	}))
+	t.Cleanup(redirecting.Close)
+
+	resolver := testResolver(redirecting)
+	_, _, err := resolver.Fetch(context.Background(), redirecting.URL+"/a.png")
+	if !errors.Is(err, errImagePermanent) {
+		t.Errorf("跨域重定向 err = %v, want wrap errImagePermanent", err)
+	}
+	if got := atomic.LoadInt32(&hits); got != 0 {
+		t.Errorf("非白名单重定向目标被请求 %d 次, want 0", got)
+	}
+}
+
+// TestImageSizeWorkerProcessBatchKeepsTransientFailures 超时属临时失败：
+// 不标 -1，保持 0 待下轮重试（避免图床抖动导致永久丢宽高）。
+func TestImageSizeWorkerProcessBatchKeepsTransientFailures(t *testing.T) {
+	old := imageSizeFetchTimeout
+	imageSizeFetchTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { imageSizeFetchTimeout = old })
+
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(500 * time.Millisecond) // 远超 100ms 超时，触发超时错误
+		_, _ = w.Write(pngBytes(t, 32, 16))
+	}))
+	t.Cleanup(slow.Close)
+
+	resolver := testResolver(slow)
+	src := &fakeImageSource{imgs: []model.Image{{Id: 1, Url: slow.URL + "/slow.png"}}}
+	w := &ImageSizeWorker{source: src, resolver: resolver, l: zap.NewNop()}
+
+	w.processBatch()
+
+	src.mu.Lock()
+	defer src.mu.Unlock()
+	if len(src.updates) != 0 {
+		t.Errorf("超时失败被回写 = %v, want 无回写（保持 0 待重试）", src.updates)
 	}
 }

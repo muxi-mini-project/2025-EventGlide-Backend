@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
@@ -17,9 +18,14 @@ import (
 	"github.com/raiki02/EG/internal/model"
 )
 
-const (
+var (
 	// imageSizeFetchTimeout 单张图片拉取超时。
 	imageSizeFetchTimeout = 10 * time.Second
+	// url为非可解析宽高内容(4xx、非白名单、跨域重定向、非图片)
+	errImagePermanent = errors.New("image permanently unresolvable")
+)
+
+const (
 	// imageSizeFetchConcurrent 拉图解析并发上限（网络 IO 密集）。
 	imageSizeFetchConcurrent = 8
 	// imageSizeResolveBudget 创建路径同步解析的整批预算：拉图是尽力而为，
@@ -38,9 +44,23 @@ type ImageSizeResolver struct {
 }
 
 func NewImageSizeResolver(cfg *config.Conf) *ImageSizeResolver {
+	allowedHost := hostFromURL(cfg.Imgbed.ImgURL)
 	return &ImageSizeResolver{
-		client:      &http.Client{Timeout: imageSizeFetchTimeout},
-		allowedHost: hostFromURL(cfg.Imgbed.ImgURL),
+		client:      newImageSizeClient(allowedHost),
+		allowedHost: allowedHost,
+	}
+}
+
+func newImageSizeClient(allowedHost string) *http.Client {
+	return &http.Client{
+		Timeout: imageSizeFetchTimeout,
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			if !strings.EqualFold(req.URL.Host, allowedHost) {
+				return fmt.Errorf("%w: redirect host %q 不在允许列表（%s）", errImagePermanent, req.URL.Host, allowedHost)
+			}
+
+			return nil
+		},
 	}
 }
 
@@ -51,27 +71,30 @@ func (r *ImageSizeResolver) Enabled() bool { return r.allowedHost != "" }
 func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("%w: %v", errImagePermanent, err)
 	}
 	if !strings.EqualFold(u.Host, r.allowedHost) {
-		return 0, 0, fmt.Errorf("host %q 不在允许列表（%s）", u.Host, r.allowedHost)
+		return 0, 0, fmt.Errorf("%w: host %q 不在允许列表（%s）", errImagePermanent, u.Host, r.allowedHost)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("%w: %v", errImagePermanent, err)
 	}
 	resp, err := r.client.Do(req)
 	if err != nil {
 		return 0, 0, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	switch {
+	case resp.StatusCode >= 400 && resp.StatusCode < 500:
+		return 0, 0, fmt.Errorf("%w: 拉取图片返回 %s", errImagePermanent, resp.Status)
+	case resp.StatusCode != http.StatusOK:
 		return 0, 0, fmt.Errorf("拉取图片返回 %s", resp.Status)
 	}
 	cfg, _, err := image.DecodeConfig(resp.Body)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("%w: 图片解析格式失败; %v", errImagePermanent, err)
 	}
 	return cfg.Width, cfg.Height, nil
 }
