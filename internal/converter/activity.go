@@ -62,17 +62,22 @@ func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.Ac
 }
 
 // ImagesFromReq 从请求 DTO 构建图片行，宽高随 URL 一起落库，供前端展示占位。
+// 客户端值只作提示：宽高齐全才置 ok，否则归零并置 pending，交由 ResolveMissing/回填 worker 解析覆盖。
 func ImagesFromReq(imgs []req.Image, ownerId int64, ownerType string) []model.Image {
 	images := make([]model.Image, 0, len(imgs))
 	for _, img := range imgs {
-		id := tools.MustGenerateID()
+		width, height, status := img.Width, img.Height, model.ImageSizeOK
+		if width <= 0 || height <= 0 {
+			width, height, status = 0, 0, model.ImageSizePending
+		}
 		images = append(images, model.Image{
-			Id:        id,
-			OwnerId:   ownerId,
-			OwnerType: ownerType,
-			Url:       img.Url,
-			Width:     img.Width,
-			Height:    img.Height,
+			Id:         tools.MustGenerateID(),
+			OwnerId:    ownerId,
+			OwnerType:  ownerType,
+			Url:        img.Url,
+			Width:      width,
+			Height:     height,
+			SizeStatus: status,
 		})
 	}
 	return images
@@ -104,7 +109,11 @@ func ToLoadDraftResp(d model.ActivityDraft) resp.LoadActivitiesDraftResp {
 func ImagesToResp(images []model.Image) []resp.Image {
 	out := make([]resp.Image, len(images))
 	for i, img := range images {
-		out[i] = resp.Image{Url: img.Url, Width: img.Width, Height: img.Height}
+		width, height := img.Width, img.Height
+		if width < 0 || height < 0 {
+			width, height = 0, 0
+		}
+		out[i] = resp.Image{Url: img.Url, Width: width, Height: height}
 	}
 	return out
 }
@@ -113,7 +122,11 @@ func ImagesToResp(images []model.Image) []resp.Image {
 func ImagesToReq(images []model.Image) []req.Image {
 	out := make([]req.Image, len(images))
 	for i, img := range images {
-		out[i] = req.Image{Url: img.Url, Width: img.Width, Height: img.Height}
+		width, height := img.Width, img.Height
+		if width < 0 || height < 0 {
+			width, height = 0, 0
+		}
+		out[i] = req.Image{Url: img.Url, Width: width, Height: height}
 	}
 	return out
 }

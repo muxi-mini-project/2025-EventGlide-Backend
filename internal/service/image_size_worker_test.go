@@ -22,8 +22,8 @@ import (
 type fakeImageSource struct {
 	mu             sync.Mutex
 	imgs           []model.Image
-	updates        map[int64][2]int
-	updateDeadline time.Time // 最近一次回写收到的 ctx deadline
+	updates        map[int64][3]int // {width, height, size_status}
+	updateDeadline time.Time        // 最近一次回写收到的 ctx deadline
 	copied         bool
 }
 
@@ -31,13 +31,13 @@ func (f *fakeImageSource) FindZeroSizeImages(context.Context, int) ([]model.Imag
 	return f.imgs, nil
 }
 
-func (f *fakeImageSource) UpdateImageSize(ctx context.Context, id int64, w, h int) error {
+func (f *fakeImageSource) UpdateImageSize(ctx context.Context, id int64, w, h, status int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.updates == nil {
-		f.updates = map[int64][2]int{}
+		f.updates = map[int64][3]int{}
 	}
-	f.updates[id] = [2]int{w, h}
+	f.updates[id] = [3]int{w, h, status}
 	if d, ok := ctx.Deadline(); ok {
 		f.updateDeadline = d
 	}
@@ -118,15 +118,15 @@ func TestImageSizeWorkerProcessBatchFillsSizes(t *testing.T) {
 	}
 	src.mu.Lock()
 	defer src.mu.Unlock()
-	if got := src.updates[1]; got != [2]int{32, 16} {
-		t.Errorf("image 1 回写 = %v, want {32 16}", got)
+	if got := src.updates[1]; got != [3]int{32, 16, 1} {
+		t.Errorf("image 1 回写 = %v, want {32 16 1}", got)
 	}
-	if got := src.updates[2]; got != [2]int{8, 4} {
-		t.Errorf("image 2 回写 = %v, want {8 4}", got)
+	if got := src.updates[2]; got != [3]int{8, 4, 1} {
+		t.Errorf("image 2 回写 = %v, want {8 4 1}", got)
 	}
 }
 
-// TestImageSizeWorkerProcessBatchMarksFailures 404 与非白名单主机都标记 -1，
+// TestImageSizeWorkerProcessBatchMarksFailures 404 与非白名单主机都置 failed（0/0 + status=2），
 // 且非白名单 URL 不会发起请求（防 SSRF）。
 func TestImageSizeWorkerProcessBatchMarksFailures(t *testing.T) {
 	var hits int32
@@ -146,11 +146,11 @@ func TestImageSizeWorkerProcessBatchMarksFailures(t *testing.T) {
 	}
 	src.mu.Lock()
 	defer src.mu.Unlock()
-	if got := src.updates[1]; got != [2]int{-1, -1} {
-		t.Errorf("404 行回写 = %v, want {-1 -1}", got)
+	if got := src.updates[1]; got != [3]int{0, 0, 2} {
+		t.Errorf("404 行回写 = %v, want {0 0 2}", got)
 	}
-	if got := src.updates[2]; got != [2]int{-1, -1} {
-		t.Errorf("非白名单行回写 = %v, want {-1 -1}", got)
+	if got := src.updates[2]; got != [3]int{0, 0, 2} {
+		t.Errorf("非白名单行回写 = %v, want {0 0 2}", got)
 	}
 }
 
@@ -185,6 +185,9 @@ func TestImageSizeResolverResolveMissing(t *testing.T) {
 	if got := [2]int{imgs[3].Width, imgs[3].Height}; got != [2]int{20, 10} {
 		t.Errorf("部分宽高行 = %v, want 补全为 {20 10}", got)
 	}
+	if imgs[0].SizeStatus != model.ImageSizeOK {
+		t.Errorf("解析成功行 status = %d, want %d (ok)", imgs[0].SizeStatus, model.ImageSizeOK)
+	}
 	if got := atomic.LoadInt32(&hits); got != 3 {
 		t.Errorf("图床服务被请求 %d 次, want 3（完整宽高行不得重复拉取，部分宽高行需要拉取）", got)
 	}
@@ -215,7 +218,7 @@ func TestImageSizeResolverBlocksCrossHostRedirect(t *testing.T) {
 }
 
 // TestImageSizeWorkerProcessBatchKeepsTransientFailures 超时属临时失败：
-// 不标 -1，保持 0 待下轮重试（避免图床抖动导致永久丢宽高）。
+// 不置 failed，保持 pending 待下轮重试（避免图床抖动导致永久丢宽高）。
 func TestImageSizeWorkerProcessBatchKeepsTransientFailures(t *testing.T) {
 	old := imageSizeFetchTimeout
 	imageSizeFetchTimeout = 100 * time.Millisecond
@@ -241,7 +244,7 @@ func TestImageSizeWorkerProcessBatchKeepsTransientFailures(t *testing.T) {
 }
 
 // TestImageSizeWorkerWritesWithFreshCtx 回写必须使用独立于拉图 deadline 的 ctx：
-// 慢图耗尽拉图预算后，复用拉图 ctx 回写会随 deadline 一起失败，行保持 0 每 tick 死链重试
+// 慢图耗尽拉图预算后，复用拉图 ctx 回写会随 deadline 一起失败，行保持 pending 每 tick 死链重试
 func TestImageSizeWorkerWritesWithFreshCtx(t *testing.T) {
 	oldFetch, oldWrite := imageSizeFetchTimeout, imageSizeDBWriteTimeout
 	imageSizeFetchTimeout = 500 * time.Millisecond
@@ -262,8 +265,8 @@ func TestImageSizeWorkerWritesWithFreshCtx(t *testing.T) {
 
 	src.mu.Lock()
 	defer src.mu.Unlock()
-	if got := src.updates[1]; got != [2]int{32, 16} {
-		t.Fatalf("回写 = %v, want {32 16}", got)
+	if got := src.updates[1]; got != [3]int{32, 16, 1} {
+		t.Fatalf("回写 = %v, want {32 16 1}", got)
 	}
 	if remain := time.Until(src.updateDeadline); remain < imageSizeDBWriteTimeout/2 {
 		t.Errorf("回写 ctx 剩余 %v, 期望独立的 %v 预算；复用拉图 ctx 会导致回写随拉图超时一起失败", remain, imageSizeDBWriteTimeout)

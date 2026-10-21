@@ -20,8 +20,8 @@ func (r *ImageRepo) FindZeroSizeImages(ctx context.Context, limit int) ([]model.
 	return r.d.FindZeroSizeImages(ctx, limit)
 }
 
-func (r *ImageRepo) UpdateImageSize(ctx context.Context, id int64, width, height int) error {
-	return r.d.UpdateImageSize(ctx, id, width, height)
+func (r *ImageRepo) UpdateImageSize(ctx context.Context, id int64, width, height, status int) error {
+	return r.d.UpdateImageSize(ctx, id, width, height, status)
 }
 
 func (r *ImageRepo) CopySizeFromDuplicates(ctx context.Context) error {
