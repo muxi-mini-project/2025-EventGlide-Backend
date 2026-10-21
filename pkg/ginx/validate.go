@@ -39,12 +39,12 @@ func InitValidation() {
 		req_ := sl.Current().Interface().(req.CreateActReq)
 		if req_.LabelForm.HolderType == HolderTypePersonal {
 			if len(req_.LabelForm.Signer) <= 2 {
-				sl.ReportError(req_.LabelForm.Signer, "signer", "Signer", "min_signer", "3")
+				sl.ReportError(req_.LabelForm.Signer, "labelform.signer", "LabelForm.Signer", "min_signer", "3")
 				return
 			}
 		} else {
 			if len(req_.LabelForm.Signer) <= 0 {
-				sl.ReportError(req_.LabelForm.Signer, "signer", "Signer", "min_signer", "1")
+				sl.ReportError(req_.LabelForm.Signer, "labelform.signer", "LabelForm.Signer", "min_signer", "1")
 				return
 			}
 		}

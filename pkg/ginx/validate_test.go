@@ -190,12 +190,12 @@ func TestMinSignerMessage(t *testing.T) {
 				{StudentID: "1234567890"},
 				{StudentID: "1234567891"},
 			}),
-			want: "signer 数量不足（至少 3 位）",
+			want: "labelform.signer 数量不足（至少 3 位）",
 		},
 		{
 			name: "organization needs 1 signer",
 			req:  newValidCreateActReq("部门", nil),
-			want: "signer 数量不足（至少 1 位）",
+			want: "labelform.signer 数量不足（至少 1 位）",
 		},
 	}
 
