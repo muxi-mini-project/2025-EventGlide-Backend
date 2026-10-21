@@ -197,3 +197,13 @@ func (w *ImageSizeWorker) processBatch(ctx context.Context) int {
 	wg.Wait()
 	return len(imgs)
 }
+
+// hasPendingImage 是否含待解析宽高的行（worker 的唤醒条件）。
+func hasPendingImage(imgs []model.Image) bool {
+	for _, img := range imgs {
+		if img.SizeStatus == model.ImageSizePending {
+			return true
+		}
+	}
+	return false
+}

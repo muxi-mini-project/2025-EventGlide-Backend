@@ -183,45 +183,6 @@ func TestImageSizeWorkerProcessBatchMarksFailures(t *testing.T) {
 	}
 }
 
-// TestImageSizeResolverResolveMissing 创建路径同步兜底：
-// 已有宽高的行不重复拉取，0 宽高行原地填充，失败行保持 0。
-func TestImageSizeResolverResolveMissing(t *testing.T) {
-	var hits int32
-	srv := newImgServer(t, map[string][]byte{
-		"/a.png":       pngBytes(t, 32, 16),
-		"/partial.png": pngBytes(t, 20, 10),
-	}, &hits)
-
-	resolver := testResolver(srv)
-	imgs := []model.Image{
-		{Url: srv.URL + "/a.png"},
-		{Url: srv.URL + "/missing.png"},
-		{Url: srv.URL + "/pre.png", Width: 100, Height: 50},
-		{Url: srv.URL + "/partial.png", Width: 100, Height: 0},
-	}
-
-	resolver.ResolveMissing(context.Background(), imgs)
-
-	if got := [2]int{imgs[0].Width, imgs[0].Height}; got != [2]int{32, 16} {
-		t.Errorf("第一张宽高 = %v, want {32 16}", got)
-	}
-	if got := [2]int{imgs[1].Width, imgs[1].Height}; got != [2]int{0, 0} {
-		t.Errorf("失败行宽高 = %v, want 保持 {0 0} 交 worker 重试", got)
-	}
-	if got := [2]int{imgs[2].Width, imgs[2].Height}; got != [2]int{100, 50} {
-		t.Errorf("前端已传宽高的行被覆盖 = %v, want {100 50}", got)
-	}
-	if got := [2]int{imgs[3].Width, imgs[3].Height}; got != [2]int{20, 10} {
-		t.Errorf("部分宽高行 = %v, want 补全为 {20 10}", got)
-	}
-	if imgs[0].SizeStatus != model.ImageSizeOK {
-		t.Errorf("解析成功行 status = %d, want %d (ok)", imgs[0].SizeStatus, model.ImageSizeOK)
-	}
-	if got := atomic.LoadInt32(&hits); got != 3 {
-		t.Errorf("图床服务被请求 %d 次, want 3（完整宽高行不得重复拉取，部分宽高行需要拉取）", got)
-	}
-}
-
 // TestImageSizeResolverBlocksCrossHostRedirect 白名单域 302 到其他域必须被拒绝且目标零请求（防 SSRF）。
 func TestImageSizeResolverBlocksCrossHostRedirect(t *testing.T) {
 	var hits int32
@@ -482,6 +443,18 @@ func TestImageSizeWorkerDisabledConfigDoesNotStart(t *testing.T) {
 	defer src.mu.Unlock()
 	if len(src.updates) != 0 {
 		t.Errorf("未配置图床时仍有回写 = %v, want 无", src.updates)
+	}
+}
+
+func TestHasPendingImage(t *testing.T) {
+	if !hasPendingImage([]model.Image{{SizeStatus: model.ImageSizePending}}) {
+		t.Error("pending 行未被识别为待解析")
+	}
+	if hasPendingImage([]model.Image{{SizeStatus: model.ImageSizeOK}, {SizeStatus: model.ImageSizeFailed}}) {
+		t.Error("ok/failed 行被误判为待解析")
+	}
+	if hasPendingImage(nil) {
+		t.Error("空集应无待解析")
 	}
 }
 
