@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	_ "golang.org/x/image/webp"
+
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
 )
@@ -37,7 +39,7 @@ const (
 // 创建路径用 ResolveMissing 同步兜底（创建后前端立即刷新列表也要能拿到宽高），
 // 回填 worker 用 Fetch 异步兜底（存量、草稿与创建时解析失败的行）。
 // 只允许拉取图床域名下的 URL：showImg 由客户端提交，任意 URL 都可入库，不能盲拉（防 SSRF）。
-// 注意：std 库不认 webp，webp 图解析失败保持 0；如需支持可引入 golang.org/x/image/webp。
+// 支持 jpg/png/gif/webp；heic 等其他格式解析失败保持 0 交前端兜底。
 type ImageSizeResolver struct {
 	client      *http.Client
 	allowedHost string
