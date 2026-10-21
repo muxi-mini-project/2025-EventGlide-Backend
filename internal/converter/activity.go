@@ -62,12 +62,13 @@ func CreateActDraftFromReq(r *req.CreateActDraftReq, studentID string) *model.Ac
 }
 
 // ImagesFromReq 从请求 DTO 构建图片行，宽高随 URL 一起落库，供前端展示占位。
-// 客户端值只作提示：宽高齐全才置 ok，否则归零并置 pending，交由回填 worker 异步解析覆盖。
+// 客户端值只作提示：宽高合法（0 < w,h <= 20000）才置 ok，
+// 负数/零/超上限归零并置 pending，交由回填 worker 异步解析覆盖。
 func ImagesFromReq(imgs []req.Image, ownerId int64, ownerType string) []model.Image {
 	images := make([]model.Image, 0, len(imgs))
 	for _, img := range imgs {
 		width, height, status := img.Width, img.Height, model.ImageSizeOK
-		if width <= 0 || height <= 0 {
+		if width <= 0 || height <= 0 || width > model.ImageSizeMaxEdge || height > model.ImageSizeMaxEdge {
 			width, height, status = 0, 0, model.ImageSizePending
 		}
 		images = append(images, model.Image{

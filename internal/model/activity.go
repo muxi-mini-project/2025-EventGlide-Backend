@@ -67,6 +67,10 @@ const (
 	ImageSizeFailed  = 2
 )
 
+// ImageSizeMaxEdge 宽高合理上限：超过视为异常值（前端传错或图片头损坏），
+// 按未知尺寸处理，防止超 INT 上限的脏值写库失败或外露。
+const ImageSizeMaxEdge = 20000
+
 type Image struct {
 	Id         int64  `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
 	OwnerId    int64  `gorm:"type:bigint;comment:所有者ID;column:owner_id;not null;index"`

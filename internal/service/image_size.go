@@ -16,6 +16,7 @@ import (
 	_ "golang.org/x/image/webp"
 
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/model"
 )
 
 var (
@@ -95,6 +96,10 @@ func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int,
 	cfg, _, err := image.DecodeConfig(resp.Body)
 	if err != nil {
 		return 0, 0, fmt.Errorf("%w: 图片解析格式失败; %v", errImagePermanent, err)
+	}
+	// 图片头宽高超上限视为异常（损坏/伪造文件），按永久失败处理，脏值不回写。
+	if cfg.Width > model.ImageSizeMaxEdge || cfg.Height > model.ImageSizeMaxEdge {
+		return 0, 0, fmt.Errorf("%w: 图片宽高超上限 %dx%d", errImagePermanent, cfg.Width, cfg.Height)
 	}
 	return cfg.Width, cfg.Height, nil
 }
