@@ -111,22 +111,24 @@ func WrapWithClaims(fn func(*gin.Context, jwt.RegisteredClaims) (resp.Resp, erro
 
 func bind(ctx *gin.Context, req any) (err error) {
 	if err = ctx.ShouldBindUri(req); err != nil {
-		return
+		return paramInvalidError(err, "路径参数格式错误")
 	}
 
 	if ctx.Request.Method == http.MethodGet {
-		err = ctx.ShouldBindQuery(req)
+		if err = ctx.ShouldBindQuery(req); err != nil {
+			return paramInvalidError(err, "查询参数格式错误")
+		}
 	} else {
 		if ctx.Request.ContentLength > 0 {
 			err = ctx.ShouldBind(req)
 			if err != nil {
-				return
+				return paramInvalidError(err, "请求体格式错误")
 			}
 		}
 	}
 
 	if err = validateRequest(req); err != nil {
-		return
+		return paramInvalidError(err, "参数校验失败")
 	}
 
 	return nil

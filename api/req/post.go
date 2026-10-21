@@ -25,7 +25,7 @@ type DeletePostReq struct {
 }
 
 type FindPostByIdReq struct {
-	Id utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id"`
 }
 
 type SetPostVisibilityReq struct {
