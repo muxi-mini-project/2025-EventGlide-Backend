@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/pkg/errorx"
@@ -18,10 +19,6 @@ import (
 
 type testCreateReq struct {
 	Title string `json:"title" validate:"required"`
-}
-
-type testURIReq struct {
-	ID int64 `json:"id" form:"id" uri:"id" validate:"required"`
 }
 
 type testSnowflakeReq struct {
@@ -96,7 +93,7 @@ func TestWrapRequestReturnsParamInvalidForURIParam(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	InitValidation()
 
-	handler := WrapRequest(func(c *gin.Context, req testURIReq) (resp.Resp, error) {
+	handler := WrapRequest(func(c *gin.Context, req req.FindActByIdReq) (resp.Resp, error) {
 		return ReturnSuccess(nil)
 	})
 
@@ -153,13 +150,35 @@ func TestWrapRequestBindsQueryParam(t *testing.T) {
 	t.Run("invalid value", func(t *testing.T) {
 		assertQueryParamError(t, serve(t, http.MethodGet, "/x", "/x?page=abc", pageHandler, ""))
 	})
+}
 
-	t.Run("invalid value with uri param", func(t *testing.T) {
-		idHandler := WrapRequest(func(c *gin.Context, req testURIReq) (resp.Resp, error) {
-			return ReturnSuccess(req.ID)
-		})
-		assertQueryParamError(t, serve(t, http.MethodGet, "/x/:id", "/x/123?id=abc", idHandler, ""))
+func TestWrapRequestBindsURIParamOnly(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	InitValidation()
+
+	handler := WrapRequest(func(c *gin.Context, req_ req.FindActByIdReq) (resp.Resp, error) {
+		return ReturnSuccess(req_.Id)
 	})
+
+	targets := []string{
+		"/x/123",
+		"/x/123?id=456",
+		"/x/123?id=",
+		"/x/123?id=abc",
+		"/x/123?ID=abc",
+	}
+	for _, target := range targets {
+		t.Run(target, func(t *testing.T) {
+			w := serve(t, http.MethodGet, "/x/:id", target, handler, "")
+			if w.Code != http.StatusOK {
+				t.Fatalf("status = %d, want %d, body = %s", w.Code, http.StatusOK, w.Body.String())
+			}
+			got := decodeResp(t, w)
+			if got.Code != http.StatusOK || got.Data != "123" {
+				t.Fatalf("resp = %+v, want path id 123", got)
+			}
+		})
+	}
 }
 
 func TestWrapRequestReturnsParamInvalidForCustomUnmarshal(t *testing.T) {

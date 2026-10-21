@@ -9,5 +9,5 @@ type NumReq struct {
 }
 
 type ReadFeedDetailReq struct {
-	Id utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id"`
 }

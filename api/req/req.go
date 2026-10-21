@@ -17,5 +17,5 @@ type AuditWrapper struct {
 }
 
 type GetUserInfoReq struct {
-	Id string `json:"id" validate:"required" form:"id" uri:"id"`
+	Id string `json:"id" validate:"required" form:"-" uri:"id"`
 }
