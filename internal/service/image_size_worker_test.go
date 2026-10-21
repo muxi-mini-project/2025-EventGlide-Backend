@@ -476,3 +476,19 @@ func TestImageSizeWorkerProcessBatchHonorsTickBudget(t *testing.T) {
 		t.Errorf("processBatch 返回 %d, want 0（查询失败不视为有待解析数据）", processed)
 	}
 }
+
+// TestImageSizeResolverRejectsOversized 图片头宽高超上限视为异常（损坏/伪造文件），
+// 按永久失败处理，超限脏值不回写进库。
+func TestImageSizeResolverRejectsOversized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngBytes(t, 25000, 8))
+	}))
+	t.Cleanup(srv.Close)
+
+	resolver := testResolver(srv)
+	_, _, err := resolver.Fetch(context.Background(), srv.URL+"/huge.png")
+	if !errors.Is(err, errImagePermanent) {
+		t.Errorf("超上限图片 err = %v, want wrap errImagePermanent", err)
+	}
+}

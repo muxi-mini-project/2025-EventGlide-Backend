@@ -41,3 +41,21 @@ func TestImagesFromReqDerivesSizeStatus(t *testing.T) {
 		t.Errorf("负值行 = %+v, want pending 且归零", got[2])
 	}
 }
+
+// TestImagesFromReqRejectsOversized 宽高超上限视为异常值：归零置 pending 交 worker 解析，
+// 防止脏值写库；等于上限的合法值原样保留。
+func TestImagesFromReqRejectsOversized(t *testing.T) {
+	imgs := ImagesFromReq([]req.Image{
+		{Url: "https://img.example.com/a.png", Width: 30000, Height: 600},
+		{Url: "https://img.example.com/b.png", Width: model.ImageSizeMaxEdge, Height: model.ImageSizeMaxEdge},
+	}, 1, "post")
+
+	if imgs[0].Width != 0 || imgs[0].Height != 0 || imgs[0].SizeStatus != model.ImageSizePending {
+		t.Errorf("超上限行 = {%d %d status:%d}, want {0 0 status:%d}",
+			imgs[0].Width, imgs[0].Height, imgs[0].SizeStatus, model.ImageSizePending)
+	}
+	if imgs[1].Width != model.ImageSizeMaxEdge || imgs[1].Height != model.ImageSizeMaxEdge || imgs[1].SizeStatus != model.ImageSizeOK {
+		t.Errorf("边界行 = {%d %d status:%d}, want 原样 ok",
+			imgs[1].Width, imgs[1].Height, imgs[1].SizeStatus)
+	}
+}
