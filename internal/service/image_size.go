@@ -11,13 +11,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 
 	_ "golang.org/x/image/webp"
 
 	"github.com/raiki02/EG/config"
-	"github.com/raiki02/EG/internal/model"
 )
 
 var (
@@ -30,14 +28,9 @@ var (
 const (
 	// imageSizeFetchConcurrent 拉图解析并发上限（网络 IO 密集）。
 	imageSizeFetchConcurrent = 8
-	// imageSizeResolveBudget 创建路径同步解析的整批预算：拉图是尽力而为，
-	// 预算内未解析的行保持 0，交由回填 worker 异步重试。
-	imageSizeResolveBudget = 5 * time.Second
 )
 
-// ImageSizeResolver 拉取图片并解析宽高的共享实现：
-// 创建路径用 ResolveMissing 同步兜底（创建后前端立即刷新列表也要能拿到宽高），
-// 回填 worker 用 Fetch 异步兜底（存量、草稿与创建时解析失败的行）。
+// ImageSizeResolver 拉取图片并解析宽高的共享实现，只服务回填 worker（前端为准，创建路径不拉图）。
 // 只允许拉取图床域名下的 URL：showImg 由客户端提交，任意 URL 都可入库，不能盲拉（防 SSRF）。
 // 支持 jpg/png/gif/webp；heic 等其他格式解析失败保持 0 交前端兜底。
 type ImageSizeResolver struct {
@@ -104,37 +97,6 @@ func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int,
 		return 0, 0, fmt.Errorf("%w: 图片解析格式失败; %v", errImagePermanent, err)
 	}
 	return cfg.Width, cfg.Height, nil
-}
-
-// ResolveMissing 并发为宽高为 0 的图片解析宽高（原地填充）。
-// 请求里已带宽高的行直接跳过；解析失败保持 pending（0 宽高），交由回填 worker 重试。
-func (r *ImageSizeResolver) ResolveMissing(ctx context.Context, imgs []model.Image) {
-	if !r.Enabled() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(ctx, imageSizeResolveBudget)
-	defer cancel()
-
-	sem := make(chan struct{}, imageSizeFetchConcurrent)
-	var wg sync.WaitGroup
-	for i := range imgs {
-		if imgs[i].Width > 0 && imgs[i].Height > 0 {
-			continue
-		}
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(img *model.Image) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			width, height, err := r.Fetch(ctx, img.Url)
-			if err != nil {
-				return
-			}
-			img.Width, img.Height = width, height
-			img.SizeStatus = model.ImageSizeOK
-		}(&imgs[i])
-	}
-	wg.Wait()
 }
 
 // hostFromURL 提取图床域名的小写 host（含端口），空串表示未配置。
