@@ -20,49 +20,131 @@ type imageSizeSource interface {
 	CopySizeFromDuplicates(ctx context.Context) error
 }
 
-var imageSizeDBWriteTimeout = 3 * time.Second
+var (
+	imageSizeDBWriteTimeout = 3 * time.Second
+	// 回填轮次间隔
+	imageSizeTickInterval = 5 * time.Second
+	// imageSizeTickTimeout 每轮整轮预算（复制 + 查询 + 拉图），防查询挂死卡住 worker；
+	// 单行拉图与回写仍用各自独立 ctx，不受整轮预算影响。
+	imageSizeTickTimeout = 60 * time.Second
+)
 
 const (
 	imageSizeBatchSize = 50
 )
 
-// ImageSizeWorker 后台回填 image 表宽高。
-// （草稿路径、创建时解析失败的行）：保存时 pending（宽高 0）的行由本 worker 拉取原图解析后回写，
-// 存量数据第一轮即被补齐。
+// ImageSizeWorker 按需启停的宽高回填 worker（前端为准，只兜底）：
+//   - Start 首轮立即执行：无待解析数据（含无存量）立即关闭，不空转；
+//   - 每轮解析回写数据库后待解析清空 → 自动关闭；
+//   - 创建/草稿落库 pending 行后 Notify 唤醒（运行中标记下轮继续，已关闭则重启）；
+//   - Stop（Shutdown）后不再拉起。
 type ImageSizeWorker struct {
 	source   imageSizeSource
 	resolver *ImageSizeResolver
 	l        *zap.Logger
-	ticker   *time.Ticker
+
+	mu      sync.Mutex
+	running bool // run goroutine 是否在跑
+	wake    bool // 运行期间收到唤醒：本轮结束后继续，防关闭竞态漏解析
+	stopCh  chan struct{}
+	stopped bool // Shutdown 后不再重启
 }
 
 func NewImageSizeWorker(source *repo.ImageRepo, resolver *ImageSizeResolver, l *logger.LoggerSet) *ImageSizeWorker {
-	w := &ImageSizeWorker{
+	return &ImageSizeWorker{
 		source:   source,
 		resolver: resolver,
 		l:        l.Bff,
-		ticker:   time.NewTicker(5 * time.Second),
 	}
-	if !resolver.Enabled() {
-		// 未配置图床域名时禁用拉图（安全默认），已存 0 宽高行保持 0，前端兜底。
+}
+
+// Start 启动回填循环（幂等）。已停止、已在运行、图床配置缺失/错误时不启动。
+func (w *ImageSizeWorker) Start() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.stopped || w.running {
+		return
+	}
+	if !w.resolver.Enabled() {
 		w.l.Warn("imgbed.imgUrl 未配置，宽高回填 worker 不启动")
-		return w
+		return
 	}
+
+	w.running = true
+	w.stopCh = make(chan struct{})
 	safe.Go(w.l, "image-size-worker", w.run)
-	return w
+}
+
+// Notify 创建/草稿路径落库 pending 行后唤醒回填：运行中则置 wake（与关闭决策同锁，
+// 保证不因关闭竞态漏掉新行），已关闭则重新启动（Start 自带全部守卫）。
+func (w *ImageSizeWorker) Notify() {
+	w.mu.Lock()
+	if w.running {
+		w.wake = true
+		w.mu.Unlock()
+		return
+	}
+	w.mu.Unlock()
+	w.Start()
+}
+
+// Stop 进程关闭时停止回填循环；停止后 Notify 不再拉起。
+func (w *ImageSizeWorker) Stop() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.stopped = true
+	if w.stopCh != nil {
+		close(w.stopCh)
+		w.stopCh = nil
+	}
 }
 
 func (w *ImageSizeWorker) run() {
-	for range w.ticker.C {
-		// 每轮单独 recover：单条数据的问题不应让 worker 永久停摆。
-		safe.Run(w.l, "image-size-worker.tick", w.processBatch)
+	defer func() {
+		w.mu.Lock()
+		w.running = false
+		w.mu.Unlock()
+	}()
+
+	ticker := time.NewTicker(imageSizeTickInterval)
+	defer ticker.Stop()
+
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), imageSizeTickTimeout)
+		processed := 0
+		safe.Run(w.l, "image-size-worker.tick", func() {
+			processed = w.processBatch(ctx)
+		})
+		cancel()
+
+		w.mu.Lock()
+		if w.wake {
+			// 本轮期间有新 pending 落库，立即再跑一轮。
+			w.wake = false
+			w.mu.Unlock()
+			continue
+		}
+
+		if processed == 0 {
+			// 待解析清空：解析完毕且回写完成，worker 关闭。
+			w.running = false
+			w.mu.Unlock()
+			w.l.Info("宽高回填：待解析数据清空，worker 关闭")
+			return
+		}
+		w.mu.Unlock()
+
+		select {
+		case <-w.stopCh:
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
 // processBatch 每 tick 先复制同 URL 已解析的宽高，再拉取剩余 0 宽高行并发解析回写。
-func (w *ImageSizeWorker) processBatch() {
-	ctx := context.Background()
-
+// 返回本轮查到的待解析行数（0 表示清空，调用方可关闭 worker）。
+func (w *ImageSizeWorker) processBatch(ctx context.Context) int {
 	// 草稿反复保存会产生同 URL 的大量重复行，先免费复制，减少拉图。
 	if err := w.source.CopySizeFromDuplicates(ctx); err != nil {
 		w.l.Warn("宽高回填：复制重复行宽高失败", zap.Error(err))
@@ -72,10 +154,10 @@ func (w *ImageSizeWorker) processBatch() {
 	imgs, err := w.source.FindZeroSizeImages(ctx, imageSizeBatchSize)
 	if err != nil {
 		w.l.Warn("宽高回填：查询待解析图片失败", zap.Error(err))
-		return
+		return 0
 	}
 	if len(imgs) == 0 {
-		return
+		return 0
 	}
 
 	sem := make(chan struct{}, imageSizeFetchConcurrent)
@@ -113,8 +195,5 @@ func (w *ImageSizeWorker) processBatch() {
 		}(img)
 	}
 	wg.Wait()
-}
-
-func (w *ImageSizeWorker) Stop() {
-	w.ticker.Stop()
+	return len(imgs)
 }
