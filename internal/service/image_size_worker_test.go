@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"image"
 	"image/png"
@@ -55,6 +56,15 @@ func pngBytes(t *testing.T, w, h int) []byte {
 		t.Fatalf("encode png: %v", err)
 	}
 	return buf.Bytes()
+}
+
+func webpBytes(t *testing.T) []byte {
+	t.Helper()
+	d, err := base64.StdEncoding.DecodeString("UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==")
+	if err != nil {
+		t.Fatalf("decode webp fixture: %v", err)
+	}
+	return d
 }
 
 // testResolver 用测试图床域名构造 resolver（白名单即 httptest 地址，同样拦截跨域重定向）。
@@ -257,5 +267,22 @@ func TestImageSizeWorkerWritesWithFreshCtx(t *testing.T) {
 	}
 	if remain := time.Until(src.updateDeadline); remain < imageSizeDBWriteTimeout/2 {
 		t.Errorf("回写 ctx 剩余 %v, 期望独立的 %v 预算；复用拉图 ctx 会导致回写随拉图超时一起失败", remain, imageSizeDBWriteTimeout)
+	}
+}
+
+func TestImageSizeResolverFetchesWebp(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/webp")
+		_, _ = w.Write(webpBytes(t))
+	}))
+	t.Cleanup(srv.Close)
+
+	resolver := testResolver(srv)
+	width, height, err := resolver.Fetch(context.Background(), srv.URL+"/a.webp")
+	if err != nil {
+		t.Fatalf("webp 解析失败 = %v, want 成功", err)
+	}
+	if width != 1 || height != 1 {
+		t.Errorf("webp 宽高 = {%d %d}, want {1 1}", width, height)
 	}
 }
