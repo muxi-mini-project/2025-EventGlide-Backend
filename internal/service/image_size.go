@@ -73,6 +73,9 @@ func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int,
 	if err != nil {
 		return 0, 0, fmt.Errorf("%w: %v", errImagePermanent, err)
 	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return 0, 0, fmt.Errorf("%w: scheme %q 不支持", errImagePermanent, u.Scheme)
+	}
 	if !strings.EqualFold(u.Host, r.allowedHost) {
 		return 0, 0, fmt.Errorf("%w: host %q 不在允许列表（%s）", errImagePermanent, u.Host, r.allowedHost)
 	}
@@ -87,6 +90,8 @@ func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int,
 	}
 	defer resp.Body.Close()
 	switch {
+	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusRequestTimeout:
+		return 0, 0, fmt.Errorf("拉取图片返回: %s", resp.Status)
 	case resp.StatusCode >= 400 && resp.StatusCode < 500:
 		return 0, 0, fmt.Errorf("%w: 拉取图片返回 %s", errImagePermanent, resp.Status)
 	case resp.StatusCode != http.StatusOK:

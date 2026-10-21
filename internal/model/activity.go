@@ -62,7 +62,7 @@ type Image struct {
 	Id        int64  `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
 	OwnerId   int64  `gorm:"type:bigint;comment:所有者ID;column:owner_id;not null;index"`
 	OwnerType string `gorm:"type:varchar(50);comment:所有者类型;column:owner_type;not null;index"`
-	Url       string `gorm:"type:varchar(500);comment:图片链接;column:url;not null"`
+	Url       string `gorm:"type:varchar(500);comment:图片链接;column:url;not null;index"`
 	Width     int    `gorm:"type:int;comment:图片宽度;column:width;default:0"`
 	Height    int    `gorm:"type:int;comment:图片高度;column:height;default:0"`
 }
