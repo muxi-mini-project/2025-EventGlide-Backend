@@ -107,7 +107,7 @@ func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int,
 }
 
 // ResolveMissing 并发为宽高为 0 的图片解析宽高（原地填充）。
-// 请求里已带宽高的行直接跳过；解析失败保持 0，交由回填 worker 重试。
+// 请求里已带宽高的行直接跳过；解析失败保持 pending（0 宽高），交由回填 worker 重试。
 func (r *ImageSizeResolver) ResolveMissing(ctx context.Context, imgs []model.Image) {
 	if !r.Enabled() {
 		return
@@ -131,6 +131,7 @@ func (r *ImageSizeResolver) ResolveMissing(ctx context.Context, imgs []model.Ima
 				return
 			}
 			img.Width, img.Height = width, height
+			img.SizeStatus = model.ImageSizeOK
 		}(&imgs[i])
 	}
 	wg.Wait()

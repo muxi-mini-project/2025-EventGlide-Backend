@@ -16,7 +16,7 @@ import (
 // imageSizeSource 抽象宽高回填所需的图片行读写，便于单测注入。
 type imageSizeSource interface {
 	FindZeroSizeImages(ctx context.Context, limit int) ([]model.Image, error)
-	UpdateImageSize(ctx context.Context, id int64, width, height int) error
+	UpdateImageSize(ctx context.Context, id int64, width, height, status int) error
 	CopySizeFromDuplicates(ctx context.Context) error
 }
 
@@ -24,13 +24,10 @@ var imageSizeDBWriteTimeout = 3 * time.Second
 
 const (
 	imageSizeBatchSize = 50
-	// imageSizeFailMark 解析永久失败行的标记宽高，避免死链每 tick 重试。
-	// 前端按未知尺寸兜底；如需重试：UPDATE image SET width=0, height=0 WHERE width < 0。
-	imageSizeFailMark = -1
 )
 
 // ImageSizeWorker 后台回填 image 表宽高。
-// （草稿路径、创建时解析失败的行）：保存时宽高为 0 的行由本 worker 拉取原图解析后回写，
+// （草稿路径、创建时解析失败的行）：保存时 pending（宽高 0）的行由本 worker 拉取原图解析后回写，
 // 存量数据第一轮即被补齐。
 type ImageSizeWorker struct {
 	source   imageSizeSource
@@ -95,13 +92,14 @@ func (w *ImageSizeWorker) processBatch() {
 			defer cancel()
 
 			width, height, err := w.resolver.Fetch(fctx, img.Url)
-			//回写用独立短超时 ctx：慢图/超时耗尽 fctx 预算后复用会必然失败
+			//回写用独立短超时 ctx：慢图/超时耗尽 fctx 预算后复用会必然失败，
+			//行保持 pending 每 tick 死链重试。
 			dbCtx, dbCancel := context.WithTimeout(context.Background(), imageSizeDBWriteTimeout)
 			defer dbCancel()
 			if err != nil {
-				// 只有永久失败才标 -1 放弃；超时/5xx 等临时失败保持 0，下轮重试。
+				// 只有永久失败才置 failed（宽高归零）；超时/5xx 等临时失败保持 pending，下轮重试。
 				if errors.Is(err, errImagePermanent) {
-					if uerr := w.source.UpdateImageSize(dbCtx, img.Id, imageSizeFailMark, imageSizeFailMark); uerr != nil {
+					if uerr := w.source.UpdateImageSize(dbCtx, img.Id, 0, 0, model.ImageSizeFailed); uerr != nil {
 						w.l.Warn("宽高回填：标记失败行出错", zap.Int64("id", img.Id), zap.Error(uerr))
 					}
 				}
@@ -109,7 +107,7 @@ func (w *ImageSizeWorker) processBatch() {
 				w.l.Warn("宽高回填：解析失败", zap.Int64("id", img.Id), zap.String("url", img.Url), zap.Error(err))
 				return
 			}
-			if uerr := w.source.UpdateImageSize(dbCtx, img.Id, width, height); uerr != nil {
+			if uerr := w.source.UpdateImageSize(dbCtx, img.Id, width, height, model.ImageSizeOK); uerr != nil {
 				w.l.Warn("宽高回填：回写失败", zap.Int64("id", img.Id), zap.Error(uerr))
 			}
 		}(img)
