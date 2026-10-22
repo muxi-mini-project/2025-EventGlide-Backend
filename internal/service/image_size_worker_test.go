@@ -297,6 +297,109 @@ func TestImageSizeWorkerWritesWithFreshCtx(t *testing.T) {
 	}
 }
 
+// newDecodeServer 第 1 次返回截断 PNG，后续返回完整 PNG；alwaysTruncated 时始终返回截断内容。
+func newDecodeServer(t *testing.T, alwaysTruncated bool) (*httptest.Server, *int32) {
+	t.Helper()
+	full := pngBytes(t, 32, 16)
+	truncated := full[:20]
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		n := atomic.AddInt32(&hits, 1)
+		w.Header().Set("Content-Type", "image/png")
+		if n == 1 || alwaysTruncated {
+			_, _ = w.Write(truncated)
+			return
+		}
+		_, _ = w.Write(full)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &hits
+}
+
+// TestImageSizeResolverRetriesDecodeOnce 第一次 decode 失败（截断）时同一次 Fetch 内重试一次，
+// 第二次成功即返回宽高，请求次数为 2。
+func TestImageSizeResolverRetriesDecodeOnce(t *testing.T) {
+	srv, hits := newDecodeServer(t, false)
+	resolver := testResolver(srv)
+
+	width, height, err := resolver.Fetch(context.Background(), srv.URL+"/a.png")
+	if err != nil {
+		t.Fatalf("截断后重试仍失败: %v", err)
+	}
+	if width != 32 || height != 16 {
+		t.Errorf("宽高 = {%d %d}, want {32 16}", width, height)
+	}
+	if got := atomic.LoadInt32(hits); got != 2 {
+		t.Errorf("请求次数 = %d, want 2（decode 失败应重试一次）", got)
+	}
+}
+
+// TestImageSizeResolverDecodeFailureIsPermanentAfterRetry 两次都 decode 失败才判永久失败。
+func TestImageSizeResolverDecodeFailureIsPermanentAfterRetry(t *testing.T) {
+	srv, hits := newDecodeServer(t, true)
+
+	_, _, err := testResolver(srv).Fetch(context.Background(), srv.URL+"/a.png")
+	if !errors.Is(err, errImagePermanent) {
+		t.Fatalf("两次 decode 失败 err = %v, want wrap errImagePermanent", err)
+	}
+	if got := atomic.LoadInt32(hits); got != 2 {
+		t.Errorf("请求次数 = %d, want 2", got)
+	}
+}
+
+// TestImageSizeResolverServerErrorIsTransientWithoutRetry 5xx 属临时错误，保持 pending 下轮重试，
+// 不应在同一次 Fetch 内重试。
+func TestImageSizeResolverServerErrorIsTransientWithoutRetry(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, _, err := testResolver(srv).Fetch(context.Background(), srv.URL+"/a.png")
+	if err == nil {
+		t.Fatal("5xx 应返回错误")
+	}
+	if errors.Is(err, errImagePermanent) {
+		t.Errorf("5xx 被误判为永久失败: %v", err)
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("请求次数 = %d, want 1（5xx 不重试）", got)
+	}
+}
+
+// TestImageSizeResolverDecodeRetryHonorsCancel 重试期间 ctx 取消：返回 context 错误，不能判永久。
+func TestImageSizeResolverDecodeRetryHonorsCancel(t *testing.T) {
+	full := pngBytes(t, 32, 16)
+	truncated := full[:20]
+	secondStarted := make(chan struct{}, 1)
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			_, _ = w.Write(truncated)
+			return
+		}
+		secondStarted <- struct{}{}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-secondStarted
+		cancel()
+	}()
+
+	_, _, err := testResolver(srv).Fetch(ctx, srv.URL+"/a.png")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("重试取消 err = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, errImagePermanent) {
+		t.Fatal("ctx 取消被误判为永久失败")
+	}
+}
+
 func TestImageSizeResolverFetchesWebp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/webp")
