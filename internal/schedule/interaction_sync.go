@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// syncTaskStopTimeout Stop 等待两个循环退出的上限，需小于容器 stop grace（默认 10s）。
+// syncTaskStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
 var syncTaskStopTimeout = 10 * time.Second
 
 // InteractionSyncTask 互动数据定时同步任务

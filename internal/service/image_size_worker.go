@@ -28,7 +28,7 @@ var (
 	// 单行拉图在整轮预算内再各自限时（Stop 时随整轮取消），回写用独立短 ctx 不受影响。
 	// 批量 50 行、8 并发、单张最多 10s 时最坏约 62.5s，预算留到 2 分钟避免尾部被取消。
 	imageSizeTickTimeout = 2 * time.Minute
-	// imageSizeStopTimeout Stop 等待 run 退出的上限，需小于容器 stop grace（默认 10s）。
+	// imageSizeStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
 	imageSizeStopTimeout = 10 * time.Second
 )
 
@@ -95,6 +95,7 @@ func (w *ImageSizeWorker) Start(ctx context.Context) {
 	w.wg.Add(1)
 	safe.Go(w.l, "image-size-worker", func() {
 		defer w.wg.Done()
+		defer cancel()
 		w.run(runCtx, id)
 	})
 }
