@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
@@ -33,6 +34,9 @@ const (
 	RecoverIdle   = 2 * time.Minute
 )
 
+// consumerStopTimeout Stop 等待两个循环退出的上限，需小于容器 stop grace（默认 10s）。
+var consumerStopTimeout = 10 * time.Second
+
 // InteractionConsumer MQ 消费者，处理互动事件
 type InteractionConsumer struct {
 	mq       MQHdl
@@ -40,6 +44,11 @@ type InteractionConsumer struct {
 	l        *zap.Logger
 	consumer string
 	group    string
+
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	stopped bool
+	wg      sync.WaitGroup
 }
 
 // NewInteractionConsumer 创建互动事件消费者
@@ -53,15 +62,63 @@ func NewInteractionConsumer(mq MQHdl, dao *dao.InteractionDao, l *zap.Logger) *I
 	}
 }
 
-// Start 启动消费循环
+// Start 启动消费循环（幂等）。ctx 由 Server 持有，Stop 时取消并等待循环退出。
 func (c *InteractionConsumer) Start(ctx context.Context) error {
-	if err := c.mq.EnsureConsumerGroup(ctx, StreamKey, c.group); err != nil {
+	c.mu.Lock()
+	if c.stopped || c.cancel != nil {
+		c.mu.Unlock()
+		return nil
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
+	c.wg.Add(2)
+	c.mu.Unlock()
+
+	if err := c.mq.EnsureConsumerGroup(runCtx, StreamKey, c.group); err != nil {
+		// 已登记的等待计数必须归还，否则 Stop 会一直等到超时；清空 cancel 允许后续重试。
+		c.wg.Done()
+		c.wg.Done()
+		c.mu.Lock()
+		c.cancel = nil
+		c.mu.Unlock()
 		return err
 	}
 
-	safe.Go(c.l, "interaction-consumer.recoverLoop", func() { c.recoverLoop(ctx) })
-	safe.Go(c.l, "interaction-consumer.consumeLoop", func() { c.consumeLoop(ctx) })
+	safe.Go(c.l, "interaction-consumer.recoverLoop", func() {
+		defer c.wg.Done()
+		c.recoverLoop(runCtx)
+	})
+	safe.Go(c.l, "interaction-consumer.consumeLoop", func() {
+		defer c.wg.Done()
+		c.consumeLoop(runCtx)
+	})
 	return nil
+}
+
+// Stop 取消消费循环并等待退出；未 ACK 的消息留在 PEL，由下一轮 XAUTOCLAIM 兜底。
+func (c *InteractionConsumer) Stop() {
+	c.mu.Lock()
+	if c.stopped {
+		c.mu.Unlock()
+		return
+	}
+	c.stopped = true
+	cancel := c.cancel
+	c.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(consumerStopTimeout):
+		c.l.Warn("interaction consumer 停止超时", zap.Duration("timeout", consumerStopTimeout))
+	}
 }
 
 // consumeLoop 消费循环
