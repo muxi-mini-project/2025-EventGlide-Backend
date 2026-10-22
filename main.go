@@ -6,19 +6,10 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
-	"github.com/fsnotify/fsnotify"
 	_ "github.com/raiki02/EG/docs"
-	"github.com/raiki02/EG/internal/server"
 	"github.com/raiki02/EG/pkg/ginx"
-	"github.com/spf13/viper"
-)
-
-var (
-	app *server.Server
-	mu  sync.Mutex
 )
 
 // @title EventGlide API
@@ -31,28 +22,13 @@ func main() {
 	defer stop()
 
 	ginx.InitValidation()
-	app = InitApp()
+	app := InitApp()
 
 	if err := app.Run(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 
-	go hotLoad()
-
 	<-ctx.Done()
 	stop()
 	app.Shutdown()
-}
-
-func hotLoad() {
-	viper.OnConfigChange(func(e fsnotify.Event) {
-		app.Shutdown()
-		app = InitApp()
-		if err := app.Run(); err != nil {
-			log.Printf("Hot reload failed: %v", err)
-		} else {
-			log.Println("Hot reload successful")
-		}
-	})
-	viper.WatchConfig()
 }
