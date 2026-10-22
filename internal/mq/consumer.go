@@ -34,7 +34,7 @@ const (
 	RecoverIdle   = 2 * time.Minute
 )
 
-// consumerStopTimeout Stop 等待两个循环退出的上限，需小于容器 stop grace（默认 10s）。
+// consumerStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
 var consumerStopTimeout = 10 * time.Second
 
 // InteractionConsumer MQ 消费者，处理互动事件
@@ -75,9 +75,10 @@ func (c *InteractionConsumer) Start(ctx context.Context) error {
 	c.mu.Unlock()
 
 	if err := c.mq.EnsureConsumerGroup(runCtx, StreamKey, c.group); err != nil {
-		// 已登记的等待计数必须归还，否则 Stop 会一直等到超时；清空 cancel 允许后续重试。
+		// 已登记的等待计数必须归还，否则 Stop 会一直等到超时；取消并清空 cancel 允许后续重试。
 		c.wg.Done()
 		c.wg.Done()
+		cancel()
 		c.mu.Lock()
 		c.cancel = nil
 		c.mu.Unlock()

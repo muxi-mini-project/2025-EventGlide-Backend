@@ -47,7 +47,7 @@ func NewServer(h *handler.Handler, worker *service.AuditorUploadWorker, imageWor
 
 func (s *Server) Run() (err error) {
 	s.h.RegisterHandlers()
-	err, s.baseShutdown = s.h.Run()
+	s.baseShutdown, err = s.h.Run()
 
 	// 后台任务共用同一个可取消 ctx；每个启动调用各自兜底，避免其一 panic 导致其余不被启动。
 	ctx, cancel := context.WithCancel(context.Background())
@@ -82,9 +82,9 @@ func (s *Server) Run() (err error) {
 	return
 }
 
-// serverShutdownBudget 关闭总预算是 10s，需小于容器 stop grace（默认 10s）：
-// HTTP 排空从中分 5s，剩余时间给后台任务收尾。
-var serverShutdownBudget = 10 * time.Second
+// serverShutdownBudget 关闭总预算 8s，低于容器 stop grace（默认 10s），留出进程退出的余量：
+// HTTP 排空从中最多分 5s，剩余时间给后台任务收尾。
+var serverShutdownBudget = 8 * time.Second
 
 // Shutdown 幂等：先停 HTTP 入口，再 cancel 后台 ctx，最后并发 Stop 各组件并在共享 deadline 内等待。
 func (s *Server) Shutdown() {

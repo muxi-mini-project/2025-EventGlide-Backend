@@ -32,7 +32,7 @@ const perRecordUploadTimeout = 30 * time.Second
 var (
 	auditorUploadInterval    = 5 * time.Second
 	auditorReconcileInterval = 10 * time.Minute
-	// auditorStopTimeout Stop 等待循环退出的上限，需小于容器 stop grace（默认 10s）。
+	// auditorStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
 	// 对账轮最长 2 分钟，超时即取消：对账幂等，下一轮启动后重跑。
 	auditorStopTimeout = 10 * time.Second
 )
@@ -117,6 +117,11 @@ func (w *AuditorUploadWorker) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Stop 取消后 ctx.Done 与已触发的 ticker 可能同时就绪，这里再确认一次，
+			// 避免关闭期间又跑一轮上传。
+			if ctx.Err() != nil {
+				return
+			}
 			// 活动与帖子各自独立超时：共用同一 budget 时，前者积压会把预算耗尽，
 			// 导致后者整轮被饿死并每 tick 报错。
 			// 每轮单独 recover：单条数据的 panic 不应让整个 worker 永久停摆。
@@ -144,6 +149,10 @@ func (w *AuditorUploadWorker) runReconcile(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Stop 取消后 ctx.Done 与已触发的 ticker 可能同时就绪，这里再确认一次。
+			if ctx.Err() != nil {
+				return
+			}
 			safe.Run(w.logger.Auditor, "auditor-worker.reconcile", func() {
 				w.processWithTimeoutFor(ctx, 2*time.Minute, w.reconcile)
 			})

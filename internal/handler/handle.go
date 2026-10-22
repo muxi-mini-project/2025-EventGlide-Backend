@@ -45,7 +45,7 @@ func (r *Handler) RegisterHandlers() {
 	r.RegisterSwagger()
 }
 
-func (r *Handler) Run() (error, func(context.Context)) {
+func (r *Handler) Run() (func(context.Context), error) {
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: r.e.Handler(),
@@ -56,7 +56,7 @@ func (r *Handler) Run() (error, func(context.Context)) {
 		}
 	}()
 
-	return nil, func(parent context.Context) {
+	return func(parent context.Context) {
 		// HTTP 排空必须有界：从关闭总预算里最多取 5s，超时则强制断开残留连接。
 		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 		defer cancel()
@@ -64,7 +64,7 @@ func (r *Handler) Run() (error, func(context.Context)) {
 			log.Printf("HTTP server shutdown: %v", err)
 			_ = srv.Close()
 		}
-	}
+	}, nil
 }
 
 func (r *Handler) RegisterSwagger() {

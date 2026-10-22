@@ -60,7 +60,7 @@ const (
 	feedMaxRetry     = 3
 )
 
-// feedStopTimeout Stop 等待消费循环退出的上限，需小于容器 stop grace（默认 10s）。
+// feedStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
 var feedStopTimeout = 10 * time.Second
 
 func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *logger.LoggerSet) *FeedService {
@@ -141,9 +141,10 @@ func (fs *FeedService) Start(ctx context.Context) {
 
 	if err := fs.mq.EnsureConsumerGroup(runCtx, feedStream, feedGroup); err != nil {
 		fs.l.Error("Failed to ensure feed consumer group", zap.Error(err))
-		// 已登记的等待计数必须归还，否则 Stop 会一直等到超时；清空 cancel 允许后续重试。
+		// 已登记的等待计数必须归还，否则 Stop 会一直等到超时；取消并清空 cancel 允许后续重试。
 		fs.wg.Done()
 		fs.wg.Done()
+		cancel()
 		fs.mu.Lock()
 		fs.cancel = nil
 		fs.mu.Unlock()
