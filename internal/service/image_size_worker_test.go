@@ -16,6 +16,8 @@ import (
 
 	"github.com/raiki02/EG/internal/model"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // fakeImageSource 内存图片源，记录 worker 的查询与回写，便于断言。
@@ -23,21 +25,30 @@ type fakeImageSource struct {
 	mu             sync.Mutex
 	imgs           []model.Image
 	updates        map[int64][3]int // {width, height, size_status}
+	updateCnt      int              // UpdateImageSize 调用次数（检测重复回写）
 	updateDeadline time.Time        // 最近一次回写收到的 ctx deadline
 	copied         bool
 	autoDrain      bool // 回写后从待解析集移除该行（模拟 status 变更后的下轮查询）
 	blockFind      bool // 阻塞 FindZeroSizeImages 直到 ctx 取消（模拟卡死的查询）
-	finds          int  // FindZeroSizeImages 调用次数
+	findErr        error
+	panicCopies    int // 前 N 次 CopySizeFromDuplicates 直接 panic（模拟单轮 panic）
+	finds          int // FindZeroSizeImages 调用次数
 }
 
 func (f *fakeImageSource) FindZeroSizeImages(ctx context.Context, _ int) ([]model.Image, error) {
+	f.mu.Lock()
+	f.finds++
+	findErr := f.findErr
+	f.mu.Unlock()
 	if f.blockFind {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
+	if findErr != nil {
+		return nil, findErr
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.finds++
 	out := make([]model.Image, len(f.imgs))
 	copy(out, f.imgs)
 	return out, nil
@@ -49,6 +60,7 @@ func (f *fakeImageSource) UpdateImageSize(ctx context.Context, id int64, w, h, s
 	if f.updates == nil {
 		f.updates = map[int64][3]int{}
 	}
+	f.updateCnt++
 	f.updates[id] = [3]int{w, h, status}
 	if d, ok := ctx.Deadline(); ok {
 		f.updateDeadline = d
@@ -67,6 +79,10 @@ func (f *fakeImageSource) UpdateImageSize(ctx context.Context, id int64, w, h, s
 func (f *fakeImageSource) CopySizeFromDuplicates(context.Context) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.panicCopies > 0 {
+		f.panicCopies--
+		panic("copy size panic")
+	}
 	f.copied = true
 	return nil
 }
@@ -76,6 +92,24 @@ func (f *fakeImageSource) addImgs(imgs ...model.Image) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.imgs = append(f.imgs, imgs...)
+}
+
+func (f *fakeImageSource) findCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.finds
+}
+
+func (f *fakeImageSource) setFindErr(err error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.findErr = err
+}
+
+func (f *fakeImageSource) updateCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.updateCnt
 }
 
 func pngBytes(t *testing.T, w, h int) []byte {
@@ -140,7 +174,7 @@ func TestImageSizeWorkerProcessBatchFillsSizes(t *testing.T) {
 	}}
 	w := &ImageSizeWorker{source: src, resolver: resolver, l: zap.NewNop()}
 
-	w.processBatch(context.Background())
+	_, _ = w.processBatch(context.Background())
 
 	if !src.copied {
 		t.Error("CopySizeFromDuplicates 未被调用，重复 URL 不会被免费回填")
@@ -168,7 +202,7 @@ func TestImageSizeWorkerProcessBatchMarksFailures(t *testing.T) {
 	}}
 	w := &ImageSizeWorker{source: src, resolver: resolver, l: zap.NewNop()}
 
-	w.processBatch(context.Background())
+	_, _ = w.processBatch(context.Background())
 
 	if got := atomic.LoadInt32(&hits); got != 1 {
 		t.Errorf("图床服务被请求 %d 次, want 1（非白名单 URL 不得发起请求）", got)
@@ -224,7 +258,7 @@ func TestImageSizeWorkerProcessBatchKeepsTransientFailures(t *testing.T) {
 	src := &fakeImageSource{imgs: []model.Image{{Id: 1, Url: slow.URL + "/slow.png"}}}
 	w := &ImageSizeWorker{source: src, resolver: resolver, l: zap.NewNop()}
 
-	w.processBatch(context.Background())
+	_, _ = w.processBatch(context.Background())
 
 	src.mu.Lock()
 	defer src.mu.Unlock()
@@ -251,7 +285,7 @@ func TestImageSizeWorkerWritesWithFreshCtx(t *testing.T) {
 	src := &fakeImageSource{imgs: []model.Image{{Id: 1, Url: slow.URL + "/slow.png"}}}
 	w := &ImageSizeWorker{source: src, resolver: resolver, l: zap.NewNop()}
 
-	w.processBatch(context.Background())
+	_, _ = w.processBatch(context.Background())
 
 	src.mu.Lock()
 	defer src.mu.Unlock()
@@ -318,7 +352,7 @@ func TestImageSizeWorkerDrainsAndCloses(t *testing.T) {
 	}}
 	w := newLifecycleWorker(t, src, resolver)
 
-	w.Start()
+	w.Start(context.Background())
 
 	waitFor(t, 2*time.Second, func() bool {
 		src.mu.Lock()
@@ -343,7 +377,7 @@ func TestImageSizeWorkerClosesImmediatelyWhenNoPending(t *testing.T) {
 	src := &fakeImageSource{} // 无任何待解析行（含无存量）
 	w := newLifecycleWorker(t, src, resolver)
 
-	w.Start()
+	w.Start(context.Background())
 
 	waitFor(t, 2*time.Second, func() bool {
 		w.mu.Lock()
@@ -371,7 +405,7 @@ func TestImageSizeWorkerNotifyWakesClosedWorker(t *testing.T) {
 	src := &fakeImageSource{autoDrain: true}
 	w := newLifecycleWorker(t, src, resolver)
 
-	w.Start()
+	w.Start(context.Background())
 	waitFor(t, 2*time.Second, func() bool {
 		w.mu.Lock()
 		defer w.mu.Unlock()
@@ -402,7 +436,7 @@ func TestImageSizeWorkerStopPreventsRestart(t *testing.T) {
 	src := &fakeImageSource{autoDrain: true}
 	w := newLifecycleWorker(t, src, resolver)
 
-	w.Start()
+	w.Start(context.Background())
 	waitFor(t, 2*time.Second, func() bool {
 		w.mu.Lock()
 		defer w.mu.Unlock()
@@ -422,6 +456,153 @@ func TestImageSizeWorkerStopPreventsRestart(t *testing.T) {
 	}
 }
 
+// TestImageSizeWorkerStopCancelsInflightFetch Stop 必须取消在途拉图并等待 run 退出，
+// 不能在 Shutdown 后继续跑（回归点：Stop 只 close 信号，在途 Fetch 与 run 都不受控）。
+func TestImageSizeWorkerStopCancelsInflightFetch(t *testing.T) {
+	entered := make(chan struct{}, 1)
+	canceled := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+		canceled <- struct{}{}
+	}))
+	t.Cleanup(srv.Close)
+
+	src := &fakeImageSource{imgs: []model.Image{{Id: 1, Url: srv.URL + "/slow.png"}}}
+	w := newLifecycleWorker(t, src, testResolver(srv))
+
+	w.Start(context.Background())
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker 未发起拉图请求")
+	}
+
+	start := time.Now()
+	w.Stop()
+	if elapsed := time.Since(start); elapsed > 2*time.Second {
+		t.Fatalf("Stop 等待 run 退出耗时 %v, want 1s 内", elapsed)
+	}
+
+	select {
+	case <-canceled:
+	case <-time.After(time.Second):
+		t.Fatal("在途 Fetch 未收到 cancel")
+	}
+	w.mu.Lock()
+	running := w.running
+	w.mu.Unlock()
+	if running {
+		t.Error("Stop 返回后 run 仍在运行")
+	}
+}
+
+// TestImageSizeWorkerNotifyStormKeepsSingleRun 解析期间大量并发 Notify 只应保留一个 run，
+// 不能出现两个 goroutine 抢同一批行导致重复拉图/回写。
+func TestImageSizeWorkerNotifyStormKeepsSingleRun(t *testing.T) {
+	release := make(chan struct{})
+	entered := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("Content-Type", "image/png")
+		_, _ = w.Write(pngBytes(t, 32, 16))
+	}))
+	t.Cleanup(srv.Close)
+
+	src := &fakeImageSource{autoDrain: true, imgs: []model.Image{{Id: 1, Url: srv.URL + "/a.png"}}}
+	w := newLifecycleWorker(t, src, testResolver(srv))
+
+	w.Start(context.Background())
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker 未发起拉图请求")
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.Notify()
+		}()
+	}
+	wg.Wait()
+	close(release)
+
+	waitFor(t, 2*time.Second, func() bool {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		return !w.running
+	})
+	if got := src.updateCount(); got != 1 {
+		t.Errorf("同一行回写 %d 次, want 1（多个 run 会重复拉图回写）", got)
+	}
+}
+
+// TestImageSizeWorkerWarnsOnceWhenDisabled 未配置图床时只在首次启动告警，后续 Notify 不重复刷日志。
+func TestImageSizeWorkerWarnsOnceWhenDisabled(t *testing.T) {
+	core, logs := observer.New(zapcore.WarnLevel)
+	w := &ImageSizeWorker{
+		source:   &fakeImageSource{},
+		resolver: &ImageSizeResolver{},
+		l:        zap.New(core),
+		parent:   context.Background(),
+	}
+
+	w.Start(context.Background())
+	w.Notify()
+	w.Notify()
+
+	if got := logs.FilterMessage("imgbed.imgUrl 未配置，宽高回填 worker 不启动").Len(); got != 1 {
+		t.Errorf("未配置图床告警 %d 次, want 1", got)
+	}
+}
+
+// TestImageSizeWorkerOldRunFinishDoesNotClobberNewRun 旧 run 在关闭窗口内退出时，
+// 若 Notify 已拉起新 run，其收尾不能把新 run 的 running 清掉（否则下一次 Notify 会再启一个 run）。
+func TestImageSizeWorkerOldRunFinishDoesNotClobberNewRun(t *testing.T) {
+	w := &ImageSizeWorker{l: zap.NewNop()}
+
+	w.mu.Lock()
+	w.running = true
+	w.runID = 1
+	w.mu.Unlock()
+
+	// 模拟：旧 run 决定关闭并释放锁后，Notify 拉起新 run（runID=2）。
+	w.mu.Lock()
+	w.runID = 2
+	w.running = true
+	w.cancel = func() {}
+	w.mu.Unlock()
+
+	w.finishRun(1)
+	w.mu.Lock()
+	running, cancel := w.running, w.cancel
+	w.mu.Unlock()
+	if !running {
+		t.Fatal("旧 run 收尾覆盖了新 run 的 running，下一次 Notify 会再启一个 run")
+	}
+	if cancel == nil {
+		t.Fatal("旧 run 收尾清空了新 run 的 cancel，Stop 将无法取消新 run")
+	}
+
+	w.finishRun(2)
+	w.mu.Lock()
+	running, cancel = w.running, w.cancel
+	w.mu.Unlock()
+	if running || cancel != nil {
+		t.Fatalf("本次 run 收尾后 running=%v cancel!=nil，应为 false/nil", running)
+	}
+}
+
 // TestImageSizeWorkerDisabledConfigDoesNotStart 前端提供的图床配置缺失/错误
 // （imgbed.imgUrl 空）→ 不启动，也不拉图回写。
 func TestImageSizeWorkerDisabledConfigDoesNotStart(t *testing.T) {
@@ -429,7 +610,7 @@ func TestImageSizeWorkerDisabledConfigDoesNotStart(t *testing.T) {
 	disabled := &ImageSizeResolver{client: newImageSizeClient(""), allowedHost: ""}
 	w := newLifecycleWorker(t, src, disabled)
 
-	w.Start()
+	w.Start(context.Background())
 	w.Notify()
 	time.Sleep(100 * time.Millisecond)
 
@@ -444,6 +625,42 @@ func TestImageSizeWorkerDisabledConfigDoesNotStart(t *testing.T) {
 	if len(src.updates) != 0 {
 		t.Errorf("未配置图床时仍有回写 = %v, want 无", src.updates)
 	}
+}
+
+// TestImageSizeWorkerKeepsRunningOnQueryError 查询失败（DB 抖动/ctx 超时）不能被当成“待解析清空”：
+// worker 必须保持运行并在下一轮继续查（回归点：返回 0 导致一次抖动就永久停掉回填）。
+func TestImageSizeWorkerKeepsRunningOnQueryError(t *testing.T) {
+	src := &fakeImageSource{findErr: errors.New("db down")}
+	w := newLifecycleWorker(t, src, &ImageSizeResolver{client: newImageSizeClient("img.example.com"), allowedHost: "img.example.com"})
+
+	w.Start(context.Background())
+	waitFor(t, 2*time.Second, func() bool { return src.findCount() >= 2 })
+
+	w.mu.Lock()
+	running := w.running
+	w.mu.Unlock()
+	if !running {
+		t.Fatal("查询失败后 worker 被关闭, want 保持运行等待下一轮重试")
+	}
+	w.Stop()
+}
+
+// TestImageSizeWorkerSurvivesProcessBatchPanic 单轮 panic 同样不能关闭 worker：
+// safe.Run 吞掉 panic 后 ok 保持 false，下一轮继续查询（回归点：processed 初值 0 被误判为清空）。
+func TestImageSizeWorkerSurvivesProcessBatchPanic(t *testing.T) {
+	src := &fakeImageSource{panicCopies: 1, findErr: errors.New("db down")}
+	w := newLifecycleWorker(t, src, &ImageSizeResolver{client: newImageSizeClient("img.example.com"), allowedHost: "img.example.com"})
+
+	w.Start(context.Background())
+	waitFor(t, 2*time.Second, func() bool { return src.findCount() >= 1 })
+
+	w.mu.Lock()
+	running := w.running
+	w.mu.Unlock()
+	if !running {
+		t.Fatal("单轮 panic 后 worker 被关闭, want 继续运行")
+	}
+	w.Stop()
 }
 
 func TestHasPendingImage(t *testing.T) {
@@ -468,12 +685,12 @@ func TestImageSizeWorkerProcessBatchHonorsTickBudget(t *testing.T) {
 	defer cancel()
 
 	start := time.Now()
-	processed := w.processBatch(ctx)
+	processed, ok := w.processBatch(ctx)
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("processBatch 未按 tick 预算返回，耗时 %v", elapsed)
 	}
-	if processed != 0 {
-		t.Errorf("processBatch 返回 %d, want 0（查询失败不视为有待解析数据）", processed)
+	if processed != 0 || ok {
+		t.Errorf("processBatch 返回 (%d, %v), want (0, false)（查询失败不视为有待解析数据）", processed, ok)
 	}
 }
 

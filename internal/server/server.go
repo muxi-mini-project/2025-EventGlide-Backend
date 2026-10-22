@@ -59,7 +59,7 @@ func (s *Server) Run() (err error) {
 
 	// 宽高回填 worker 按需启动：首轮即查待解析数据，无数据自动关闭，不空转。
 	if s.imageWorker != nil {
-		s.imageWorker.Start()
+		s.imageWorker.Start(ctx)
 	}
 
 	s.Shutdown = func() {

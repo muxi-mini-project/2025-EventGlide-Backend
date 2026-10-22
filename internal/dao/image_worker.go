@@ -38,7 +38,7 @@ func (d *ImageDao) UpdateImageSize(ctx context.Context, id int64, width, height,
 }
 
 // CopySizeFromDuplicates 同一 URL 已有解析成功（ok）的行时直接复制，避免重复拉图：
-// 草稿每次保存都会整批删旧插新，同一 URL 会产生大量重复待解析行。
+// 重复待解析行主要来自不同活动/帖子引用同一张图；草稿保存会先删旧行再插新行。
 // 幂等：只动 pending 行；源行要求 status = 1（已解析），避免把错误值复制放大。
 func (d *ImageDao) CopySizeFromDuplicates(ctx context.Context) error {
 	return d.db.WithContext(ctx).Exec(
