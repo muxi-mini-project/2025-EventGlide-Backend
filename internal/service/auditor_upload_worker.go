@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/raiki02/EG/api/req"
@@ -28,67 +29,155 @@ type pendingPostSource interface {
 // DB 操作会复用一个已过期的 ctx（历史事故：一批 "Failed to get or create auditor form: context deadline exceeded"）。
 const perRecordUploadTimeout = 30 * time.Second
 
+var (
+	auditorUploadInterval    = 5 * time.Second
+	auditorReconcileInterval = 10 * time.Minute
+	// auditorStopTimeout Stop 等待循环退出的上限，需小于容器 stop grace（默认 10s）。
+	// 对账轮最长 2 分钟，超时即取消：对账幂等，下一轮启动后重跑。
+	auditorStopTimeout = 10 * time.Second
+)
+
 type AuditorUploadWorker struct {
-	activityRepo    pendingActivitySource
-	postRepo        pendingPostSource
-	auditorService  AuditorService
-	logger          *logger.LoggerSet
-	ticker          *time.Ticker
-	reconcileTicker *time.Ticker
+	activityRepo   pendingActivitySource
+	postRepo       pendingPostSource
+	auditorService AuditorService
+	logger         *logger.LoggerSet
+
+	mu      sync.Mutex
+	baseCtx context.Context    // Start 传入的 ctx，单条记录从它派生（Stop 可取消在途请求）
+	cancel  context.CancelFunc // 取消上传与对账两个循环
+	started bool
+	stopped bool
+	wg      sync.WaitGroup
 }
 
 func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, postRepo *repo.PostRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
-	w := &AuditorUploadWorker{
-		activityRepo:    activityRepo,
-		postRepo:        postRepo,
-		auditorService:  auditorService,
-		logger:          logger,
-		ticker:          time.NewTicker(5 * time.Second),
-		reconcileTicker: time.NewTicker(10 * time.Minute),
+	return &AuditorUploadWorker{
+		activityRepo:   activityRepo,
+		postRepo:       postRepo,
+		auditorService: auditorService,
+		logger:         logger,
 	}
-	safe.Go(logger.Auditor, "auditor-worker.upload", w.run)
-	safe.Go(logger.Auditor, "auditor-worker.reconcile", w.runReconcile)
-	return w
 }
 
-func (w *AuditorUploadWorker) run() {
-	for range w.ticker.C {
-		// 活动与帖子各自独立超时：共用同一 budget 时，前者积压会把预算耗尽，
-		// 导致后者整轮被饿死并每 tick 报错。
-		// 每轮单独 recover：单条数据的 panic 不应让整个 worker 永久停摆。
-		safe.Run(w.logger.Auditor, "auditor-worker.activities", func() {
-			w.processWithTimeout(w.processPendingAuditorActivities)
-		})
-		safe.Run(w.logger.Auditor, "auditor-worker.posts", func() {
-			w.processWithTimeout(w.processPendingAuditorPosts)
-		})
-		safe.Run(w.logger.Auditor, "auditor-worker.revokes", func() {
-			w.processWithTimeout(w.processPendingAuditorRevokes)
-		})
+// Start 启动上传与对账两个循环（幂等）。构造只注入依赖，不产生后台 goroutine。
+func (w *AuditorUploadWorker) Start(ctx context.Context) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.started || w.stopped {
+		return
+	}
+	w.started = true
+	runCtx, cancel := context.WithCancel(ctx)
+	w.baseCtx = runCtx
+	w.cancel = cancel
+	w.wg.Add(2)
+	safe.Go(w.logger.Auditor, "auditor-worker.upload", func() {
+		defer w.wg.Done()
+		w.run(runCtx)
+	})
+	safe.Go(w.logger.Auditor, "auditor-worker.reconcile", func() {
+		defer w.wg.Done()
+		w.runReconcile(runCtx)
+	})
+}
+
+// Stop 停止两个循环：取消在途请求并有界等待退出；幂等。
+func (w *AuditorUploadWorker) Stop() {
+	w.mu.Lock()
+	if w.stopped {
+		w.mu.Unlock()
+		return
+	}
+	w.stopped = true
+	cancel := w.cancel
+	w.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		w.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(auditorStopTimeout):
+		w.logger.Auditor.Warn("auditor worker 停止超时", zap.Duration("timeout", auditorStopTimeout))
+	}
+}
+
+func (w *AuditorUploadWorker) run(ctx context.Context) {
+	ticker := time.NewTicker(auditorUploadInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// 活动与帖子各自独立超时：共用同一 budget 时，前者积压会把预算耗尽，
+			// 导致后者整轮被饿死并每 tick 报错。
+			// 每轮单独 recover：单条数据的 panic 不应让整个 worker 永久停摆。
+			safe.Run(w.logger.Auditor, "auditor-worker.activities", func() {
+				w.processWithTimeout(ctx, w.processPendingAuditorActivities)
+			})
+			safe.Run(w.logger.Auditor, "auditor-worker.posts", func() {
+				w.processWithTimeout(ctx, w.processPendingAuditorPosts)
+			})
+			safe.Run(w.logger.Auditor, "auditor-worker.revokes", func() {
+				w.processWithTimeout(ctx, w.processPendingAuditorRevokes)
+			})
+		}
 	}
 }
 
 // runReconcile 独立于上传循环运行：对账是慢速、逐条 HTTP 的长任务，
 // 放同一 select 里会让上传被推迟到整轮对账结束。
-func (w *AuditorUploadWorker) runReconcile() {
-	for range w.reconcileTicker.C {
-		safe.Run(w.logger.Auditor, "auditor-worker.reconcile", w.reconcile)
+func (w *AuditorUploadWorker) runReconcile(ctx context.Context) {
+	ticker := time.NewTicker(auditorReconcileInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			safe.Run(w.logger.Auditor, "auditor-worker.reconcile", func() {
+				w.processWithTimeoutFor(ctx, 2*time.Minute, w.reconcile)
+			})
+		}
 	}
 }
 
 // reconcile 回查已推送但仍 pending 的表单，弥补平台回调丢失。
-func (w *AuditorUploadWorker) reconcile() {
-	w.processWithTimeoutFor(2*time.Minute, w.auditorService.ReconcilePendingForms)
+func (w *AuditorUploadWorker) reconcile(ctx context.Context) {
+	w.auditorService.ReconcilePendingForms(ctx)
 }
 
-func (w *AuditorUploadWorker) processWithTimeout(fn func(context.Context)) {
-	w.processWithTimeoutFor(30*time.Second, fn)
+// processWithTimeout 从 worker ctx 派生整轮预算：Stop 时整轮可取消，
+// 单条记录再各自派生独立超时（见 recordCtx）。
+func (w *AuditorUploadWorker) processWithTimeout(ctx context.Context, fn func(context.Context)) {
+	w.processWithTimeoutFor(ctx, 30*time.Second, fn)
 }
 
-func (w *AuditorUploadWorker) processWithTimeoutFor(d time.Duration, fn func(context.Context)) {
-	ctx, cancel := context.WithTimeout(context.Background(), d)
+func (w *AuditorUploadWorker) processWithTimeoutFor(ctx context.Context, d time.Duration, fn func(context.Context)) {
+	cctx, cancel := context.WithTimeout(ctx, d)
 	defer cancel()
-	fn(ctx)
+	fn(cctx)
+}
+
+// recordCtx 单条记录独立超时，但与 worker ctx 关联：Stop 能取消在途请求，
+// 同时不共享整轮 tick 的 deadline。
+func (w *AuditorUploadWorker) recordCtx(d time.Duration) (context.Context, context.CancelFunc) {
+	w.mu.Lock()
+	base := w.baseCtx
+	w.mu.Unlock()
+	if base == nil {
+		base = context.Background()
+	}
+	return context.WithTimeout(base, d)
 }
 
 func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Context) {
@@ -141,7 +230,7 @@ func (w *AuditorUploadWorker) processPendingAuditorRevokes(ctx context.Context) 
 
 	for _, form := range forms {
 		// 每条记录独立超时，与整轮 tick 的 ctx 解耦：单个挂死的远端删除不应拖垮同 tick 后续撤销。
-		rctx, cancel := context.WithTimeout(context.Background(), perRecordUploadTimeout)
+		rctx, cancel := w.recordCtx(perRecordUploadTimeout)
 		if err := w.auditorService.RevokeForm(rctx, form); err != nil {
 			w.logger.Auditor.Error("Failed to revoke auditor form", zap.Error(err), zap.Int64("formId", form.Id))
 		}
@@ -153,7 +242,7 @@ func (w *AuditorUploadWorker) processPendingAuditorRevokes(ctx context.Context) 
 // idField 用于区分活动/帖子的日志字段（actId / postId）。
 func (w *AuditorUploadWorker) uploadPendingForm(id int64, formUrl, subject string, aw *req.AuditWrapper, idField zap.Field) {
 	// 每条记录独立超时，与整轮 tick 的 ctx 解耦：单条挂死的上传不应拖垮同 tick 后续记录。
-	ctx, cancel := context.WithTimeout(context.Background(), perRecordUploadTimeout)
+	ctx, cancel := w.recordCtx(perRecordUploadTimeout)
 	defer cancel()
 
 	// 复用尚未成功推送的 form；若该记录已送审成功则跳过，避免回调到达前每个 tick 重复送审。
@@ -219,13 +308,4 @@ func (w *AuditorUploadWorker) markPushedWithRetry(formId int64) error {
 		}
 	}
 	return err
-}
-
-func (w *AuditorUploadWorker) Stop() {
-	if w.ticker != nil {
-		w.ticker.Stop()
-	}
-	if w.reconcileTicker != nil {
-		w.reconcileTicker.Stop()
-	}
 }

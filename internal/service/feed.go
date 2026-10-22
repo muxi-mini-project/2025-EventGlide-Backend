@@ -30,7 +30,6 @@ type FeedServiceHdl interface {
 	GetTotalCnt(ctx context.Context, sid string) (model.BriefFeedDetail, error)
 	GetFeedList(ctx context.Context, sid string) (model.FeedDetail, error)
 	GetLikeFeed(ctx context.Context, sid string) ([]model.FeedLikeDetail, error)
-	ConsumeFeedStream()
 	GetCollectFeed(ctx context.Context, sid string) ([]model.FeedCollectDetail, error)
 	GetCommentFeed(ctx context.Context, sid string) ([]model.FeedCommentDetail, error)
 	GetAtFeed(ctx context.Context, sid string) ([]model.FeedAtDetail, error)
@@ -42,11 +41,12 @@ type FeedService struct {
 	mq mq.MQHdl
 	ud *repo.UserRepo
 	l  *zap.Logger
-}
 
-var feedConsumerLifecycle struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
+	mu      sync.Mutex
+	startMu sync.Mutex // 串行化 Start，保证“重复 Start 先停旧的”在并发调用下也成立
+	cancel  context.CancelFunc
+	stopped bool
+	wg      sync.WaitGroup
 }
 
 const (
@@ -60,15 +60,16 @@ const (
 	feedMaxRetry     = 3
 )
 
+// feedStopTimeout Stop 等待消费循环退出的上限，需小于容器 stop grace（默认 10s）。
+var feedStopTimeout = 10 * time.Second
+
 func NewFeedService(fd *dao.FeedDao, mq mq.MQHdl, ud *repo.UserRepo, l *logger.LoggerSet) *FeedService {
-	fs := &FeedService{
+	return &FeedService{
 		fd: fd,
 		mq: mq,
 		ud: ud,
 		l:  l.Feed.Named("service"),
 	}
-	fs.ConsumeFeedStream()
-	return fs
 }
 
 func (fs *FeedService) ReadFeedDetail(ctx context.Context, sid string, id int64) error {
@@ -109,14 +110,28 @@ func (fs *FeedService) GetFeedList(ctx context.Context, sid string) (model.FeedD
 	}, nil
 }
 
-func (fs *FeedService) ConsumeFeedStream() {
-	feedConsumerLifecycle.mu.Lock()
-	if feedConsumerLifecycle.cancel != nil {
-		feedConsumerLifecycle.cancel()
+// Start 启动 feed 消费循环（重复 Start 先停旧的，避免两套消费者并存）。
+func (fs *FeedService) Start(ctx context.Context) {
+	fs.startMu.Lock()
+	defer fs.startMu.Unlock()
+
+	fs.mu.Lock()
+	old := fs.cancel
+	fs.mu.Unlock()
+	if old != nil {
+		old()
+		fs.wait()
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	feedConsumerLifecycle.cancel = cancel
-	feedConsumerLifecycle.mu.Unlock()
+
+	fs.mu.Lock()
+	if fs.stopped {
+		fs.mu.Unlock()
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	fs.cancel = cancel
+	fs.wg.Add(2)
+	fs.mu.Unlock()
 
 	host, err := os.Hostname()
 	if err != nil {
@@ -124,13 +139,55 @@ func (fs *FeedService) ConsumeFeedStream() {
 	}
 	consumer := fmt.Sprintf("%s-%d", host, time.Now().UnixNano())
 
-	if err := fs.mq.EnsureConsumerGroup(ctx, feedStream, feedGroup); err != nil {
+	if err := fs.mq.EnsureConsumerGroup(runCtx, feedStream, feedGroup); err != nil {
 		fs.l.Error("Failed to ensure feed consumer group", zap.Error(err))
+		// 已登记的等待计数必须归还，否则 Stop 会一直等到超时；清空 cancel 允许后续重试。
+		fs.wg.Done()
+		fs.wg.Done()
+		fs.mu.Lock()
+		fs.cancel = nil
+		fs.mu.Unlock()
 		return
 	}
 
-	safe.Go(fs.l, "feed-consumer", func() { fs.consumeFeedLoop(ctx, consumer) })
-	safe.Go(fs.l, "feed-consumer.recover", func() { fs.recoverFeedLoop(ctx, consumer) })
+	safe.Go(fs.l, "feed-consumer", func() {
+		defer fs.wg.Done()
+		fs.consumeFeedLoop(runCtx, consumer)
+	})
+	safe.Go(fs.l, "feed-consumer.recover", func() {
+		defer fs.wg.Done()
+		fs.recoverFeedLoop(runCtx, consumer)
+	})
+}
+
+// Stop 停止 feed 消费：取消在途读取/处理并有界等待循环退出；停止后不再拉起。
+func (fs *FeedService) Stop() {
+	fs.mu.Lock()
+	if fs.stopped {
+		fs.mu.Unlock()
+		return
+	}
+	fs.stopped = true
+	cancel := fs.cancel
+	fs.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	fs.wait()
+}
+
+func (fs *FeedService) wait() {
+	done := make(chan struct{})
+	go func() {
+		fs.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(feedStopTimeout):
+		fs.l.Warn("feed consumer 停止超时", zap.Duration("timeout", feedStopTimeout))
+	}
 }
 
 // consumeFeedLoop 持续读取 feed_stream 的新消息。
