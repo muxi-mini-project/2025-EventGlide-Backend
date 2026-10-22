@@ -400,6 +400,43 @@ func TestImageSizeResolverDecodeRetryHonorsCancel(t *testing.T) {
 	}
 }
 
+// TestImageSizeResolverDecodeCancelDuringRetryIsTransient 第二次读取响应体期间取消时，
+// DecodeConfig 只返回 ErrFormat（不含 context.Canceled），不能被判为永久失败。
+func TestImageSizeResolverDecodeCancelDuringRetryIsTransient(t *testing.T) {
+	full := pngBytes(t, 32, 16)
+	truncated := full[:20]
+	secondStarted := make(chan struct{}, 1)
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if atomic.AddInt32(&hits, 1) == 1 {
+			_, _ = w.Write(truncated)
+			return
+		}
+		w.Header().Set("Content-Type", "image/png")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(truncated[:12]) // 头部不完整，DecodeConfig 会继续等后续字节
+		w.(http.Flusher).Flush()
+		secondStarted <- struct{}{}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-secondStarted
+		time.Sleep(20 * time.Millisecond) // 让客户端先拿到响应头并进入 DecodeConfig
+		cancel()
+	}()
+
+	_, _, err := testResolver(srv).Fetch(ctx, srv.URL+"/a.png")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("第二次 decode 期间取消 err = %v, want context.Canceled", err)
+	}
+	if errors.Is(err, errImagePermanent) {
+		t.Fatal("取消被误判为永久失败，行会被写成 size_status=2")
+	}
+}
+
 func TestImageSizeResolverFetchesWebp(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "image/webp")

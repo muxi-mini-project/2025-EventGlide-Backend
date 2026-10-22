@@ -74,10 +74,18 @@ func (r *ImageSizeResolver) Fetch(ctx context.Context, rawURL string) (int, int,
 
 	width, height, err := r.requestSize(ctx, rawURL)
 	if err != nil && errors.Is(err, errImageDecode) {
+		// 取消/超时期间 DecodeConfig 可能只返回 ErrFormat，先按临时失败返回，且不再重试。
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return 0, 0, ctxErr
+		}
 		// 可能是截断/半张图，重试一次；真不支持的格式会在第二次后判永久。
 		width, height, err = r.requestSize(ctx, rawURL)
 	}
 	if err != nil && errors.Is(err, errImageDecode) {
+		// 第二次读取响应体期间被取消/超时，同样不能判永久，留给下一轮重试。
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return 0, 0, ctxErr
+		}
 		return 0, 0, fmt.Errorf("%w: %v", errImagePermanent, err)
 	}
 	return width, height, err
