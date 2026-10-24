@@ -8,6 +8,8 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -126,8 +128,14 @@ func (r *ImageSizeResolver) requestSize(ctx context.Context, rawURL string) (int
 	case resp.StatusCode != http.StatusOK:
 		return 0, 0, fmt.Errorf("拉取图片返回 %s", resp.Status)
 	}
-	cfg, _, err := image.DecodeConfig(resp.Body)
+	rec := &readErrorRecorder{r: resp.Body}
+	cfg, _, err := image.DecodeConfig(rec)
 	if err != nil {
+		// DecodeConfig 可能把读错误吞成 ErrFormat（sniff 的 Peek 失败），
+		// 用记录到的底层错误区分网络中断/取消与真正的格式错误。
+		if terr := rec.transientErr(); terr != nil {
+			return 0, 0, fmt.Errorf("读取图片失败: %w", terr)
+		}
 		return 0, 0, fmt.Errorf("%w: %v", errImageDecode, err)
 	}
 	// 图片头宽高超上限视为异常（损坏/伪造文件），按永久失败处理，脏值不回写。
@@ -135,6 +143,36 @@ func (r *ImageSizeResolver) requestSize(ctx context.Context, rawURL string) (int
 		return 0, 0, fmt.Errorf("%w: 图片宽高超上限 %dx%d", errImagePermanent, cfg.Width, cfg.Height)
 	}
 	return cfg.Width, cfg.Height, nil
+}
+
+// readErrorRecorder 记录响应体读取的底层错误：image.DecodeConfig 在 sniff 阶段
+// 会把读错误吞成 ErrFormat，无法区分网络中断、取消与真正的格式不支持。
+type readErrorRecorder struct {
+	r   io.Reader
+	err error
+}
+
+func (r *readErrorRecorder) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err != nil && !errors.Is(err, io.EOF) {
+		r.err = err
+	}
+	return n, err
+}
+
+// transientErr 底层读错误属于网络/取消类时返回它，供调用方保持 pending 重试；
+// 普通格式错误或干净截断（ErrUnexpectedEOF）返回 nil，仍走 decode 重试。
+func (r *readErrorRecorder) transientErr() error {
+	if r.err == nil {
+		return nil
+	}
+	var ne net.Error
+	if errors.As(r.err, &ne) ||
+		errors.Is(r.err, context.Canceled) ||
+		errors.Is(r.err, context.DeadlineExceeded) {
+		return r.err
+	}
+	return nil
 }
 
 // hostFromURL 提取图床域名的小写 host（含端口），空串表示未配置。

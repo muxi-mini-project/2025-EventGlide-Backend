@@ -7,6 +7,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -434,6 +435,60 @@ func TestImageSizeResolverDecodeCancelDuringRetryIsTransient(t *testing.T) {
 	}
 	if errors.Is(err, errImagePermanent) {
 		t.Fatal("取消被误判为永久失败，行会被写成 size_status=2")
+	}
+}
+
+// roundTripFunc 用于构造不经过真实网络的 http.Client。
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// errBody 在读完 data 后返回预设的读错误。
+type errBody struct {
+	data []byte
+	err  error
+}
+
+func (b *errBody) Read(p []byte) (int, error) {
+	if len(b.data) > 0 {
+		n := copy(p, b.data)
+		b.data = b.data[n:]
+		return n, nil
+	}
+	return 0, b.err
+}
+
+func (b *errBody) Close() error { return nil }
+
+// TestImageSizeResolverDecodeReadErrorIsTransient DecodeConfig 在 sniff 阶段可能把
+// 连接重置吞成 ErrFormat；底层 net.Error 不能被判为永久失败，也不应重试。
+func TestImageSizeResolverDecodeReadErrorIsTransient(t *testing.T) {
+	var hits int32
+	client := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		atomic.AddInt32(&hits, 1)
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Status:     "200 OK",
+			Header:     http.Header{"Content-Type": []string{"image/png"}},
+			Body:       &errBody{err: &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}},
+			Request:    req,
+		}, nil
+	})}
+	resolver := &ImageSizeResolver{client: client, allowedHost: "img.example.com"}
+
+	_, _, err := resolver.Fetch(context.Background(), "http://img.example.com/a.png")
+	if err == nil {
+		t.Fatal("读错误应返回 error")
+	}
+	if errors.Is(err, errImagePermanent) {
+		t.Fatalf("网络读错误被误判为永久失败: %v", err)
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) {
+		t.Fatalf("err = %v, want net.Error", err)
+	}
+	if got := atomic.LoadInt32(&hits); got != 1 {
+		t.Errorf("请求次数 = %d, want 1（网络错误不重试）", got)
 	}
 }
 
