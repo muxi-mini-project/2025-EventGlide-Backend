@@ -18,21 +18,23 @@ var Provider = wire.NewSet(
 )
 
 type Server struct {
-	h        *handler.Handler
-	l        *zap.Logger
-	worker   *service.AuditorUploadWorker
-	consumer *mq.InteractionConsumer
-	syncTask *schedule.InteractionSyncTask
-	Shutdown func()
+	h           *handler.Handler
+	l           *zap.Logger
+	worker      *service.AuditorUploadWorker
+	imageWorker *service.ImageSizeWorker
+	consumer    *mq.InteractionConsumer
+	syncTask    *schedule.InteractionSyncTask
+	Shutdown    func()
 }
 
-func NewServer(h *handler.Handler, worker *service.AuditorUploadWorker, consumer *mq.InteractionConsumer, syncTask *schedule.InteractionSyncTask) *Server {
+func NewServer(h *handler.Handler, worker *service.AuditorUploadWorker, imageWorker *service.ImageSizeWorker, consumer *mq.InteractionConsumer, syncTask *schedule.InteractionSyncTask) *Server {
 	return &Server{
-		h:        h,
-		l:        logger.GetLogger("bff"),
-		worker:   worker,
-		consumer: consumer,
-		syncTask: syncTask,
+		h:           h,
+		l:           logger.GetLogger("bff"),
+		worker:      worker,
+		imageWorker: imageWorker,
+		consumer:    consumer,
+		syncTask:    syncTask,
 	}
 }
 
@@ -55,9 +57,17 @@ func (s *Server) Run() (err error) {
 		}
 	})
 
+	// 宽高回填 worker 按需启动：首轮即查待解析数据，无数据自动关闭，不空转。
+	if s.imageWorker != nil {
+		s.imageWorker.Start()
+	}
+
 	s.Shutdown = func() {
 		baseShutdown()
 		cancel()
+		if s.imageWorker != nil {
+			s.imageWorker.Stop()
+		}
 	}
 	return
 }

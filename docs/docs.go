@@ -2237,7 +2237,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2318,7 +2318,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2395,7 +2395,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2412,7 +2412,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2540,6 +2540,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "req.Image": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "width": {
                     "type": "integer"
                 }
             }
@@ -2781,7 +2795,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "signer": {
@@ -3062,6 +3076,20 @@ const docTemplate = `{
                 }
             }
         },
+        "resp.Image": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
         "resp.ImgBedResp": {
             "type": "object",
             "properties": {
@@ -3163,7 +3191,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "title": {
@@ -3210,7 +3238,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "title": {
@@ -3236,7 +3264,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "title": {
@@ -3259,7 +3287,7 @@ const docTemplate = `{
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "studentId": {

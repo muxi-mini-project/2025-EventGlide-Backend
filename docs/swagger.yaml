@@ -30,7 +30,7 @@ definitions:
         $ref: '#/definitions/req.CreateDraftLabel'
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/req.Image'
         type: array
       title:
         type: string
@@ -84,7 +84,7 @@ definitions:
         $ref: '#/definitions/req.CreateActLabel'
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/req.Image'
         type: array
       title:
         type: string
@@ -138,7 +138,7 @@ definitions:
         type: string
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/req.Image'
         type: array
       title:
         type: string
@@ -149,7 +149,7 @@ definitions:
         type: string
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/req.Image'
         type: array
       title:
         type: string
@@ -233,6 +233,15 @@ definitions:
         type: integer
     required:
     - name
+    type: object
+  req.Image:
+    properties:
+      height:
+        type: integer
+      url:
+        type: string
+      width:
+        type: integer
     type: object
   req.InteractionReq:
     properties:
@@ -390,7 +399,7 @@ definitions:
         type: string
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/resp.Image'
         type: array
       signer:
         items:
@@ -574,6 +583,15 @@ definitions:
       Username:
         type: string
     type: object
+  resp.Image:
+    properties:
+      height:
+        type: integer
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
   resp.ImgBedResp:
     properties:
       accessToken:
@@ -641,7 +659,7 @@ definitions:
         type: string
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/resp.Image'
         type: array
       title:
         type: string
@@ -672,7 +690,7 @@ definitions:
         type: string
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/resp.Image'
         type: array
       title:
         type: string
@@ -689,7 +707,7 @@ definitions:
         $ref: '#/definitions/resp.LabelForm'
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/resp.Image'
         type: array
       title:
         type: string
@@ -704,7 +722,7 @@ definitions:
         type: string
       showImg:
         items:
-          type: string
+          $ref: '#/definitions/resp.Image'
         type: array
       studentId:
         type: string

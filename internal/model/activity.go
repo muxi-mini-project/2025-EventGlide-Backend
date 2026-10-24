@@ -58,11 +58,27 @@ type ActivitySigner struct {
 	Name       EncryptedString `gorm:"type:varchar(255);not null"`
 }
 
+// 图片宽高解析三态：pending 待解析 / ok 已解析 / failed 永久失败。
+// 宽高列不再用负值表达状态：failed 行宽高为 0，前端按未知尺寸兜底；
+// 重试 failed 行：UPDATE image SET size_status = 0 WHERE size_status = 2。
+const (
+	ImageSizePending = 0
+	ImageSizeOK      = 1
+	ImageSizeFailed  = 2
+)
+
+// ImageSizeMaxEdge 宽高合理上限：超过视为异常值（前端传错或图片头损坏），
+// 按未知尺寸处理，防止超 INT 上限的脏值写库失败或外露。
+const ImageSizeMaxEdge = 20000
+
 type Image struct {
-	Id        int64  `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
-	OwnerId   int64  `gorm:"type:bigint;comment:所有者ID;column:owner_id;not null;index"`
-	OwnerType string `gorm:"type:varchar(50);comment:所有者类型;column:owner_type;not null;index"`
-	Url       string `gorm:"type:text;comment:图片链接;column:url;not null"`
+	Id         int64  `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
+	OwnerId    int64  `gorm:"type:bigint;comment:所有者ID;column:owner_id;not null;index"`
+	OwnerType  string `gorm:"type:varchar(50);comment:所有者类型;column:owner_type;not null;index"`
+	Url        string `gorm:"type:varchar(500);comment:图片链接;column:url;not null;index"`
+	Width      int    `gorm:"type:int;comment:图片宽度;column:width;default:0"`
+	Height     int    `gorm:"type:int;comment:图片高度;column:height;default:0"`
+	SizeStatus int    `gorm:"type:tinyint;comment:宽高解析状态 0待解析 1已解析 2失败;column:size_status;default:0;index"`
 }
 
 type Signer struct {
