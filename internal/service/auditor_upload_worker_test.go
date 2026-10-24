@@ -160,7 +160,7 @@ func TestWorkerReconcileInvokesService(t *testing.T) {
 	svc := &fakeAuditorSvc{}
 	w := newWorkerForTest(&fakePendingPosts{}, svc)
 
-	w.reconcile()
+	w.reconcile(context.Background())
 	if svc.reconcileCnt != 1 {
 		t.Fatalf("expected reconcile invoked once, got %d", svc.reconcileCnt)
 	}
@@ -261,6 +261,58 @@ func (f *ctxCheckingSvc) FindOrphanPostForms(context.Context) ([]model.AuditorFo
 }
 
 func (f *ctxCheckingSvc) RevokeForm(context.Context, model.AuditorForm) error { return nil }
+
+// blockingUploadSvc 让上传挂起直到 ctx 取消，用于验证 Stop 能取消在途送审。
+type blockingUploadSvc struct {
+	*fakeAuditorSvc
+	entered  chan struct{}
+	canceled chan struct{}
+}
+
+func (f *blockingUploadSvc) UploadForm(ctx context.Context, _ *req.AuditWrapper, _ int64) error {
+	f.entered <- struct{}{}
+	<-ctx.Done()
+	f.canceled <- struct{}{}
+	return ctx.Err()
+}
+
+// TestAuditorWorkerStopCancelsUpload Stop 必须取消在途上传并有界返回；未 Start 时 Stop 是空操作。
+func TestAuditorWorkerStopCancelsUpload(t *testing.T) {
+	oldInterval, oldStop := auditorUploadInterval, auditorStopTimeout
+	auditorUploadInterval = 10 * time.Millisecond
+	auditorStopTimeout = 2 * time.Second
+	t.Cleanup(func() { auditorUploadInterval, auditorStopTimeout = oldInterval, oldStop })
+
+	svc := &blockingUploadSvc{
+		fakeAuditorSvc: &fakeAuditorSvc{},
+		entered:        make(chan struct{}, 1),
+		canceled:       make(chan struct{}, 1),
+	}
+	posts := &fakePendingPosts{posts: []model.Post{{Id: 1001, StudentID: "S1"}}}
+	w := newWorkerForTest(posts, svc)
+
+	// 未 Start 时 Stop 是幂等空操作。
+	newWorkerForTest(posts, &fakeAuditorSvc{}).Stop()
+
+	w.Start(context.Background())
+	select {
+	case <-svc.entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker 未发起送审上传")
+	}
+
+	start := time.Now()
+	w.Stop()
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Stop 等待退出耗时 %v, want 1s 内", elapsed)
+	}
+	select {
+	case <-svc.canceled:
+	case <-time.After(time.Second):
+		t.Fatal("在途上传未收到 cancel")
+	}
+	w.Stop() // 重复 Stop 幂等
+}
 
 // TestUpload_IndependentContextPerRecord 整轮 tick 的 ctx（带 tickCtxKey 标记）不得传入单条记录的
 // 送审序列；回归点：修复前 uploadPendingForm 复用整轮 ctx，同 tick 内一条挂死会拖垮后续记录。

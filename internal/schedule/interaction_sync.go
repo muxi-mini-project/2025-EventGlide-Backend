@@ -2,6 +2,7 @@ package schedule
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/raiki02/EG/internal/cache"
@@ -11,12 +12,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// syncTaskStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
+var syncTaskStopTimeout = 10 * time.Second
+
 // InteractionSyncTask 互动数据定时同步任务
 // 负责热点数据预热和对账修正
 type InteractionSyncTask struct {
 	lfr *cache.LikeFavoriteRedis
 	dao *dao.InteractionDao
 	l   *zap.Logger
+
+	mu      sync.Mutex
+	cancel  context.CancelFunc
+	stopped bool
+	wg      sync.WaitGroup
 }
 
 // NewInteractionSyncTask 创建互动数据同步任务
@@ -28,13 +37,55 @@ func NewInteractionSyncTask(lfr *cache.LikeFavoriteRedis, dao *dao.InteractionDa
 	}
 }
 
-// Start 启动定时任务
+// Start 启动定时任务（幂等）
 func (t *InteractionSyncTask) Start(ctx context.Context) {
+	t.mu.Lock()
+	if t.stopped || t.cancel != nil {
+		t.mu.Unlock()
+		return
+	}
+	runCtx, cancel := context.WithCancel(ctx)
+	t.cancel = cancel
+	t.wg.Add(2)
+	t.mu.Unlock()
+
 	// 每5分钟预热热点数据
-	safe.Go(t.l, "hotWarmupLoop", func() { t.hotWarmupLoop(ctx) })
+	safe.Go(t.l, "hotWarmupLoop", func() {
+		defer t.wg.Done()
+		t.hotWarmupLoop(runCtx)
+	})
 
 	// 每小时对账
-	safe.Go(t.l, "reconcileLoop", func() { t.reconcileLoop(ctx) })
+	safe.Go(t.l, "reconcileLoop", func() {
+		defer t.wg.Done()
+		t.reconcileLoop(runCtx)
+	})
+}
+
+// Stop 取消定时任务并等待循环退出。
+func (t *InteractionSyncTask) Stop() {
+	t.mu.Lock()
+	if t.stopped {
+		t.mu.Unlock()
+		return
+	}
+	t.stopped = true
+	cancel := t.cancel
+	t.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	done := make(chan struct{})
+	go func() {
+		t.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(syncTaskStopTimeout):
+		t.l.Warn("interaction sync task 停止超时", zap.Duration("timeout", syncTaskStopTimeout))
+	}
 }
 
 // hotWarmupLoop 热点数据预热循环

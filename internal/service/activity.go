@@ -38,11 +38,11 @@ type ActivityService struct {
 	id        *repo.InteractionRepo
 	mq        mq.MQHdl
 	aud       AuditorService
-	imgWorker *ImageSizeWorker
+	imgWorker imageWorkerNotifier
 	l         *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgWorker *ImageSizeWorker, l *logger.LoggerSet) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgWorker imageWorkerNotifier, l *logger.LoggerSet) *ActivityService {
 	return &ActivityService{
 		ad:        ad,
 		ud:        ud,
@@ -55,6 +55,11 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.Inter
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
+	// 前端为准：宽高随请求入库；漏传/传错的行走 pending，创建不阻塞，
+	// 落库成功后唤醒回填 worker 异步兜底。
+	// pending 必须在事务前判定：DAO 写入活动时会把 act.Images 置空，事务后读不到图片行。
+	pending := hasPendingImage(act.Images)
+
 	err := as.ad.Transaction(c, func(tx *gorm.DB) error {
 		return as.ad.CreateActivity(c, tx, act, signers, studentID)
 	})
@@ -63,9 +68,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 		return errs.ErrActivityCreateFailed.Wrap(err)
 	}
 
-	// 前端为准：宽高随请求入库；漏传/传错的行走 pending，创建不阻塞，
-	// 落库成功后唤醒回填 worker 异步兜底。
-	if hasPendingImage(act.Images) {
+	if pending {
 		as.imgWorker.Notify()
 	}
 

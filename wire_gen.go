@@ -75,6 +75,6 @@ func InitApp() *server.Server {
 	zapLogger := ioc.GetInteractionLogger(loggerSet)
 	interactionConsumer := mq.NewInteractionConsumer(mqHdl, interactionDao, zapLogger)
 	interactionSyncTask := ioc.NewInteractionSyncTask(likeFavoriteRedis, interactionDao, loggerSet)
-	serverServer := server.NewServer(handlerHandler, auditorUploadWorker, imageSizeWorker, interactionConsumer, interactionSyncTask)
+	serverServer := server.NewServer(handlerHandler, auditorUploadWorker, imageSizeWorker, feedService, interactionConsumer, interactionSyncTask)
 	return serverServer
 }
