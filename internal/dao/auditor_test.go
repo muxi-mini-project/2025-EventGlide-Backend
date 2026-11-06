@@ -345,28 +345,6 @@ func TestRevertRejectToPendingSkipsWhenNotReject(t *testing.T) {
 	}
 }
 
-// TestFindOrphanPostFormsSQL 锁定"待撤销表单"的判据：subject='post' 且对应帖子已不存在（孤儿）。
-// 帖子是硬删除，故该判据精确等价于"帖子已被删"，不会误撤活帖子的表单。
-func TestFindOrphanPostFormsSQL(t *testing.T) {
-	repo, mock := newAuditorDaoForTest(t)
-
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE subject = \\? AND NOT EXISTS \\(SELECT 1 FROM post p WHERE p.id = auditor_form.activity_id\\)").
-		WithArgs("post").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "pushed_at"}).
-			AddRow(9, 1001, "post", nil))
-
-	forms, err := repo.FindOrphanPostForms(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(forms) != 1 || forms[0].Id != 9 {
-		t.Fatalf("expected the single orphan form, got %+v", forms)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // TestUpdateAuditorFormMissingIsIdempotent 撤销后表单行已消失，迟到的审核回调应视为幂等成功，
 // 而不是报错让平台无休止重试。
 func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
@@ -533,22 +511,6 @@ func TestFindReasonsByActivityIDsEmpty(t *testing.T) {
 	}
 	if reasons == nil || len(reasons) != 0 {
 		t.Fatalf("expected empty non-nil map, got %+v", reasons)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestAuditorFormDeleteSQL 断言按 id 删除本地表单行。
-func TestAuditorFormDeleteSQL(t *testing.T) {
-	repo, mock := newAuditorDaoForTest(t)
-
-	mock.ExpectExec("DELETE FROM `auditor_form` WHERE id = \\?").
-		WithArgs(int64(9)).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	if err := repo.Delete(context.Background(), 9); err != nil {
-		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

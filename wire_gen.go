@@ -67,7 +67,7 @@ func InitApp() *server.Server {
 	callbackAuditorService := service.NewCallbackAuditor(auditorRepository, auditorService, loggerSet)
 	callbackAuditorHandler := handler.NewCallbackAuditorHandler(engine, callbackAuditorService, conf, loggerSet)
 	handlerHandler := handler.NewHandler(engine, cors, userHandler, actHandler, postHandler, commentHandler, feedHandler, interactionHandler, callbackAuditorHandler)
-	auditorUploadWorker := service.NewAuditorUploadWorker(activityRepo, postRepo, auditorService, loggerSet)
+	auditorUploadWorker := service.NewAuditorUploadWorker(activityRepo, auditorService, loggerSet)
 	zapLogger := ioc.GetInteractionLogger(loggerSet)
 	interactionConsumer := mq.NewInteractionConsumer(mqHdl, interactionDao, zapLogger)
 	interactionSyncTask := ioc.NewInteractionSyncTask(likeFavoriteRedis, interactionDao, loggerSet)
