@@ -201,10 +201,12 @@ func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil t
 // 以 id 升序、取 id > afterID 的前 limit 条；调用方处理完后推进游标，取完回绕。
 // 排除帖子表单：帖子已不审核，其历史表单在平台上可能已不存在，
 // 继续回查只会每轮刷告警且永远不收敛。
+// 同时排除所属活动已过期的表单：这类活动在所有列表都不可见，结论对用户没有意义。
 func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
 	var forms []model.AuditorForm
 	err := a.db.WithContext(c).
 		Where("pushed_at IS NOT NULL AND status = ? AND subject <> ? AND id > ?", "pending", model.SubjectPost, afterID).
+		Where("EXISTS (SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time > ?)", time.Now()).
 		Order("id ASC").
 		Limit(limit).
 		Find(&forms).Error
