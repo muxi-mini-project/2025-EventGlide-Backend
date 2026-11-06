@@ -3188,6 +3188,9 @@ const docTemplate = `{
                 "position": {
                     "type": "string"
                 },
+                "rejectReason": {
+                    "type": "string"
+                },
                 "showImg": {
                     "type": "array",
                     "items": {

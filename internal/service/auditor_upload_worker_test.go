@@ -33,6 +33,8 @@ type fakeAuditorSvc struct {
 	orphans      []model.AuditorForm
 	revoked      []int64
 	revokeErr    error
+	reasons      map[int64]string // GetReasons 的返回值
+	reasonIds    []int64          // GetReasons 收到的 activity id
 }
 
 var _ AuditorService = (*fakeAuditorSvc)(nil)
@@ -97,6 +99,17 @@ func (f *fakeAuditorSvc) FindOrphanPostForms(context.Context) ([]model.AuditorFo
 func (f *fakeAuditorSvc) RevokeForm(_ context.Context, form model.AuditorForm) error {
 	f.revoked = append(f.revoked, form.Id)
 	return f.revokeErr
+}
+
+func (f *fakeAuditorSvc) GetReasons(_ context.Context, ids []int64) (map[int64]string, error) {
+	f.reasonIds = ids
+	out := make(map[int64]string, len(ids))
+	for _, id := range ids {
+		if reason, ok := f.reasons[id]; ok {
+			out[id] = reason
+		}
+	}
+	return out, nil
 }
 
 func newWorkerForTest(posts *fakePendingPosts, svc AuditorService) *AuditorUploadWorker {
@@ -261,6 +274,10 @@ func (f *ctxCheckingSvc) FindOrphanPostForms(context.Context) ([]model.AuditorFo
 }
 
 func (f *ctxCheckingSvc) RevokeForm(context.Context, model.AuditorForm) error { return nil }
+
+func (f *ctxCheckingSvc) GetReasons(context.Context, []int64) (map[int64]string, error) {
+	return nil, nil
+}
 
 // TestUpload_IndependentContextPerRecord 整轮 tick 的 ctx（带 tickCtxKey 标记）不得传入单条记录的
 // 送审序列；回归点：修复前 uploadPendingForm 复用整轮 ctx，同 tick 内一条挂死会拖垮后续记录。

@@ -1,5 +1,5 @@
 # 第一阶段：构建 Go 应用
-FROM golang:alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 
 # 设置 Go 代理为七牛云的代理
 ENV GOPROXY=https://goproxy.cn,direct
@@ -19,13 +19,13 @@ RUN go mod tidy
 RUN GO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app
 
 # 第二阶段：构建最终镜像
-FROM alpine
+FROM alpine:3.24
 
 ARG Project_Name
 ARG PORT
 
-# 安装 tzdata 来设置时区
-RUN apk add --no-cache tzdata
+# 安装 tzdata 设置时区，显式装 ca-certificates 保证出网 TLS 校验不依赖基础镜像自带
+RUN apk add --no-cache tzdata ca-certificates
 
 # 设置时区为 Asia/Shanghai
 RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \

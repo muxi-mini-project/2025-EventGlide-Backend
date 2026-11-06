@@ -95,8 +95,8 @@ func TestReleaseClaimSQL(t *testing.T) {
 func TestFindPushedPendingSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\? AND id > \\? ORDER BY id ASC LIMIT \\?").
-		WithArgs("pending", int64(10), 100).
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\? AND subject <> \\? AND id > \\? ORDER BY id ASC LIMIT \\?").
+		WithArgs("pending", "post", int64(10), 100).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "pending"))
 
@@ -131,19 +131,91 @@ func TestUpdateIfPendingSkipsTerminal(t *testing.T) {
 	}
 }
 
-// TestUpdateIfPendingUpdatesWhenPending 表单仍为 pending 时正常写回。
-func TestUpdateIfPendingUpdatesWhenPending(t *testing.T) {
+// TestUpdateIfPendingUpdatesWhenChanged 表单仍为 pending 且平台给出不同结论时正常写回，
+// 并触发 AfterUpdate 推进活动状态。
+func TestUpdateIfPendingUpdatesWhenChanged(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
+			AddRow(42, "pending", "activity", 1001))
+	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	// AfterUpdate 的 pass 分支：仅当活动仍待审核且无未通过审批时才置为 pass
+	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking IN \\('pending_auditor','reject'\\) AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)").
+		WithArgs(int64(1001), int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "pass"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateIfPendingSkipsWhenUnchanged 平台结论与现值相同（仍为 pending）时不得写库，
+// 避免每轮对账反复刷新 updated_at。
+func TestUpdateIfPendingSkipsWhenUnchanged(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject"}).AddRow(42, "pending", "activity"))
-	// 用 pending 目标状态，避免触发 AfterUpdate 对 activity/post 的写操作
-	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	// 不期望任何 UPDATE：状态未变化即返回
 	mock.ExpectCommit()
 
 	if err := repo.UpdateIfPending(context.Background(), 42, "pending"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAuditorFormAfterUpdatePassAllowsReject 平台改判为通过时，已驳回的活动要跟着放行：
+// pass 分支的 SQL 必须允许 is_checking 从 reject 迁移，且保留"送审人不全为 pass 则不放行"的守卫。
+func TestAuditorFormAfterUpdatePassAllowsReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	// 活动已驳回（reject），平台再次回调把表单改成 pass
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
+			AddRow(42, 7, "activity", "reject"))
+	mock.ExpectExec("UPDATE `auditor_form` SET").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking IN \\('pending_auditor','reject'\\) AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)$").
+		WithArgs(int64(7), int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "pass", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAuditorFormAfterUpdateRejectOnlyPending 锁定 reject 分支不做对称扩展：
+// 仍只允许 pending_auditor -> reject，不把已通过的活动改判下架。
+func TestAuditorFormAfterUpdateRejectOnlyPending(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
+			AddRow(42, 7, "activity", "pending"))
+	mock.ExpectExec("UPDATE `auditor_form` SET").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
+		WithArgs(int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "reject", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -201,7 +273,7 @@ func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
 		WithArgs(int64(9), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
-	if err := repo.Update(context.Background(), 9, "pass"); err != nil {
+	if err := repo.Update(context.Background(), 9, "pass", ""); err != nil {
 		t.Fatalf("missing form on update must be idempotent success, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -223,6 +295,116 @@ func TestAuditorFormFindByIDSQL(t *testing.T) {
 	}
 	if form.Id != 9 {
 		t.Fatalf("expected form 9, got %d", form.Id)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormWritesReason 回调带的原因必须与状态一起落库。
+func TestUpdateAuditorFormWritesReason(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status"}).
+			AddRow(42, "activity", 7, "pending"))
+	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
+		WithArgs("activity", int64(7), "reject", "资料不全", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// 拒绝状态会经 AuditorForm.AfterUpdate 把活动推进为 is_checking='reject'
+	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "reject", "资料不全"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormKeepsReasonOnEmptyRejectMsg 驳回回调不带原因时保留已有原因，
+// 避免第二次 reject 回调把第一次写入的原因冲成空串。
+func TestUpdateAuditorFormKeepsReasonOnEmptyRejectMsg(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason"}).
+			AddRow(42, "activity", 7, "pending", "资料不全"))
+	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
+		WithArgs("activity", int64(7), "reject", "资料不全", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "reject", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormClearsReasonWhenNotReject 非 reject 状态清空原因：
+// 平台把条目重置为 pending 后会保留旧原因，若随后 reject 回调丢失、由对账改回 reject，
+// 旧原因会被当成当前原因展示。
+func TestUpdateAuditorFormClearsReasonWhenNotReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason"}).
+			AddRow(42, "activity", 7, "reject", "旧原因"))
+	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
+		WithArgs("activity", int64(7), "pending", "", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "pending", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindReasonsByActivityIDsSQL 批量查原因只取拒绝状态的活动表单，返回 activity_id -> reason。
+func TestFindReasonsByActivityIDsSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT `activity_id`,`reason` FROM `auditor_form` WHERE subject = \\? AND status = \\? AND activity_id IN \\(\\?,\\?\\)").
+		WithArgs("activity", "reject", int64(7), int64(8)).
+		WillReturnRows(sqlmock.NewRows([]string{"activity_id", "reason"}).
+			AddRow(7, "资料不全").
+			AddRow(8, ""))
+
+	reasons, err := repo.FindReasonsByActivityIDs(context.Background(), []int64{7, 8})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reasons[7] != "资料不全" {
+		t.Fatalf("expected reason for 7, got %+v", reasons)
+	}
+	if reason, ok := reasons[8]; !ok || reason != "" {
+		t.Fatalf("expected empty reason for 8 to be present, got %+v", reasons)
+	}
+	if len(reasons) != 2 {
+		t.Fatalf("expected 2 reasons, got %+v", reasons)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindReasonsByActivityIDsEmpty 空 ids 不得发 SQL，直接返回空 map。
+func TestFindReasonsByActivityIDsEmpty(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	reasons, err := repo.FindReasonsByActivityIDs(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reasons == nil || len(reasons) != 0 {
+		t.Fatalf("expected empty non-nil map, got %+v", reasons)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

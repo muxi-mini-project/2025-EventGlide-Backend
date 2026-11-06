@@ -657,6 +657,8 @@ definitions:
         type: string
       position:
         type: string
+      rejectReason:
+        type: string
       showImg:
         items:
           $ref: '#/definitions/resp.Image'
