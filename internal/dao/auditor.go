@@ -69,11 +69,15 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 		return err
 	}
 	prevStatus := form.Status
+	form.PrevStatus = prevStatus
 	form.Status = status
 	// 原因只服务当前结论：非 reject 时清空，避免条目重置/对账把上一轮的旧原因当成当前原因展示；
 	// 批量查询已按 status='reject' 过滤，清空不损失展示。
+	// reject 回调可能不带原因（人工审核常见），空串不覆盖已有原因，避免把第一次写入的原因冲掉。
 	if status == model.StanceReject {
-		form.Reason = reason
+		if reason != "" {
+			form.Reason = reason
+		}
 	} else {
 		form.Reason = ""
 	}

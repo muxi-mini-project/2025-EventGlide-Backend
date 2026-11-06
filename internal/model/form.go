@@ -28,6 +28,10 @@ type AuditorForm struct {
 	ClaimedAt  *time.Time `gorm:"type:datetime;column:claimed_at"`                                                             // 上传占用（租约）；NULL 表示无人持有，供多实例互斥
 	CreatedAt  time.Time  `gorm:"type:datetime;column:created_at;not null"`                                                    // 创建时间
 	UpdatedAt  time.Time  `gorm:"type:datetime;column:updated_at;not null"`                                                    // 更新时间
+
+	// PrevStatus 不落库，仅用于回调路径把"更新前状态"带进 AfterUpdate，
+	// 以便区分"真的状态迁移"和"同结论的重复回调"（后者不该打告警）。
+	PrevStatus string `gorm:"-"`
 }
 
 func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
@@ -64,9 +68,11 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				log.Println("auditorform AfterUpdate passed successfully for activity:", af.ActivityId)
 				return nil
 			}
-			// 结论已落库但活动未变更：活动可能已是 pass/reject，或送审人守卫不满足。
-			// 平台存在 AI 与人工两套回调，同一结论的重复回调属正常，故仅 Warn 便于排查。
-			log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity unchanged (already pass/reject, or signer guard not met); duplicate callbacks of the same conclusion are expected", af.Id, af.Status, af.Subject, af.ActivityId)
+			// 只有结论真的变化却没落到活动上才值得告警；同结论的重复回调（AI + 人工双通道）
+			// 命中 0 行属正常，静默跳过，避免把本次降噪的目标路径又刷回来。
+			if af.PrevStatus != af.Status {
+				log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity unchanged (already pass/reject, or signer guard not met)", af.Id, af.Status, af.Subject, af.ActivityId)
+			}
 		}
 	}
 
@@ -86,9 +92,10 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				log.Println("auditorform AfterUpdate rejected successfully for activity:", af.ActivityId)
 				return nil
 			}
-			// 结论已落库但活动未变更：活动已不在 pending_auditor（reject 分支没有送审人守卫）。
-			// 平台存在 AI 与人工两套回调，同一结论的重复回调属正常，故仅 Warn 便于排查。
-			log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity not in pending_auditor; duplicate callbacks of the same conclusion are expected", af.Id, af.Status, af.Subject, af.ActivityId)
+			// 只有结论真的变化却没落到活动上才值得告警；同结论的重复回调命中 0 行属正常。
+			if af.PrevStatus != af.Status {
+				log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity not in pending_auditor", af.Id, af.Status, af.Subject, af.ActivityId)
+			}
 		}
 	}
 	return nil

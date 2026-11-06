@@ -323,6 +323,28 @@ func TestUpdateAuditorFormWritesReason(t *testing.T) {
 	}
 }
 
+// TestUpdateAuditorFormKeepsReasonOnEmptyRejectMsg 驳回回调不带原因时保留已有原因，
+// 避免第二次 reject 回调把第一次写入的原因冲成空串。
+func TestUpdateAuditorFormKeepsReasonOnEmptyRejectMsg(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason"}).
+			AddRow(42, "activity", 7, "pending", "资料不全"))
+	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
+		WithArgs("activity", int64(7), "reject", "资料不全", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "reject", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestUpdateAuditorFormClearsReasonWhenNotReject 非 reject 状态清空原因：
 // 平台把条目重置为 pending 后会保留旧原因，若随后 reject 回调丢失、由对账改回 reject，
 // 旧原因会被当成当前原因展示。
