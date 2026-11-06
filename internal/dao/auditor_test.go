@@ -1,7 +1,10 @@
 package dao
 
 import (
+	"bytes"
 	"context"
+	"log"
+	"strings"
 	"testing"
 	"time"
 
@@ -176,6 +179,69 @@ func TestUpdateIfPendingSkipsWhenUnchanged(t *testing.T) {
 	}
 }
 
+// TestUpdateIfPendingClearsReasonForNonReject 对账写回非 reject 结论时必须清空旧的驳回原因：
+// 否则"驳回(有原因) -> 回查无法确认退回 pending（保留原因） -> 对账写回 pass"之后旧原因残留，
+// 后续不带原因的 reject 回调会把它当成新的驳回原因展示。
+func TestUpdateIfPendingClearsReasonForNonReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id", "reason", "form_url"}).
+			AddRow(42, "pending", "activity", 1001, "旧原因", ""))
+	mock.ExpectExec("UPDATE `auditor_form` SET").
+		WithArgs("activity", int64(1001), "pass", "", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'pass'").
+		WithArgs(int64(1001), int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "pass"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateIfPendingNoWarnWhenActivityAlreadyReject 退回 pending 的表单随后由对账写回 reject 时，
+// 活动通常已是 reject（条件更新命中 0 行），属同结论写入，AfterUpdate 不应再打 WARN，
+// 否则这条正常路径会持续刷假告警。
+func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	var buf bytes.Buffer
+	old := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(old) })
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
+			AddRow(42, "pending", "activity", 1001))
+	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
+		WithArgs(int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT `is_checking` FROM `activity` WHERE id = \\?").
+		WithArgs(int64(1001)).
+		WillReturnRows(sqlmock.NewRows([]string{"is_checking"}).AddRow("reject"))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "reject"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "WARN") {
+		t.Fatalf("same-conclusion reconcile write must stay quiet, got log: %s", buf.String())
+	}
+}
+
 // TestAuditorFormAfterUpdatePassAllowsReject 平台改判为通过时，已驳回的活动要跟着放行：
 // pass 分支的 SQL 必须允许 is_checking 从 reject 迁移，且保留"送审人不全为 pass 则不放行"的守卫。
 func TestAuditorFormAfterUpdatePassAllowsReject(t *testing.T) {
@@ -238,6 +304,41 @@ func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
 
 	if err := repo.UpdateIfPending(context.Background(), 42, "pass"); err != nil {
 		t.Fatalf("missing form on reconcile update must be idempotent success, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRevertRejectToPendingSQL 条件命中时只写 status（updated_at 由 GORM 自动维护），
+// 不触碰 reason/pushed_at/claimed_at，避免回查抖动把已驳回活动的驳回原因清空，
+// 也避免覆盖并发写入的推送/占用信息。
+func TestRevertRejectToPendingSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.RevertRejectToPending(context.Background(), 42); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRevertRejectToPendingSkipsWhenNotReject 条件未命中（状态已被其它路径推进）时不写行，
+// 并视为幂等成功。
+func TestRevertRejectToPendingSkipsWhenNotReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := repo.RevertRejectToPending(context.Background(), 42); err != nil {
+		t.Fatalf("rows affected=0 must be idempotent success, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

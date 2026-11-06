@@ -25,6 +25,7 @@ type AuditorRepository interface {
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
 	FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error)
 	UpdateIfPending(c context.Context, formId int64, status string) error
+	RevertRejectToPending(c context.Context, formId int64) error
 	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
 	FindByID(c context.Context, formId int64) (model.AuditorForm, error)
 	Delete(c context.Context, formId int64) error
@@ -69,7 +70,6 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 		return err
 	}
 	prevStatus := form.Status
-	form.PrevStatus = prevStatus
 	form.Status = status
 	// 原因只服务当前结论：非 reject 时清空，避免条目重置/对账把上一轮的旧原因当成当前原因展示；
 	// 批量查询已按 status='reject' 过滤，清空不损失展示。
@@ -242,12 +242,38 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 			return nil
 		}
 		form.Status = status
+		// 原因只服务 reject 结论：写回非 reject 时清空。否则"驳回(有原因) -> 回查无法确认退回
+		// pending（保留原因） -> 对账写回 pass"后旧原因会残留，被后续不带原因的 reject 回调沿用。
+		if status != model.StanceReject {
+			form.Reason = ""
+		}
 		if err := tx.Save(&form).Error; err != nil {
 			a.l.Error("failed to update auditor form", zap.Error(err), zap.Int64("formId", formId))
 			return err
 		}
 		return nil
 	})
+}
+
+// RevertRejectToPending 仅在表单当前仍为 reject 时退回 pending。
+// 改判回查无法确认平台结论时用它代替无条件的 Update：条件更新不会覆盖并发路径已写入的
+// 终态（例如已确认的 pass），也不会因非 reject 写入而清空驳回原因。
+// 条件未命中（状态已被回调/对账推进）视为幂等成功。
+func (a *AuditorRepo) RevertRejectToPending(c context.Context, formId int64) error {
+	form := model.AuditorForm{Id: formId, Status: "pending"}
+	res := a.db.WithContext(c).
+		Model(&model.AuditorForm{}).
+		Where("id = ? AND status = ?", formId, model.StanceReject).
+		Select("Status").
+		Updates(&form)
+	if res.Error != nil {
+		a.l.Error("failed to revert auditor form to pending", zap.Error(res.Error), zap.Int64("formId", formId))
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		a.l.Info("auditor form no longer reject, skip revert to pending", zap.Int64("formId", formId))
+	}
+	return nil
 }
 
 // FindOrphanPostForms 捞出"帖子已不存在"的帖子审核表单（孤儿）。
