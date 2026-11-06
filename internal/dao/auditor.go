@@ -68,6 +68,7 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 		a.l.Error("auditor form not found", zap.Error(err))
 		return err
 	}
+	prevStatus := form.Status
 	form.Status = status
 	// 原因只服务当前结论：非 reject 时清空，避免条目重置/对账把上一轮的旧原因当成当前原因展示；
 	// 批量查询已按 status='reject' 过滤，清空不损失展示。
@@ -79,6 +80,18 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 	if err := a.db.WithContext(c).Save(&form).Error; err != nil {
 		a.l.Error("failed to update auditor form", zap.Error(err))
 		return err
+	}
+	// 结论发生迁移时记录旧状态：回调没有顺序/版本号，reject 被改判为 pass 需要能从日志还原是谁盖了谁。
+	if prevStatus != "" && prevStatus != status {
+		if prevStatus == model.StanceReject && status == model.StancePass {
+			a.l.Warn("auditor form transitioned reject -> pass by callback",
+				zap.Int64("formId", formId), zap.Int64("activityId", form.ActivityId),
+				zap.String("from", prevStatus), zap.String("to", status))
+		} else {
+			a.l.Info("auditor form status changed by callback",
+				zap.Int64("formId", formId), zap.Int64("activityId", form.ActivityId),
+				zap.String("from", prevStatus), zap.String("to", status))
+		}
 	}
 	return nil
 }
