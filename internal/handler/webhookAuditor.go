@@ -36,19 +36,23 @@ func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService
 }
 
 func (w *CallbackAuditorHandler) CallbackAuditor(c *gin.Context, req *request.HookPayload) (response.Resp, error) {
-	if w.apiKey != "" {
-		got := c.GetHeader("api_key")
-		// 平台回调以 api_key 头携带项目 API Key，必须校验，否则任何人都能伪造审核结论。
-		if subtle.ConstantTimeCompare([]byte(got), []byte(w.apiKey)) != 1 {
-			w.l.Warn("Auditor callback rejected: api_key mismatch")
-			// 平台按 HTTP 状态判断失败并重试；响应体由 SDK 包装层统一写成 {"code":200,"msg":"success"}，
-			// 这里无法覆盖，能保证的只有 401 状态码。
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return response.Resp{}, nil
-		}
-	} else {
-		// 正常启动时 SDK 构造会因空 key 直接 Fatal，这里只作防御，避免误配时静默拒绝全部回调。
-		w.l.Warn("Auditor callback api_key not configured, signature check skipped")
+	if w.apiKey == "" {
+		// fail-closed：未配置 key 时宁可让回调失败，也不在无鉴权的情况下接受。
+		// 该分支正常启动不可达：NewAuditorService 构造时 client.NewClient 会因空 key
+		// 报错并 Fatal+panic，这里仅作防御。
+		w.l.Error("Auditor callback api_key not configured, reject callback")
+		c.AbortWithStatus(http.StatusInternalServerError)
+		return response.Resp{}, nil
+	}
+
+	got := c.GetHeader("api_key")
+	// 平台回调以 api_key 头携带项目 API Key，必须校验，否则任何人都能伪造审核结论。
+	if subtle.ConstantTimeCompare([]byte(got), []byte(w.apiKey)) != 1 {
+		w.l.Warn("Auditor callback rejected: api_key mismatch")
+		// 平台按 HTTP 状态判断失败并重试；响应体由 SDK 包装层统一写成 {"code":200,"msg":"success"}，
+		// 这里无法覆盖，能保证的只有 401 状态码。
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return response.Resp{}, nil
 	}
 
 	if err := w.svc.UpdateStatus(c, int64(req.Data.Id), req.Data.Status, req.Data.Msg); err != nil {
