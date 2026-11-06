@@ -40,6 +40,7 @@ type AuditorService interface {
 	ReconcilePendingForms(c context.Context)
 	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
 	RevokeForm(c context.Context, form model.AuditorForm) error
+	GetReasons(c context.Context, activityIds []int64) (map[int64]string, error)
 }
 
 type auditorService struct {
@@ -201,6 +202,11 @@ func (a *auditorService) FindOrphanPostForms(c context.Context) ([]model.Auditor
 	return a.AuditorRepo.FindOrphanPostForms(c)
 }
 
+// GetReasons 批量返回活动的审核原因（activity_id -> reason）。
+func (a *auditorService) GetReasons(c context.Context, activityIds []int64) (map[int64]string, error) {
+	return a.AuditorRepo.FindReasonsByActivityIDs(c, activityIds)
+}
+
 // RevokeForm 撤销一条帖子审核表单：远端可能存在的条目调用 DeleteItem 删除，成功后删本地行。
 // 远端失败时保留本地行，交由后台下一轮重试。
 //
@@ -255,7 +261,8 @@ func (a *auditorService) ReleaseClaim(c context.Context, FormId int64, leaseUnti
 	return a.AuditorRepo.ReleaseClaim(c, FormId, leaseUntil)
 }
 
-// ReconcilePendingForms 回查"已推送但平台仍 pending"的表单，拉取平台结论并落库。
+// ReconcilePendingForms 回查"已推送但平台仍 pending"的活动表单，拉取平台结论并落库。
+// 帖子表单已在 FindPushedPending 中按 subject 排除（帖子不审核），不在对账范围内。
 // 平台回调可能丢失，此前的实现只在"上传被拒"时回查，导致丢失回调的表单永久停在 pending。
 // 对账只同步平台已有结论；若平台根本没有该条目（历史推送丢失），仅告警不自动重推——
 // 自动重推有重复创建风险（参见历史 "该条目已被创建" 事故），属需产品单独决策的扩展项。

@@ -170,6 +170,27 @@ func (as *ActivityService) FindActByOwnerIDAll(c context.Context, studentID stri
 	return acts, nil
 }
 
+// RejectReasons 返回给定活动中审核不通过者的拒绝原因（activity id -> reason）。
+// 仅 is_checking='reject' 的活动返回原因：平台在 pass 时也可能带 msg，不能当作拒绝原因展示。
+// 查询失败只记日志返回空，不阻断列表/详情。
+func (as *ActivityService) RejectReasons(c context.Context, acts ...model.Activity) map[int64]string {
+	ids := make([]int64, 0, len(acts))
+	for _, act := range acts {
+		if act.IsChecking == model.StanceReject {
+			ids = append(ids, act.Id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	reasons, err := as.aud.GetReasons(c, ids)
+	if err != nil {
+		as.l.Error("Failed to get auditor reject reasons", zap.Error(err))
+		return nil
+	}
+	return reasons
+}
+
 func (as *ActivityService) EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail {
 	studentIDs := make([]string, 0, len(acts)+1)
 	studentIDs = append(studentIDs, viewerID)

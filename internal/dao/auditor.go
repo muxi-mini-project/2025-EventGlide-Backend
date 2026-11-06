@@ -15,8 +15,9 @@ import (
 
 type AuditorRepository interface {
 	Insert(c context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error)
-	Update(c context.Context, formId int64, status string) error
+	Update(c context.Context, formId int64, status string, reason string) error
 	Get(c context.Context, activityId int64) (model.AuditorForm, error)
+	FindReasonsByActivityIDs(c context.Context, ids []int64) (map[int64]string, error)
 	IsRejected(c context.Context, activityId int64) (bool, error)
 	FindByActivity(c context.Context, activityId int64, sub string) (model.AuditorForm, error)
 	MarkPushed(c context.Context, formId int64, pushedAt time.Time) error
@@ -55,7 +56,7 @@ func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string
 	return &form, nil
 }
 
-func (a *AuditorRepo) Update(c context.Context, formId int64, status string) error {
+func (a *AuditorRepo) Update(c context.Context, formId int64, status string, reason string) error {
 	var form model.AuditorForm
 	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).Where("id = ?", formId).First(&form).Error; err != nil {
 		// 回调查不到本地表单行：帖子撤销删除后迟到回调和"hook_id 与本地行对不上"都落在这里。
@@ -67,12 +68,58 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string) err
 		a.l.Error("auditor form not found", zap.Error(err))
 		return err
 	}
+	prevStatus := form.Status
+	form.PrevStatus = prevStatus
 	form.Status = status
+	// 原因只服务当前结论：非 reject 时清空，避免条目重置/对账把上一轮的旧原因当成当前原因展示；
+	// 批量查询已按 status='reject' 过滤，清空不损失展示。
+	// reject 回调可能不带原因（人工审核常见），空串不覆盖已有原因，避免把第一次写入的原因冲掉。
+	if status == model.StanceReject {
+		if reason != "" {
+			form.Reason = reason
+		}
+	} else {
+		form.Reason = ""
+	}
 	if err := a.db.WithContext(c).Save(&form).Error; err != nil {
 		a.l.Error("failed to update auditor form", zap.Error(err))
 		return err
 	}
+	// 结论发生迁移时记录旧状态：回调没有顺序/版本号，reject 被改判为 pass 需要能从日志还原是谁盖了谁。
+	if prevStatus != "" && prevStatus != status {
+		if prevStatus == model.StanceReject && status == model.StancePass {
+			a.l.Warn("auditor form transitioned reject -> pass by callback",
+				zap.Int64("formId", formId), zap.Int64("activityId", form.ActivityId),
+				zap.String("from", prevStatus), zap.String("to", status))
+		} else {
+			a.l.Info("auditor form status changed by callback",
+				zap.Int64("formId", formId), zap.Int64("activityId", form.ActivityId),
+				zap.String("from", prevStatus), zap.String("to", status))
+		}
+	}
 	return nil
+}
+
+// FindReasonsByActivityIDs 批量返回活动的审核原因（activity_id -> reason，空串也返回），
+// 供列表接口一次取全，避免逐条查询。ids 为空时不发 SQL。
+func (a *AuditorRepo) FindReasonsByActivityIDs(c context.Context, ids []int64) (map[int64]string, error) {
+	reasons := make(map[int64]string, len(ids))
+	if len(ids) == 0 {
+		return reasons, nil
+	}
+
+	var forms []model.AuditorForm
+	if err := a.db.WithContext(c).
+		Select("activity_id", "reason").
+		Where("subject = ? AND status = ? AND activity_id IN ?", model.SubjectActivity, model.StanceReject, ids).
+		Find(&forms).Error; err != nil {
+		a.l.Error("failed to find auditor reasons", zap.Error(err))
+		return nil, err
+	}
+	for _, form := range forms {
+		reasons[form.ActivityId] = form.Reason
+	}
+	return reasons, nil
 }
 
 func (a *AuditorRepo) Get(c context.Context, activityId int64) (model.AuditorForm, error) {
@@ -147,13 +194,15 @@ func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil t
 	return nil
 }
 
-// FindPushedPending 按 id 游标分批返回"已推送但平台仍未给结论"的表单，
+// FindPushedPending 按 id 游标分批返回"已推送但平台仍未给结论"的活动表单，
 // 供定时对账分批回查（回调可能丢失，导致表单永久停在 pending）。
 // 以 id 升序、取 id > afterID 的前 limit 条；调用方处理完后推进游标，取完回绕。
+// 排除帖子表单：帖子已不审核，其历史表单在平台上可能已不存在，
+// 继续回查只会每轮刷告警且永远不收敛。
 func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
 	var forms []model.AuditorForm
 	err := a.db.WithContext(c).
-		Where("pushed_at IS NOT NULL AND status = ? AND id > ?", "pending", afterID).
+		Where("pushed_at IS NOT NULL AND status = ? AND subject <> ? AND id > ?", "pending", model.SubjectPost, afterID).
 		Order("id ASC").
 		Limit(limit).
 		Find(&forms).Error
@@ -167,7 +216,7 @@ func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit 
 // UpdateIfPending 仅在表单当前仍为 pending 时更新状态，避免对账用平台过期结果覆盖
 // 回调已写入的终态（pass/reject）。条件未命中（已被回调更新）时视为无需处理，返回 nil。
 // 在事务内对行加锁，使"读当前状态 -> 写回"对同一行的并发回调写入原子，消除 TOCTOU。
-// 仍走 Save，以触发 AuditorForm.AfterUpdate 推进活动/帖子。
+// 平台结论与现值一致时不写库；状态确有变化时仍走 Save，以触发 AuditorForm.AfterUpdate 推进活动。
 func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status string) error {
 	return a.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
 		var form model.AuditorForm
@@ -184,6 +233,10 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 		if form.Status != "pending" {
 			a.l.Info("auditor form no longer pending, skip reconcile update",
 				zap.Int64("formId", formId), zap.String("status", form.Status))
+			return nil
+		}
+		// 平台结论与现值一致：跳过写库，避免每轮对账反复刷新 updated_at。
+		if form.Status == status {
 			return nil
 		}
 		form.Status = status

@@ -7,6 +7,7 @@ import (
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/middleware"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/service"
 	"github.com/raiki02/EG/pkg/ginx"
 	"github.com/raiki02/EG/pkg/logger"
@@ -180,7 +181,12 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwner
 		return ginx.ReturnError(err)
 	}
 	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
+	res := converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details)
+	reasons := ah.as.RejectReasons(ctx, paginated.Acts...)
+	for i := range res.Details {
+		res.Details[i].RejectReason = reasons[int64(res.Details[i].Id)]
+	}
+	return ginx.ReturnSuccess(res)
 }
 
 // ListAllActs
@@ -235,5 +241,15 @@ func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, cla
 		return ginx.ReturnError(err)
 	}
 	detail := ah.as.EnrichOneForSearcher(ctx, &act, claims.Subject)
-	return ginx.ReturnSuccess(converter.ToListActivityResp(detail))
+	res := converter.ToListActivityResp(detail)
+	// 拒绝原因是审核人的内部备注，只回给活动作者
+	if rejectReasonVisible(act, claims.Subject) {
+		res.RejectReason = ah.as.RejectReasons(ctx, act)[act.Id]
+	}
+	return ginx.ReturnSuccess(res)
+}
+
+// rejectReasonVisible 判断拒绝原因能否展示给 viewer：只有活动作者本人可见。
+func rejectReasonVisible(act model.Activity, viewer string) bool {
+	return viewer != "" && act.StudentID == viewer
 }
