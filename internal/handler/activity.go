@@ -184,7 +184,7 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwner
 	res := converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details)
 	reasons := ah.as.RejectReasons(ctx, paginated.Acts...)
 	for i := range res.Details {
-		res.Details[i].RejectReason = reasons[details[i].Activity.Id]
+		res.Details[i].RejectReason = reasons[int64(res.Details[i].Id)]
 	}
 	return ginx.ReturnSuccess(res)
 }
