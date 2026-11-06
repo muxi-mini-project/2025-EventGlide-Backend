@@ -34,11 +34,15 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 	if af.Status == StancePass {
 		table := af.Subject
 		if table == SubjectActivity {
+			// 平台在"通过方向"上是审核结论的权威源：条目先被判不通过、之后又被改判为通过时，
+			// 已置为 reject 的活动必须跟着放行，否则会出现"平台显示通过、用户侧仍被拒"的错位。
+			// reject 分支不做对称扩展（不把已 pass 的活动改判为 reject 下架）：下架属于产品本次划定
+			// 范围之外的场景，留待后续评估，与上面的放行不冲突，勿顺手补成对称条件。
 			update := tx.Exec(`
 				UPDATE activity
 				SET is_checking = 'pass'
 				WHERE id = ?
-				AND is_checking = 'pending_auditor'
+				AND is_checking IN ('pending_auditor','reject')
 				AND NOT EXISTS (
 					SELECT 1
 					FROM approvement
@@ -54,6 +58,9 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				log.Println("auditorform AfterUpdate passed successfully for activity:", af.ActivityId)
 				return nil
 			}
+			// 结论已落库但活动未变更：活动可能已是 pass/reject，或送审人守卫不满足。
+			// 平台存在 AI 与人工两套回调，同一结论的重复回调属正常，故仅 Warn 便于排查。
+			log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity unchanged (already pass/reject, or signer guard not met); duplicate callbacks of the same conclusion are expected", af.Id, af.Status, af.Subject, af.ActivityId)
 		}
 	}
 
@@ -73,6 +80,9 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 				log.Println("auditorform AfterUpdate rejected successfully for activity:", af.ActivityId)
 				return nil
 			}
+			// 结论已落库但活动未变更：活动已不在 pending_auditor（reject 分支没有送审人守卫）。
+			// 平台存在 AI 与人工两套回调，同一结论的重复回调属正常，故仅 Warn 便于排查。
+			log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity not in pending_auditor; duplicate callbacks of the same conclusion are expected", af.Id, af.Status, af.Subject, af.ActivityId)
 		}
 	}
 	return nil

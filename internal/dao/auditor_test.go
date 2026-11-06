@@ -176,6 +176,53 @@ func TestUpdateIfPendingSkipsWhenUnchanged(t *testing.T) {
 	}
 }
 
+// TestAuditorFormAfterUpdatePassAllowsReject 平台改判为通过时，已驳回的活动要跟着放行：
+// pass 分支的 SQL 必须允许 is_checking 从 reject 迁移，且保留"送审人不全为 pass 则不放行"的守卫。
+func TestAuditorFormAfterUpdatePassAllowsReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	// 活动已驳回（reject），平台再次回调把表单改成 pass
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
+			AddRow(42, 7, "activity", "reject"))
+	mock.ExpectExec("UPDATE `auditor_form` SET").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking IN \\('pending_auditor','reject'\\) AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)$").
+		WithArgs(int64(7), int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "pass"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestAuditorFormAfterUpdateRejectOnlyPending 锁定 reject 分支不做对称扩展：
+// 仍只允许 pending_auditor -> reject，不把已通过的活动改判下架。
+func TestAuditorFormAfterUpdateRejectOnlyPending(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
+			AddRow(42, 7, "activity", "pending"))
+	mock.ExpectExec("UPDATE `auditor_form` SET").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
+		WithArgs(int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "reject"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestUpdateIfPendingMissingIsIdempotent 表单已被撤销删除时，对账更新应幂等成功（与 Update 一致），
 // 避免撤销与对账并发时对已删行报错刷日志。
 func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
