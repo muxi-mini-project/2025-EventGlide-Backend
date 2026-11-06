@@ -426,6 +426,46 @@ func newAuditorServiceWithServer(t *testing.T, handler http.HandlerFunc) (*audit
 	return &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}, repo
 }
 
+// TestPlatformStatus 平台状态映射与条目数校验：仅当恰好一条时才采信，否则报错。
+func TestPlatformStatus(t *testing.T) {
+	tests := []struct {
+		name      string
+		body      string
+		want      string
+		wantError bool
+	}{
+		{name: "pending", body: `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`, want: "pending"},
+		{name: "pass", body: `{"msg":"","code":200,"data":{"items":[{"status":1}]}}`, want: "pass"},
+		{name: "reject", body: `{"msg":"","code":200,"data":{"items":[{"status":2}]}}`, want: "reject"},
+		{name: "unknown status", body: `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`, want: ""},
+		{name: "empty items", body: `{"msg":"","code":200,"data":{"items":[]}}`, wantError: true},
+		{name: "two items", body: `{"msg":"","code":200,"data":{"items":[{"status":1},{"status":2}]}}`, wantError: true},
+		{name: "http 500", body: `{"code":500,"msg":"boom"}`, wantError: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(tt.body))
+			})
+
+			got, err := svc.PlatformStatus(context.Background(), 42)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("expected error, got status %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("expected status %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
 // TestRevokeForm_DeletesRemoteForPushed 已推送表单撤销时须调远端 DELETE，成功后才删本地行。
 func TestRevokeForm_DeletesRemoteForPushed(t *testing.T) {
 	now := time.Now()

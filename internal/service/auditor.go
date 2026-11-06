@@ -209,7 +209,7 @@ func (a *auditorService) GetReasons(c context.Context, activityIds []int64) (map
 }
 
 // PlatformStatus 回查平台条目的审核状态，返回映射后的 pass/reject/pending；
-// 平台状态无法识别时返回空串（未知），查不到条目或查询失败返回 error。
+// 平台状态无法识别时返回空串（未知），返回条目数不为 1 或查询失败返回 error。
 // 回调无顺序号，延迟到达的旧 pass 回调可能把已驳回的活动错误放行，放行前据此确认当前结论。
 func (a *auditorService) PlatformStatus(c context.Context, formId int64) (string, error) {
 	req, err := request.NewGetItemsStatusReq([]int{int(formId)})
@@ -223,8 +223,10 @@ func (a *auditorService) PlatformStatus(c context.Context, formId int64) (string
 	if resp.Basic.Code != sdkerrorx.SuccessCode {
 		return "", fmt.Errorf("auditor get items not success: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
 	}
-	if len(resp.Items) == 0 {
-		return "", fmt.Errorf("auditor item not found: formId=%d", formId)
+	if len(resp.Items) != 1 {
+		// 仅当恰好返回一条时才采信：条目数异常时无法确认哪一条对应本次回查，
+		// 取错条目会得出错误结论，因此一律报错交由调用方 fail-closed 处理。
+		return "", fmt.Errorf("auditor item count unexpected: formId=%d count=%d", formId, len(resp.Items))
 	}
 	return tools.StatusMapper(resp.Items[0].Status), nil
 }

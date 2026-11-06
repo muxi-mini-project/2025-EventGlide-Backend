@@ -148,21 +148,17 @@ func TestCallbackRejectToPassIgnoredWhenPlatformRejects(t *testing.T) {
 func TestCallbackPassSkipsConfirmWhenNotRejected(t *testing.T) {
 	for _, local := range []string{"pending", model.StancePass} {
 		t.Run(local, func(t *testing.T) {
-			var hits int
-			aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
-				hits++
-				_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1}]}}`))
-			})
 			repo := &fakeAuditorRepo{byID: &model.AuditorForm{
 				Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: local,
 			}}
+			aud := &stubAuditorSvc{status: model.StancePass}
 			svc := newCallbackAuditorWithAudForTest(repo, aud)
 
 			if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if hits != 0 {
-				t.Fatalf("local %q should not query platform, got %d hits", local, hits)
+			if aud.queryCnt != 0 {
+				t.Fatalf("local %q should not query platform, got %d queries", local, aud.queryCnt)
 			}
 			if repo.updatedTo != model.StancePass {
 				t.Fatalf("expected pass written for local %q, got %q", local, repo.updatedTo)
@@ -171,35 +167,15 @@ func TestCallbackPassSkipsConfirmWhenNotRejected(t *testing.T) {
 	}
 }
 
-// TestCallbackPlatformStatusErrorFailsOpen 平台回查出错时保持放行，不新增失败面。
-func TestCallbackPlatformStatusErrorFailsOpen(t *testing.T) {
-	var hits int
-	aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
-		hits++
-		_, _ = w.Write([]byte(`{"code":500,"msg":"boom"}`))
-	})
-	repo := &fakeAuditorRepo{byID: &model.AuditorForm{
-		Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: model.StanceReject,
-	}}
-	svc := newCallbackAuditorWithAudForTest(repo, aud)
-
-	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
-		t.Fatalf("confirm error must not fail the callback, got %v", err)
-	}
-	if hits != 1 {
-		t.Fatalf("expected platform queried once, got %d", hits)
-	}
-	if repo.updatedTo != model.StancePass {
-		t.Fatalf("confirm error should fail open and write pass, got %q", repo.updatedTo)
-	}
-}
-
-// TestCallbackRejectToPassAcceptsWhenPlatformPending 平台当前仍在审核中时不能丢弃这条 pass：
-// 本地已停在 reject，而对账只扫 pending，丢弃后活动将永久无法恢复。
-func TestCallbackRejectToPassAcceptsWhenPlatformPending(t *testing.T) {
+// TestCallbackRejectToPassRevertsToPending 平台结论无法确认时不得放行，也不能丢弃回调：
+// pending、未知状态、条目数异常、查询失败都把本地表单退回 pending，交由对账在平台
+// 给出结论后再决定（对账只扫 pending）。
+func TestCallbackRejectToPassRevertsToPending(t *testing.T) {
 	for name, body := range map[string]string{
-		"pending": `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`,
-		"unknown": `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`,
+		"pending":      `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`,
+		"unknown":      `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`,
+		"empty items":  `{"msg":"","code":200,"data":{"items":[]}}`,
+		"query failed": `{"code":500,"msg":"boom"}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			var hits int
@@ -218,8 +194,8 @@ func TestCallbackRejectToPassAcceptsWhenPlatformPending(t *testing.T) {
 			if hits != 1 {
 				t.Fatalf("expected platform queried once, got %d", hits)
 			}
-			if repo.updatedTo != model.StancePass {
-				t.Fatalf("platform %s should not block pass callback, got %q", name, repo.updatedTo)
+			if repo.updatedTo != "pending" {
+				t.Fatalf("unconfirmed platform status must revert form to pending, got %q", repo.updatedTo)
 			}
 		})
 	}
