@@ -143,7 +143,7 @@ func TestUpdateIfPendingUpdatesWhenChanged(t *testing.T) {
 			AddRow(42, "pending", "activity", 1001))
 	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
 	// AfterUpdate 的 pass 分支：仅当活动仍待审核且无未通过审批时才置为 pass
-	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking = 'pending_auditor' AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)").
+	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking IN \\('pending_auditor','reject'\\) AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)").
 		WithArgs(int64(1001), int64(1001)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -192,7 +192,7 @@ func TestAuditorFormAfterUpdatePassAllowsReject(t *testing.T) {
 		WithArgs(int64(7), int64(7)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	if err := repo.Update(context.Background(), 42, "pass"); err != nil {
+	if err := repo.Update(context.Background(), 42, "pass", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -215,7 +215,7 @@ func TestAuditorFormAfterUpdateRejectOnlyPending(t *testing.T) {
 		WithArgs(int64(7)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	if err := repo.Update(context.Background(), 42, "reject"); err != nil {
+	if err := repo.Update(context.Background(), 42, "reject", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
