@@ -34,6 +34,14 @@ RUN ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
 # 设置工作目录为 /app
 WORKDIR /app
 
+# 生产模式：关闭 gin 的 debug 路由打印与调试断言；
+# 访问日志由 gin.Logger 中间件输出，不受 GIN_MODE 影响。
+ENV GIN_MODE=release
+
+# 健康检查：容器内 busybox wget 探测 /healthz（进程存活 + HTTP 可用）
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:8080/healthz || exit 1
+
 # 从 builder 复制编译好的二进制文件（如果只需要二进制文件，可直接复制 app 文件）
 COPY --from=builder /app .
 

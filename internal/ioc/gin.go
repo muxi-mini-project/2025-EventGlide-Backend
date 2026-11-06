@@ -6,7 +6,7 @@ func InitGinHandler() *gin.Engine {
 	e := gin.New()
 	e.Use(
 		gin.LoggerWithConfig(gin.LoggerConfig{
-			SkipPaths: []string{"/metrics"},
+			SkipPaths: []string{"/metrics", "/healthz"},
 		}),
 		gin.Recovery(),
 	)
