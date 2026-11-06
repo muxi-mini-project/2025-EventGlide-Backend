@@ -252,7 +252,7 @@ func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	}
 }
 
-// TestUpdateIfPendingWarnsWhenActivityMissing 活动查不到（或 is_checking 为 NULL）时 cur 为空串，
+// TestUpdateIfPendingWarnsWhenActivityMissing 活动查不到时 cur 为空串，
 // 说明结论没有真正落到活动上，AfterUpdate 必须告警而不是静默当成同结论。
 func TestUpdateIfPendingWarnsWhenActivityMissing(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
@@ -334,8 +334,8 @@ func TestAuditorFormAfterUpdateRejectOnlyPending(t *testing.T) {
 	}
 }
 
-// TestUpdateIfPendingMissingIsIdempotent 表单已被撤销删除时，对账更新应幂等成功（与 Update 一致），
-// 避免撤销与对账并发时对已删行报错刷日志。
+// TestUpdateIfPendingMissingIsIdempotent 表单行已被删除时，对账更新应幂等成功（与 Update 一致），
+// 避免对已删行报错刷日志。
 func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
@@ -388,7 +388,7 @@ func TestRevertRejectToPendingSkipsWhenNotReject(t *testing.T) {
 	}
 }
 
-// TestUpdateAuditorFormMissingIsIdempotent 撤销后表单行已消失，迟到的审核回调应视为幂等成功，
+// TestUpdateAuditorFormMissingIsIdempotent 表单行已消失时，迟到的审核回调应视为幂等成功，
 // 而不是报错让平台无休止重试。
 func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
@@ -405,7 +405,7 @@ func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestAuditorFormFindByIDSQL 断言按 id 回查表单（撤销前取最新状态）。
+// TestAuditorFormFindByIDSQL 断言按 id 回查表单。
 func TestAuditorFormFindByIDSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
