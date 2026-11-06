@@ -206,16 +206,26 @@ func TestUpdateIfPendingClearsReasonForNonReject(t *testing.T) {
 	}
 }
 
+// captureStdLog 把标准库 log 输出重定向到返回的 buffer，供断言 AfterUpdate 的告警。
+// 依赖本包测试不使用 t.Parallel：log.SetOutput 是进程级全局状态，并行用例会互相
+// 覆盖输出、造成跨用例串扰。
+func captureStdLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	old := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(old) })
+	return &buf
+}
+
 // TestUpdateIfPendingNoWarnWhenActivityAlreadyReject 退回 pending 的表单随后由对账写回 reject 时，
 // 活动通常已是 reject（条件更新命中 0 行），属同结论写入，AfterUpdate 不应再打 WARN，
 // 否则这条正常路径会持续刷假告警。
 func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	var buf bytes.Buffer
-	old := log.Writer()
-	log.SetOutput(&buf)
-	t.Cleanup(func() { log.SetOutput(old) })
+	buf := captureStdLog(t)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
@@ -226,7 +236,7 @@ func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
 		WithArgs(int64(1001)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("SELECT `is_checking` FROM `activity` WHERE id = \\?").
+	mock.ExpectQuery("SELECT COALESCE\\(is_checking, ''\\) FROM `activity` WHERE id = \\?").
 		WithArgs(int64(1001)).
 		WillReturnRows(sqlmock.NewRows([]string{"is_checking"}).AddRow("reject"))
 	mock.ExpectCommit()
@@ -239,6 +249,39 @@ func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "WARN") {
 		t.Fatalf("same-conclusion reconcile write must stay quiet, got log: %s", buf.String())
+	}
+}
+
+// TestUpdateIfPendingWarnsWhenActivityMissing 活动查不到（或 is_checking 为 NULL）时 cur 为空串，
+// 说明结论没有真正落到活动上，AfterUpdate 必须告警而不是静默当成同结论。
+func TestUpdateIfPendingWarnsWhenActivityMissing(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	buf := captureStdLog(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
+			AddRow(42, "pending", "activity", 1001))
+	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
+		WithArgs(int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	// 活动不存在：查询命中 0 行，cur 保持空串
+	mock.ExpectQuery("SELECT COALESCE\\(is_checking, ''\\) FROM `activity` WHERE id = \\?").
+		WithArgs(int64(1001)).
+		WillReturnRows(sqlmock.NewRows([]string{"is_checking"}))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "reject"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `is_checking=""`) {
+		t.Fatalf("missing activity must WARN with empty is_checking, got log: %s", buf.String())
 	}
 }
 
