@@ -34,6 +34,7 @@ type ListActivitiesResp struct {
 	IfRegister    string            `json:"ifRegister"`
 	ShowImg       []string          `json:"showImg"`
 	IsChecking    string            `json:"isChecking"`
+	RejectReason  string            `json:"rejectReason"`
 
 	LikeNum    uint `json:"likeNum"`
 	CollectNum uint `json:"collectNum"`

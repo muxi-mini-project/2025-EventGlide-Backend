@@ -24,6 +24,8 @@ type fakeAuditorRepo struct {
 	lastFormId    int64
 	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
 	updatedTo     string              // Update 写入的最后一个状态
+	updatedReason string              // Update 写入的最后一个原因
+	reasons       map[int64]string    // FindReasonsByActivityIDs 的返回值
 	pushedPending []model.AuditorForm // FindPushedPending 的返回值
 	orphans       []model.AuditorForm
 	deletedId     int64
@@ -49,9 +51,23 @@ func (f *fakeAuditorRepo) Insert(_ context.Context, activityId int64, formUrl st
 	return form, nil
 }
 
-func (f *fakeAuditorRepo) Update(_ context.Context, _ int64, status string) error {
+func (f *fakeAuditorRepo) Update(_ context.Context, _ int64, status string, reason string) error {
 	f.updatedTo = status
+	f.updatedReason = reason
 	return nil
+}
+
+func (f *fakeAuditorRepo) FindReasonsByActivityIDs(_ context.Context, ids []int64) (map[int64]string, error) {
+	if len(ids) == 0 {
+		return map[int64]string{}, nil
+	}
+	out := make(map[int64]string, len(ids))
+	for _, id := range ids {
+		if reason, ok := f.reasons[id]; ok {
+			out[id] = reason
+		}
+	}
+	return out, nil
 }
 
 func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status string) error {

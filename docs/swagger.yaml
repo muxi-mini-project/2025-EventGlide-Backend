@@ -639,6 +639,8 @@ definitions:
         type: string
       position:
         type: string
+      rejectReason:
+        type: string
       showImg:
         items:
           type: string
