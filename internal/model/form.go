@@ -10,6 +10,11 @@ import (
 const (
 	SubjectActivity = "activity"
 	SubjectPost     = "post"
+
+	// AuditorReasonMaxLen 与 AuditorForm.Reason 的列宽 varchar(512) 保持一致。
+	// MySQL 的 varchar 按字符计数，超长在严格模式下会报 1406 使整条更新失败（状态也写不进去），
+	// 故写库前需按 rune 截断。
+	AuditorReasonMaxLen = 512
 )
 
 type AuditorForm struct {
@@ -17,6 +22,7 @@ type AuditorForm struct {
 	Subject    string     `gorm:"type:varchar(255);not null;uniqueIndex:idx_auditor_form_act_subject,priority:2"`              // 活动 or 帖子
 	ActivityId int64      `gorm:"type:bigint;not null;uniqueIndex:idx_auditor_form_act_subject,priority:1;column:activity_id"` // 活动/帖子ID
 	Status     string     `gorm:"type:enum('pending','pass','reject');default:'pending';column:status;not null"`               // 表单审核状态 审核是0,1,2
+	Reason     string     `gorm:"type:varchar(512);column:reason;not null;default:''"`                                         // 审核不通过原因；仅 reject 时写入，来自回调 Data.Msg
 	FormUrl    string     `gorm:"type:text;column:form_url"`                                                                   // 表单的URL地址 // 给活动用的填报表单
 	PushedAt   *time.Time `gorm:"type:datetime;column:pushed_at"`                                                              // 成功送审时间；NULL 表示尚未推送
 	ClaimedAt  *time.Time `gorm:"type:datetime;column:claimed_at"`                                                             // 上传占用（租约）；NULL 表示无人持有，供多实例互斥

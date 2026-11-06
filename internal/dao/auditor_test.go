@@ -273,7 +273,7 @@ func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
 		WithArgs(int64(9), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 
-	if err := repo.Update(context.Background(), 9, "pass"); err != nil {
+	if err := repo.Update(context.Background(), 9, "pass", ""); err != nil {
 		t.Fatalf("missing form on update must be idempotent success, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -295,6 +295,94 @@ func TestAuditorFormFindByIDSQL(t *testing.T) {
 	}
 	if form.Id != 9 {
 		t.Fatalf("expected form 9, got %d", form.Id)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormWritesReason 回调带的原因必须与状态一起落库。
+func TestUpdateAuditorFormWritesReason(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status"}).
+			AddRow(42, "activity", 7, "pending"))
+	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
+		WithArgs("activity", int64(7), "reject", "资料不全", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	// 拒绝状态会经 AuditorForm.AfterUpdate 把活动推进为 is_checking='reject'
+	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "reject", "资料不全"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormClearsReasonWhenNotReject 非 reject 状态清空原因：
+// 平台把条目重置为 pending 后会保留旧原因，若随后 reject 回调丢失、由对账改回 reject，
+// 旧原因会被当成当前原因展示。
+func TestUpdateAuditorFormClearsReasonWhenNotReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason"}).
+			AddRow(42, "activity", 7, "reject", "旧原因"))
+	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
+		WithArgs("activity", int64(7), "pending", "", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "pending", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindReasonsByActivityIDsSQL 批量查原因只取拒绝状态的活动表单，返回 activity_id -> reason。
+func TestFindReasonsByActivityIDsSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT `activity_id`,`reason` FROM `auditor_form` WHERE subject = \\? AND status = \\? AND activity_id IN \\(\\?,\\?\\)").
+		WithArgs("activity", "reject", int64(7), int64(8)).
+		WillReturnRows(sqlmock.NewRows([]string{"activity_id", "reason"}).
+			AddRow(7, "资料不全").
+			AddRow(8, ""))
+
+	reasons, err := repo.FindReasonsByActivityIDs(context.Background(), []int64{7, 8})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reasons[7] != "资料不全" {
+		t.Fatalf("expected reason for 7, got %+v", reasons)
+	}
+	if reason, ok := reasons[8]; !ok || reason != "" {
+		t.Fatalf("expected empty reason for 8 to be present, got %+v", reasons)
+	}
+	if len(reasons) != 2 {
+		t.Fatalf("expected 2 reasons, got %+v", reasons)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindReasonsByActivityIDsEmpty 空 ids 不得发 SQL，直接返回空 map。
+func TestFindReasonsByActivityIDsEmpty(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	reasons, err := repo.FindReasonsByActivityIDs(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if reasons == nil || len(reasons) != 0 {
+		t.Fatalf("expected empty non-nil map, got %+v", reasons)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

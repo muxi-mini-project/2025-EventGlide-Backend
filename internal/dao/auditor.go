@@ -15,8 +15,9 @@ import (
 
 type AuditorRepository interface {
 	Insert(c context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error)
-	Update(c context.Context, formId int64, status string) error
+	Update(c context.Context, formId int64, status string, reason string) error
 	Get(c context.Context, activityId int64) (model.AuditorForm, error)
+	FindReasonsByActivityIDs(c context.Context, ids []int64) (map[int64]string, error)
 	IsRejected(c context.Context, activityId int64) (bool, error)
 	FindByActivity(c context.Context, activityId int64, sub string) (model.AuditorForm, error)
 	MarkPushed(c context.Context, formId int64, pushedAt time.Time) error
@@ -55,7 +56,7 @@ func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string
 	return &form, nil
 }
 
-func (a *AuditorRepo) Update(c context.Context, formId int64, status string) error {
+func (a *AuditorRepo) Update(c context.Context, formId int64, status string, reason string) error {
 	var form model.AuditorForm
 	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).Where("id = ?", formId).First(&form).Error; err != nil {
 		// 回调查不到本地表单行：帖子撤销删除后迟到回调和"hook_id 与本地行对不上"都落在这里。
@@ -68,11 +69,40 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string) err
 		return err
 	}
 	form.Status = status
+	// 原因只服务当前结论：非 reject 时清空，避免条目重置/对账把上一轮的旧原因当成当前原因展示；
+	// 批量查询已按 status='reject' 过滤，清空不损失展示。
+	if status == model.StanceReject {
+		form.Reason = reason
+	} else {
+		form.Reason = ""
+	}
 	if err := a.db.WithContext(c).Save(&form).Error; err != nil {
 		a.l.Error("failed to update auditor form", zap.Error(err))
 		return err
 	}
 	return nil
+}
+
+// FindReasonsByActivityIDs 批量返回活动的审核原因（activity_id -> reason，空串也返回），
+// 供列表接口一次取全，避免逐条查询。ids 为空时不发 SQL。
+func (a *AuditorRepo) FindReasonsByActivityIDs(c context.Context, ids []int64) (map[int64]string, error) {
+	reasons := make(map[int64]string, len(ids))
+	if len(ids) == 0 {
+		return reasons, nil
+	}
+
+	var forms []model.AuditorForm
+	if err := a.db.WithContext(c).
+		Select("activity_id", "reason").
+		Where("subject = ? AND status = ? AND activity_id IN ?", model.SubjectActivity, model.StanceReject, ids).
+		Find(&forms).Error; err != nil {
+		a.l.Error("failed to find auditor reasons", zap.Error(err))
+		return nil, err
+	}
+	for _, form := range forms {
+		reasons[form.ActivityId] = form.Reason
+	}
+	return reasons, nil
 }
 
 func (a *AuditorRepo) Get(c context.Context, activityId int64) (model.AuditorForm, error) {

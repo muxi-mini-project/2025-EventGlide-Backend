@@ -40,6 +40,7 @@ type AuditorService interface {
 	ReconcilePendingForms(c context.Context)
 	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
 	RevokeForm(c context.Context, form model.AuditorForm) error
+	GetReasons(c context.Context, activityIds []int64) (map[int64]string, error)
 }
 
 type auditorService struct {
@@ -199,6 +200,11 @@ func (a *auditorService) MarkPushed(c context.Context, FormId int64, pushedAt ti
 // FindOrphanPostForms 返回帖子已不存在的审核表单（待撤销队列）。
 func (a *auditorService) FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error) {
 	return a.AuditorRepo.FindOrphanPostForms(c)
+}
+
+// GetReasons 批量返回活动的审核原因（activity_id -> reason）。
+func (a *auditorService) GetReasons(c context.Context, activityIds []int64) (map[int64]string, error) {
+	return a.AuditorRepo.FindReasonsByActivityIDs(c, activityIds)
 }
 
 // RevokeForm 撤销一条帖子审核表单：远端可能存在的条目调用 DeleteItem 删除，成功后删本地行。

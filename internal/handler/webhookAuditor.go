@@ -33,7 +33,7 @@ func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService
 }
 
 func (w *CallbackAuditorHandler) CallbackAuditor(c *gin.Context, req *request.HookPayload) (response.Resp, error) {
-	if err := w.svc.UpdateStatus(c, int64(req.Data.Id), req.Data.Status); err != nil {
+	if err := w.svc.UpdateStatus(c, int64(req.Data.Id), req.Data.Status, req.Data.Msg); err != nil {
 		w.l.Error("Failed to update auditor status", zap.Int64("id", int64(req.Data.Id)), zap.String("status", req.Data.Status), zap.Error(err))
 		// 无效状态属永久性错误返回 400，其余（如 DB 故障）返回 500，供平台按其重试策略处理。
 		// 返回 nil：SDK 包装层在 err != nil 时会再写一次响应体，形成非法 JSON；此处已直接写状态码。
@@ -45,7 +45,11 @@ func (w *CallbackAuditorHandler) CallbackAuditor(c *gin.Context, req *request.Ho
 		return response.Resp{}, nil
 	}
 
-	w.l.Info("Auditor status updated successfully", zap.Int64("id", int64(req.Data.Id)), zap.String("status", req.Data.Status))
+	w.l.Info("Auditor status updated successfully",
+		zap.Int64("id", int64(req.Data.Id)),
+		zap.String("status", req.Data.Status),
+		zap.Int("reasonLen", len(req.Data.Msg)),
+	)
 	return response.Resp{
 		Code: 200,
 		Msg:  "Success",
