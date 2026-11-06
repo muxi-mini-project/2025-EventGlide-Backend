@@ -98,8 +98,8 @@ func TestReleaseClaimSQL(t *testing.T) {
 func TestFindPushedPendingSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\? AND subject <> \\? AND id > \\? ORDER BY id ASC LIMIT \\?").
-		WithArgs("pending", "post", int64(10), 100).
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE \\(pushed_at IS NOT NULL AND status = \\? AND subject <> \\? AND id > \\?\\) AND \\(EXISTS \\(SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time > \\?\\)\\) ORDER BY id ASC LIMIT \\?").
+		WithArgs("pending", "post", int64(10), sqlmock.AnyArg(), 100).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "pending"))
 
