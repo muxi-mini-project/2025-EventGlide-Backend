@@ -8,6 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/request"
+	"github.com/muxi-Infra/auditor-Backend/sdk/v2/api/response"
 	"go.uber.org/zap"
 )
 
@@ -28,7 +29,7 @@ func newCallbackAuditorHandlerForTest(apiKey string, svc *fakeCallbackAuditorSvc
 	}
 }
 
-func callCallback(t *testing.T, h *CallbackAuditorHandler, apiKeyHeader *string) *gin.Context {
+func callCallback(t *testing.T, h *CallbackAuditorHandler, apiKeyHeader *string) (*gin.Context, response.Resp) {
 	t.Helper()
 
 	gin.SetMode(gin.TestMode)
@@ -39,13 +40,21 @@ func callCallback(t *testing.T, h *CallbackAuditorHandler, apiKeyHeader *string)
 		c.Request.Header.Set("api_key", *apiKeyHeader)
 	}
 
-	_, err := h.CallbackAuditor(c, &request.HookPayload{
+	resp, err := h.CallbackAuditor(c, &request.HookPayload{
 		Data: request.WebHookData{Id: 42, Status: "通过"},
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	return c
+	return c, resp
+}
+
+// assertAccepted 断言放行时返回的响应体，避免只依赖 gin 默认 200（未写响应时也是 200）。
+func assertAccepted(t *testing.T, resp response.Resp) {
+	t.Helper()
+	if resp.Code != 200 || resp.Msg != "Success" {
+		t.Fatalf("expected accepted resp {200 Success}, got %+v", resp)
+	}
 }
 
 func strPtr(s string) *string { return &s }
@@ -55,11 +64,9 @@ func TestCallbackAuditorAcceptsMatchingApiKey(t *testing.T) {
 	svc := &fakeCallbackAuditorSvc{}
 	h := newCallbackAuditorHandlerForTest("secret-key", svc)
 
-	c := callCallback(t, h, strPtr("secret-key"))
+	_, resp := callCallback(t, h, strPtr("secret-key"))
 
-	if c.Writer.Status() != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", c.Writer.Status())
-	}
+	assertAccepted(t, resp)
 	if svc.calls != 1 {
 		t.Fatalf("expected service called once, got %d", svc.calls)
 	}
@@ -70,7 +77,7 @@ func TestCallbackAuditorRejectsWrongApiKey(t *testing.T) {
 	svc := &fakeCallbackAuditorSvc{}
 	h := newCallbackAuditorHandlerForTest("secret-key", svc)
 
-	c := callCallback(t, h, strPtr("wrong-key"))
+	c, _ := callCallback(t, h, strPtr("wrong-key"))
 
 	if c.Writer.Status() != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", c.Writer.Status())
@@ -85,7 +92,7 @@ func TestCallbackAuditorRejectsMissingApiKey(t *testing.T) {
 	svc := &fakeCallbackAuditorSvc{}
 	h := newCallbackAuditorHandlerForTest("secret-key", svc)
 
-	c := callCallback(t, h, nil)
+	c, _ := callCallback(t, h, nil)
 
 	if c.Writer.Status() != http.StatusUnauthorized {
 		t.Fatalf("expected status 401, got %d", c.Writer.Status())
@@ -100,11 +107,9 @@ func TestCallbackAuditorSkipsCheckWhenKeyUnset(t *testing.T) {
 	svc := &fakeCallbackAuditorSvc{}
 	h := newCallbackAuditorHandlerForTest("", svc)
 
-	c := callCallback(t, h, nil)
+	_, resp := callCallback(t, h, nil)
 
-	if c.Writer.Status() != http.StatusOK {
-		t.Fatalf("expected status 200, got %d", c.Writer.Status())
-	}
+	assertAccepted(t, resp)
 	if svc.calls != 1 {
 		t.Fatalf("expected service called once, got %d", svc.calls)
 	}

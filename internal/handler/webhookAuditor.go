@@ -41,7 +41,8 @@ func (w *CallbackAuditorHandler) CallbackAuditor(c *gin.Context, req *request.Ho
 		// 平台回调以 api_key 头携带项目 API Key，必须校验，否则任何人都能伪造审核结论。
 		if subtle.ConstantTimeCompare([]byte(got), []byte(w.apiKey)) != 1 {
 			w.l.Warn("Auditor callback rejected: api_key mismatch")
-			// 与 400/500 分支一致：中止并返回 nil，避免 SDK 包装层二次写响应体。
+			// 平台按 HTTP 状态判断失败并重试；响应体由 SDK 包装层统一写成 {"code":200,"msg":"success"}，
+			// 这里无法覆盖，能保证的只有 401 状态码。
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return response.Resp{}, nil
 		}

@@ -13,17 +13,17 @@ import (
 	"go.uber.org/zap"
 )
 
-// stubAuditorSvc 只记录 ConfirmPass 调用，其余方法不属于回调路径。
+// stubAuditorSvc 只记录 PlatformStatus 调用，其余方法不属于回调路径。
 type stubAuditorSvc struct {
 	AuditorService
-	pass       bool
-	err        error
-	confirmCnt int
+	status   string
+	err      error
+	queryCnt int
 }
 
-func (s *stubAuditorSvc) ConfirmPass(context.Context, int64) (bool, error) {
-	s.confirmCnt++
-	return s.pass, s.err
+func (s *stubAuditorSvc) PlatformStatus(context.Context, int64) (string, error) {
+	s.queryCnt++
+	return s.status, s.err
 }
 
 func newCallbackAuditorForTest(repo *fakeAuditorRepo) CallbackAuditorService {
@@ -171,8 +171,8 @@ func TestCallbackPassSkipsConfirmWhenNotRejected(t *testing.T) {
 	}
 }
 
-// TestCallbackConfirmPassErrorFailsOpen 平台回查出错时保持放行，不新增失败面。
-func TestCallbackConfirmPassErrorFailsOpen(t *testing.T) {
+// TestCallbackPlatformStatusErrorFailsOpen 平台回查出错时保持放行，不新增失败面。
+func TestCallbackPlatformStatusErrorFailsOpen(t *testing.T) {
 	var hits int
 	aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		hits++
@@ -191,5 +191,58 @@ func TestCallbackConfirmPassErrorFailsOpen(t *testing.T) {
 	}
 	if repo.updatedTo != model.StancePass {
 		t.Fatalf("confirm error should fail open and write pass, got %q", repo.updatedTo)
+	}
+}
+
+// TestCallbackRejectToPassAcceptsWhenPlatformPending 平台当前仍在审核中时不能丢弃这条 pass：
+// 本地已停在 reject，而对账只扫 pending，丢弃后活动将永久无法恢复。
+func TestCallbackRejectToPassAcceptsWhenPlatformPending(t *testing.T) {
+	for name, body := range map[string]string{
+		"pending": `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`,
+		"unknown": `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var hits int
+			aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				hits++
+				_, _ = w.Write([]byte(body))
+			})
+			repo := &fakeAuditorRepo{byID: &model.AuditorForm{
+				Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: model.StanceReject,
+			}}
+			svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+			if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if hits != 1 {
+				t.Fatalf("expected platform queried once, got %d", hits)
+			}
+			if repo.updatedTo != model.StancePass {
+				t.Fatalf("platform %s should not block pass callback, got %q", name, repo.updatedTo)
+			}
+		})
+	}
+}
+
+// TestCallbackFindByIDErrorFailsOpen 读本地表单失败时无法判断是否需要回查，
+// 保持放行以免平台抖动导致回调落库失败。
+func TestCallbackFindByIDErrorFailsOpen(t *testing.T) {
+	var hits int
+	aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1}]}}`))
+	})
+	repo := &fakeAuditorRepo{findErr: errors.New("db down")}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
+		t.Fatalf("find error must not fail the callback, got %v", err)
+	}
+	if hits != 0 {
+		t.Fatalf("find error should skip platform query, got %d hits", hits)
+	}
+	if repo.updatedTo != model.StancePass {
+		t.Fatalf("find error should fail open and write pass, got %q", repo.updatedTo)
 	}
 }
