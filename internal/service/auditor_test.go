@@ -82,12 +82,6 @@ func (f *fakeAuditorRepo) RevertRejectToPending(_ context.Context, formId int64)
 	return nil
 }
 
-func (f *fakeAuditorRepo) Get(context.Context, int64) (model.AuditorForm, error) {
-	return model.AuditorForm{}, nil
-}
-
-func (f *fakeAuditorRepo) IsRejected(context.Context, int64) (bool, error) { return false, nil }
-
 func (f *fakeAuditorRepo) FindByActivity(_ context.Context, _ int64, _ string) (model.AuditorForm, error) {
 	if f.existing == nil {
 		return model.AuditorForm{}, gorm.ErrRecordNotFound

@@ -16,9 +16,7 @@ import (
 type AuditorRepository interface {
 	Insert(c context.Context, activityId int64, formUrl string, sub string) (*model.AuditorForm, error)
 	Update(c context.Context, formId int64, status string, reason string) error
-	Get(c context.Context, activityId int64) (model.AuditorForm, error)
 	FindReasonsByActivityIDs(c context.Context, ids []int64) (map[int64]string, error)
-	IsRejected(c context.Context, activityId int64) (bool, error)
 	FindByActivity(c context.Context, activityId int64, sub string) (model.AuditorForm, error)
 	MarkPushed(c context.Context, formId int64, pushedAt time.Time) error
 	ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error)
@@ -120,21 +118,6 @@ func (a *AuditorRepo) FindReasonsByActivityIDs(c context.Context, ids []int64) (
 		reasons[form.ActivityId] = form.Reason
 	}
 	return reasons, nil
-}
-
-func (a *AuditorRepo) Get(c context.Context, activityId int64) (model.AuditorForm, error) {
-	var form model.AuditorForm
-	err := a.db.WithContext(c).Where("activity_id = ?", activityId).First(&form).Error
-	return form, err
-}
-
-func (a *AuditorRepo) IsRejected(c context.Context, activityId int64) (bool, error) {
-	var form model.AuditorForm
-	err := a.db.WithContext(c).Where("activity_id = ? and status = ?", activityId, "reject").First(&form).Error
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		return false, nil // Not rejected
-	}
-	return true, err // Either found or another error occurred
 }
 
 func (a *AuditorRepo) FindByActivity(c context.Context, activityId int64, sub string) (model.AuditorForm, error) {
