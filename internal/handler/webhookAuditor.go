@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"crypto/subtle"
 	"errors"
 	"net/http"
 
@@ -16,14 +17,16 @@ import (
 )
 
 type CallbackAuditorHandler struct {
-	svc service.CallbackAuditorService
-	l   *zap.Logger
+	svc    service.CallbackAuditorService
+	apiKey string
+	l      *zap.Logger
 }
 
 func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService, cfg *config.Conf, l *logger.LoggerSet) *CallbackAuditorHandler {
 	c := &CallbackAuditorHandler{
-		svc: svc,
-		l:   l.Auditor.Named("handler"),
+		svc:    svc,
+		apiKey: cfg.Auditor.ApiKey,
+		l:      l.Auditor.Named("handler"),
 	}
 	s := sdk.NewGinRegistrar(&e.RouterGroup)
 	chain := sdk.NewChain()
@@ -33,6 +36,20 @@ func NewCallbackAuditorHandler(e *gin.Engine, svc service.CallbackAuditorService
 }
 
 func (w *CallbackAuditorHandler) CallbackAuditor(c *gin.Context, req *request.HookPayload) (response.Resp, error) {
+	if w.apiKey != "" {
+		got := c.GetHeader("api_key")
+		// 平台回调以 api_key 头携带项目 API Key，必须校验，否则任何人都能伪造审核结论。
+		if subtle.ConstantTimeCompare([]byte(got), []byte(w.apiKey)) != 1 {
+			w.l.Warn("Auditor callback rejected: api_key mismatch")
+			// 与 400/500 分支一致：中止并返回 nil，避免 SDK 包装层二次写响应体。
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return response.Resp{}, nil
+		}
+	} else {
+		// 正常启动时 SDK 构造会因空 key 直接 Fatal，这里只作防御，避免误配时静默拒绝全部回调。
+		w.l.Warn("Auditor callback api_key not configured, signature check skipped")
+	}
+
 	if err := w.svc.UpdateStatus(c, int64(req.Data.Id), req.Data.Status, req.Data.Msg); err != nil {
 		w.l.Error("Failed to update auditor status", zap.Int64("id", int64(req.Data.Id)), zap.String("status", req.Data.Status), zap.Error(err))
 		// 无效状态属永久性错误返回 400，其余（如 DB 故障）返回 500，供平台按其重试策略处理。
