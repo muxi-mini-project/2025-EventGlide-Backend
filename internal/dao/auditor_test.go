@@ -186,7 +186,8 @@ func TestAuditorFormAfterUpdatePassAllowsReject(t *testing.T) {
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "reject"))
-	mock.ExpectExec("UPDATE `auditor_form` SET").
+	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
+		WithArgs("pass", "", sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking IN \\('pending_auditor','reject'\\) AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)$").
 		WithArgs(int64(7), int64(7)).
@@ -209,7 +210,8 @@ func TestAuditorFormAfterUpdateRejectOnlyPending(t *testing.T) {
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "pending"))
-	mock.ExpectExec("UPDATE `auditor_form` SET").
+	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
+		WithArgs("reject", "", sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
 		WithArgs(int64(7)).
@@ -309,8 +311,8 @@ func TestUpdateAuditorFormWritesReason(t *testing.T) {
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status"}).
 			AddRow(42, "activity", 7, "pending"))
-	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
-		WithArgs("activity", int64(7), "reject", "资料不全", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
+		WithArgs("reject", "资料不全", sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	// 拒绝状态会经 AuditorForm.AfterUpdate 把活动推进为 is_checking='reject'
 	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -332,8 +334,8 @@ func TestUpdateAuditorFormKeepsReasonOnEmptyRejectMsg(t *testing.T) {
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason"}).
 			AddRow(42, "activity", 7, "pending", "资料不全"))
-	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
-		WithArgs("activity", int64(7), "reject", "资料不全", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
+		WithArgs("reject", "资料不全", sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -355,11 +357,36 @@ func TestUpdateAuditorFormClearsReasonWhenNotReject(t *testing.T) {
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason"}).
 			AddRow(42, "activity", 7, "reject", "旧原因"))
-	mock.ExpectExec("UPDATE `auditor_form` SET .*`reason`=\\?").
-		WithArgs("activity", int64(7), "pending", "", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
+		WithArgs("pending", "", sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	if err := repo.Update(context.Background(), 42, "pending", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateAuditorFormDoesNotWriteUploadColumns 回调更新只写结论列，不得用读到的旧快照覆盖
+// pushed_at / claimed_at：与上传并发时会把已推送表单改回未推送，或误清他人的上传占用。
+func TestUpdateAuditorFormDoesNotWriteUploadColumns(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+	pushedAt := time.Now().Add(-time.Hour)
+	claimedAt := time.Now().Add(-time.Minute)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "subject", "activity_id", "status", "reason", "pushed_at", "claimed_at"}).
+			AddRow(42, "activity", 7, "pending", "", pushedAt, claimedAt))
+	// SQL 只含 status/reason/updated_at 三列；若带上 pushed_at 或 claimed_at 该断言会失败。
+	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
+		WithArgs("pass", "", sqlmock.AnyArg(), int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity").WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.Update(context.Background(), 42, "pass", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
