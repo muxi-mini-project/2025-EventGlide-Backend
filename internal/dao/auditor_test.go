@@ -244,6 +244,41 @@ func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
 	}
 }
 
+// TestRevertRejectToPendingSQL 条件命中时只写 status（updated_at 由 GORM 自动维护），
+// 不触碰 reason/pushed_at/claimed_at，避免回查抖动把已驳回活动的驳回原因清空，
+// 也避免覆盖并发写入的推送/占用信息。
+func TestRevertRejectToPendingSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.RevertRejectToPending(context.Background(), 42); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRevertRejectToPendingSkipsWhenNotReject 条件未命中（状态已被其它路径推进）时不写行，
+// 并视为幂等成功。
+func TestRevertRejectToPendingSkipsWhenNotReject(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	if err := repo.RevertRejectToPending(context.Background(), 42); err != nil {
+		t.Fatalf("rows affected=0 must be idempotent success, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestFindOrphanPostFormsSQL 锁定"待撤销表单"的判据：subject='post' 且对应帖子已不存在（孤儿）。
 // 帖子是硬删除，故该判据精确等价于"帖子已被删"，不会误撤活帖子的表单。
 func TestFindOrphanPostFormsSQL(t *testing.T) {

@@ -26,6 +26,8 @@ type fakeAuditorRepo struct {
 	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
 	updatedTo     string              // Update 写入的最后一个状态
 	updatedReason string              // Update 写入的最后一个原因
+	revertCnt     int                 // RevertRejectToPending 调用次数
+	revertFormId  int64               // RevertRejectToPending 收到的表单 id
 	reasons       map[int64]string    // FindReasonsByActivityIDs 的返回值
 	pushedPending []model.AuditorForm // FindPushedPending 的返回值
 	orphans       []model.AuditorForm
@@ -73,6 +75,13 @@ func (f *fakeAuditorRepo) FindReasonsByActivityIDs(_ context.Context, ids []int6
 
 func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status string) error {
 	f.updatedTo = status
+	return nil
+}
+
+// RevertRejectToPending 模拟条件更新：真实 DAO 只在 status='reject' 时命中。
+func (f *fakeAuditorRepo) RevertRejectToPending(_ context.Context, formId int64) error {
+	f.revertCnt++
+	f.revertFormId = formId
 	return nil
 }
 
@@ -350,6 +359,33 @@ func TestSyncExistingFormStatus_EmptyItems(t *testing.T) {
 	}
 }
 
+// TestSyncExistingFormStatus_MultipleItems 平台返回多条时无法确认哪条对应本表单：
+// 按"存在"处理以止住重传，但不得写库。
+func TestSyncExistingFormStatus_MultipleItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1},{"status":2}]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	ok, err := svc.syncExistingFormStatus(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("multiple items should be treated as existing")
+	}
+	if repo.updatedTo != "" {
+		t.Fatalf("multiple items must not be written back, got %q", repo.updatedTo)
+	}
+}
+
 // TestReconcilePendingForms_SyncsConclusion 平台已出结论时，对账应把状态落库。
 func TestReconcilePendingForms_SyncsConclusion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -429,10 +465,11 @@ func newAuditorServiceWithServer(t *testing.T, handler http.HandlerFunc) (*audit
 // TestPlatformStatus 平台状态映射与条目数校验：仅当恰好一条时才采信，否则报错。
 func TestPlatformStatus(t *testing.T) {
 	tests := []struct {
-		name      string
-		body      string
-		want      string
-		wantError bool
+		name       string
+		statusCode int
+		body       string
+		want       string
+		wantError  bool
 	}{
 		{name: "pending", body: `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`, want: "pending"},
 		{name: "pass", body: `{"msg":"","code":200,"data":{"items":[{"status":1}]}}`, want: "pass"},
@@ -440,12 +477,16 @@ func TestPlatformStatus(t *testing.T) {
 		{name: "unknown status", body: `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`, want: ""},
 		{name: "empty items", body: `{"msg":"","code":200,"data":{"items":[]}}`, wantError: true},
 		{name: "two items", body: `{"msg":"","code":200,"data":{"items":[{"status":1},{"status":2}]}}`, wantError: true},
-		{name: "http 500", body: `{"code":500,"msg":"boom"}`, wantError: true},
+		{name: "data type illegal", body: `{"msg":"","code":200,"data":"boom"}`, wantError: true},
+		{name: "http 500", statusCode: http.StatusInternalServerError, body: `boom`, wantError: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				if tt.statusCode != 0 {
+					w.WriteHeader(tt.statusCode)
+				}
 				_, _ = w.Write([]byte(tt.body))
 			})
 

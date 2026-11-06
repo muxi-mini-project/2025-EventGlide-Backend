@@ -142,7 +142,14 @@ func (a *auditorService) syncExistingFormStatus(c context.Context, id int64) (bo
 	if len(resp.Items) == 0 {
 		return false, nil
 	}
-	// 只查询单个非零 id，平台按 ids 过滤返回，故返回的条目必为所查项。
+	if len(resp.Items) != 1 {
+		// 无法确认哪一条对应该表单：不采信、不写库，但按"平台存在"处理以止住重传，
+		// 避免条目数异常时被反复当成"不存在"重新推送。
+		a.l.Warn("Auditor get items returned unexpected count, treated as existing",
+			zap.Int("count", len(resp.Items)), zap.Int64("formId", id))
+		return true, nil
+	}
+	// 只查询单个非零 id，平台按 ids 过滤返回，故恰好一条时即为所查项。
 	mapped := tools.StatusMapper(resp.Items[0].Status)
 	if mapped == "" {
 		a.l.Warn("Auditor item exists but status unmapped", zap.String("status", resp.Items[0].Status), zap.Int64("formId", id))

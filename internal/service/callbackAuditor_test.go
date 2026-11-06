@@ -144,44 +144,109 @@ func TestCallbackRejectToPassIgnoredWhenPlatformRejects(t *testing.T) {
 	}
 }
 
-// TestCallbackPassSkipsConfirmWhenNotRejected 本地是 pending 或已 pass 时无需回查平台，照旧写库。
-func TestCallbackPassSkipsConfirmWhenNotRejected(t *testing.T) {
-	for _, local := range []string{"pending", model.StancePass} {
-		t.Run(local, func(t *testing.T) {
-			repo := &fakeAuditorRepo{byID: &model.AuditorForm{
-				Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: local,
-			}}
-			aud := &stubAuditorSvc{status: model.StancePass}
-			svc := newCallbackAuditorWithAudForTest(repo, aud)
+// TestCallbackPassSkipsConfirmWhenAlreadyPass 本地已通过时幂等，不回查平台。
+func TestCallbackPassSkipsConfirmWhenAlreadyPass(t *testing.T) {
+	repo := &fakeAuditorRepo{byID: &model.AuditorForm{
+		Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: model.StancePass,
+	}}
+	aud := &stubAuditorSvc{status: model.StancePass}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
 
-			if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if aud.queryCnt != 0 {
-				t.Fatalf("local %q should not query platform, got %d queries", local, aud.queryCnt)
-			}
-			if repo.updatedTo != model.StancePass {
-				t.Fatalf("expected pass written for local %q, got %q", local, repo.updatedTo)
-			}
-		})
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if aud.queryCnt != 0 {
+		t.Fatalf("already-pass form should not query platform, got %d queries", aud.queryCnt)
+	}
+	if repo.updatedTo != model.StancePass {
+		t.Fatalf("expected pass written, got %q", repo.updatedTo)
+	}
+}
+
+// TestCallbackPendingToPassConfirmsPlatform 本地仍 pending（例如刚被退回待审）时，
+// 平台重投的 pass 也必须先回查，防止绕过确认直接放行。
+func TestCallbackPendingToPassConfirmsPlatform(t *testing.T) {
+	var hits int
+	aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1}]}}`))
+	})
+	repo := &fakeAuditorRepo{byID: &model.AuditorForm{
+		Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: "pending",
+	}}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if hits != 1 {
+		t.Fatalf("pending form must query platform once, got %d", hits)
+	}
+	if repo.updatedTo != model.StancePass {
+		t.Fatalf("confirmed pass should be written, got %q", repo.updatedTo)
+	}
+}
+
+// TestCallbackPendingToPassIgnoredWhenPlatformRejects 本地 pending、平台仍是 reject 时，
+// 这条 pass 与平台当前结论冲突，忽略且不改本地状态。
+func TestCallbackPendingToPassIgnoredWhenPlatformRejects(t *testing.T) {
+	repo := &fakeAuditorRepo{byID: &model.AuditorForm{
+		Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: "pending",
+	}}
+	aud := &stubAuditorSvc{status: model.StanceReject}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
+		t.Fatalf("ignored callback must return success, got %v", err)
+	}
+	if aud.queryCnt != 1 {
+		t.Fatalf("expected platform queried once, got %d", aud.queryCnt)
+	}
+	if repo.updatedTo != "" || repo.revertCnt != 0 {
+		t.Fatalf("conflicting pass must not change status, got update=%q revert=%d", repo.updatedTo, repo.revertCnt)
+	}
+}
+
+// TestCallbackPendingPassStaysPending 平台仍 pending 时无法确认结论，退回操作对 pending 行
+// 是条件更新的空操作（真实 DAO 命中 0 行），因此不会有任何状态写入。
+func TestCallbackPendingPassStaysPending(t *testing.T) {
+	repo := &fakeAuditorRepo{byID: &model.AuditorForm{
+		Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: "pending",
+	}}
+	aud := &stubAuditorSvc{status: "pending"}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.updatedTo != "" {
+		t.Fatalf("unconfirmed pass must not be written, got %q", repo.updatedTo)
+	}
+	if repo.revertCnt != 1 {
+		t.Fatalf("expected revert attempted once (no-op on pending), got %d", repo.revertCnt)
 	}
 }
 
 // TestCallbackRejectToPassRevertsToPending 平台结论无法确认时不得放行，也不能丢弃回调：
-// pending、未知状态、条目数异常、查询失败都把本地表单退回 pending，交由对账在平台
-// 给出结论后再决定（对账只扫 pending）。
+// pending、未知状态、条目数异常、查询失败（含真实 HTTP 500）都把本地表单退回 pending，
+// 交由对账在平台给出结论后再决定（对账只扫 pending）。
 func TestCallbackRejectToPassRevertsToPending(t *testing.T) {
-	for name, body := range map[string]string{
-		"pending":      `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`,
-		"unknown":      `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`,
-		"empty items":  `{"msg":"","code":200,"data":{"items":[]}}`,
-		"query failed": `{"code":500,"msg":"boom"}`,
+	for name, tc := range map[string]struct {
+		statusCode int
+		body       string
+	}{
+		"pending":      {http.StatusOK, `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`},
+		"unknown":      {http.StatusOK, `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`},
+		"empty items":  {http.StatusOK, `{"msg":"","code":200,"data":{"items":[]}}`},
+		"query failed": {http.StatusOK, `{"code":500,"msg":"boom"}`},
+		"http 500":     {http.StatusInternalServerError, `boom`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var hits int
 			aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
 				hits++
-				_, _ = w.Write([]byte(body))
+				w.WriteHeader(tc.statusCode)
+				_, _ = w.Write([]byte(tc.body))
 			})
 			repo := &fakeAuditorRepo{byID: &model.AuditorForm{
 				Id: 42, ActivityId: 7, Subject: model.SubjectActivity, Status: model.StanceReject,
@@ -194,16 +259,19 @@ func TestCallbackRejectToPassRevertsToPending(t *testing.T) {
 			if hits != 1 {
 				t.Fatalf("expected platform queried once, got %d", hits)
 			}
-			if repo.updatedTo != "pending" {
-				t.Fatalf("unconfirmed platform status must revert form to pending, got %q", repo.updatedTo)
+			if repo.revertCnt != 1 || repo.revertFormId != 42 {
+				t.Fatalf("unconfirmed platform status must revert form to pending, got revert=%d id=%d", repo.revertCnt, repo.revertFormId)
+			}
+			if repo.updatedTo != "" {
+				t.Fatalf("unconfirmed platform status must not write status directly, got %q", repo.updatedTo)
 			}
 		})
 	}
 }
 
-// TestCallbackFindByIDErrorFailsOpen 读本地表单失败时无法判断是否需要回查，
-// 保持放行以免平台抖动导致回调落库失败。
-func TestCallbackFindByIDErrorFailsOpen(t *testing.T) {
+// TestCallbackFindByIDErrorReturnsError 读本地表单失败时无法判断是否需要回查，
+// 必须返回 error 让平台重试（最终由对账兜底），不能 fail-open 直接放行。
+func TestCallbackFindByIDErrorReturnsError(t *testing.T) {
 	var hits int
 	aud, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
 		hits++
@@ -212,13 +280,13 @@ func TestCallbackFindByIDErrorFailsOpen(t *testing.T) {
 	repo := &fakeAuditorRepo{findErr: errors.New("db down")}
 	svc := newCallbackAuditorWithAudForTest(repo, aud)
 
-	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err != nil {
-		t.Fatalf("find error must not fail the callback, got %v", err)
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", ""); err == nil {
+		t.Fatalf("find error must be returned for platform retry")
 	}
 	if hits != 0 {
 		t.Fatalf("find error should skip platform query, got %d hits", hits)
 	}
-	if repo.updatedTo != model.StancePass {
-		t.Fatalf("find error should fail open and write pass, got %q", repo.updatedTo)
+	if repo.updatedTo != "" {
+		t.Fatalf("find error must not write pass, got %q", repo.updatedTo)
 	}
 }

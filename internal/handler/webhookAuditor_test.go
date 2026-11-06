@@ -105,15 +105,16 @@ func TestCallbackAuditorRejectsMissingApiKey(t *testing.T) {
 	}
 }
 
-// TestCallbackAuditorRejectsWhenKeyUnset apiKey 未配置时 fail-closed：返回 500，且不得调用 service。
-func TestCallbackAuditorRejectsWhenKeyUnset(t *testing.T) {
+// TestCallbackAuditorRouteRejectsWhenKeyUnset 走真实 SDK 路由：apiKey 未配置时 fail-closed，
+// 返回 500 且不得调用 service。
+func TestCallbackAuditorRouteRejectsWhenKeyUnset(t *testing.T) {
 	svc := &fakeCallbackAuditorSvc{}
-	h := newCallbackAuditorHandlerForTest("", svc)
+	engine := newCallbackAuditorRouteEngine(t, "", svc)
 
-	c, _ := callCallback(t, h, nil)
+	w := postCallbackRoute(t, engine, nil)
 
-	if c.Writer.Status() != http.StatusInternalServerError {
-		t.Fatalf("expected status 500, got %d", c.Writer.Status())
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status 500, got %d body=%s", w.Code, w.Body.String())
 	}
 	if svc.calls != 0 {
 		t.Fatalf("service must not be called when key is unset, got %d", svc.calls)
