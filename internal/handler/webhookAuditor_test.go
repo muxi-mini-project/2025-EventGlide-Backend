@@ -38,7 +38,7 @@ func callCallback(t *testing.T, h *CallbackAuditorHandler, apiKeyHeader *string)
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodPost, "/webhook", nil)
+	c.Request = httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/webhook", nil)
 	if apiKeyHeader != nil {
 		c.Request.Header.Set("api_key", *apiKeyHeader)
 	}
@@ -140,7 +140,7 @@ func postCallbackRoute(t *testing.T, engine *gin.Engine, apiKeyHeader *string) *
 	t.Helper()
 
 	body := strings.NewReader(`{"event":"audit","try":1,"data":{"id":42,"status":"通过","msg":""}}`)
-	req := httptest.NewRequest(http.MethodPost, "/hook", body)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/hook", body)
 	req.Header.Set("Content-Type", "application/json")
 	if apiKeyHeader != nil {
 		req.Header.Set("api_key", *apiKeyHeader)
