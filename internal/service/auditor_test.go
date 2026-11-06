@@ -20,6 +20,7 @@ import (
 type fakeAuditorRepo struct {
 	existing      *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
 	byID          *model.AuditorForm // FindByID 的返回值，nil 表示未找到
+	findErr       error              // 非 nil 时 FindByID 返回该错误
 	insertCnt     int
 	lastFormId    int64
 	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
@@ -134,6 +135,9 @@ func (f *fakeAuditorRepo) FindOrphanPostForms(context.Context) ([]model.AuditorF
 }
 
 func (f *fakeAuditorRepo) FindByID(_ context.Context, formId int64) (model.AuditorForm, error) {
+	if f.findErr != nil {
+		return model.AuditorForm{}, f.findErr
+	}
 	if f.byID == nil || f.byID.Id != formId {
 		return model.AuditorForm{}, gorm.ErrRecordNotFound
 	}

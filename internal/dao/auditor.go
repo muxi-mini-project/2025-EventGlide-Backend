@@ -81,7 +81,9 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 	} else {
 		form.Reason = ""
 	}
-	if err := a.db.WithContext(c).Save(&form).Error; err != nil {
+	// 只写结论相关列：回调与上传/撤销并发时，读全行再 Save 会用旧快照覆盖 pushed_at/claimed_at，
+	// 使已推送表单被当作未推送或占用被误清。
+	if err := a.db.WithContext(c).Model(&form).Select("Status", "Reason").Updates(&form).Error; err != nil {
 		a.l.Error("failed to update auditor form", zap.Error(err))
 		return err
 	}

@@ -41,6 +41,7 @@ type AuditorService interface {
 	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
 	RevokeForm(c context.Context, form model.AuditorForm) error
 	GetReasons(c context.Context, activityIds []int64) (map[int64]string, error)
+	PlatformStatus(c context.Context, formId int64) (string, error)
 }
 
 type auditorService struct {
@@ -205,6 +206,27 @@ func (a *auditorService) FindOrphanPostForms(c context.Context) ([]model.Auditor
 // GetReasons 批量返回活动的审核原因（activity_id -> reason）。
 func (a *auditorService) GetReasons(c context.Context, activityIds []int64) (map[int64]string, error) {
 	return a.AuditorRepo.FindReasonsByActivityIDs(c, activityIds)
+}
+
+// PlatformStatus 回查平台条目的审核状态，返回映射后的 pass/reject/pending；
+// 平台状态无法识别时返回空串（未知），查不到条目或查询失败返回 error。
+// 回调无顺序号，延迟到达的旧 pass 回调可能把已驳回的活动错误放行，放行前据此确认当前结论。
+func (a *auditorService) PlatformStatus(c context.Context, formId int64) (string, error) {
+	req, err := request.NewGetItemsStatusReq([]int{int(formId)})
+	if err != nil {
+		return "", err
+	}
+	resp, err := a.MuxiCli.GetItems(c, req)
+	if err != nil {
+		return "", err
+	}
+	if resp.Basic.Code != sdkerrorx.SuccessCode {
+		return "", fmt.Errorf("auditor get items not success: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
+	}
+	if len(resp.Items) == 0 {
+		return "", fmt.Errorf("auditor item not found: formId=%d", formId)
+	}
+	return tools.StatusMapper(resp.Items[0].Status), nil
 }
 
 // RevokeForm 撤销一条帖子审核表单：远端可能存在的条目调用 DeleteItem 删除，成功后删本地行。

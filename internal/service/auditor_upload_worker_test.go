@@ -112,6 +112,10 @@ func (f *fakeAuditorSvc) GetReasons(_ context.Context, ids []int64) (map[int64]s
 	return out, nil
 }
 
+func (f *fakeAuditorSvc) PlatformStatus(context.Context, int64) (string, error) {
+	return "", errors.New("not used")
+}
+
 func newWorkerForTest(posts *fakePendingPosts, svc AuditorService) *AuditorUploadWorker {
 	return &AuditorUploadWorker{
 		postRepo:       posts,
@@ -277,6 +281,10 @@ func (f *ctxCheckingSvc) RevokeForm(context.Context, model.AuditorForm) error { 
 
 func (f *ctxCheckingSvc) GetReasons(context.Context, []int64) (map[int64]string, error) {
 	return nil, nil
+}
+
+func (f *ctxCheckingSvc) PlatformStatus(context.Context, int64) (string, error) {
+	return "", errors.New("not used")
 }
 
 // TestUpload_IndependentContextPerRecord 整轮 tick 的 ctx（带 tickCtxKey 标记）不得传入单条记录的
