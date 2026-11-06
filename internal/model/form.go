@@ -67,7 +67,7 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 			// 命中 0 行时以活动当前状态判断是否异常：已经 pass（例如退回 pending 后又由对账写回）
 			// 属同结论写入，静默跳过；只有活动确实没到该结论才告警。
 			var cur string
-			if qerr := tx.Model(&Activity{}).Select("is_checking").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
+			if qerr := tx.Model(&Activity{}).Select("COALESCE(is_checking, '')").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
 				log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but failed to load activity status: %v", af.Id, af.Status, af.Subject, af.ActivityId, qerr)
 				return nil
 			}
@@ -97,7 +97,7 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 			// 命中 0 行时以活动当前状态判断是否异常：已经是 reject（同结论重复写入）静默跳过，
 			// 只有活动确实没被驳回才告警，避免对账写回时持续刷假告警。
 			var cur string
-			if qerr := tx.Model(&Activity{}).Select("is_checking").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
+			if qerr := tx.Model(&Activity{}).Select("COALESCE(is_checking, '')").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
 				log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but failed to load activity status: %v", af.Id, af.Status, af.Subject, af.ActivityId, qerr)
 				return nil
 			}

@@ -206,16 +206,26 @@ func TestUpdateIfPendingClearsReasonForNonReject(t *testing.T) {
 	}
 }
 
+// captureStdLog 把标准库 log 输出重定向到返回的 buffer，供断言 AfterUpdate 的告警。
+// 依赖本包测试不使用 t.Parallel：log.SetOutput 是进程级全局状态，并行用例会互相
+// 覆盖输出、造成跨用例串扰。
+func captureStdLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var buf bytes.Buffer
+	old := log.Writer()
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(old) })
+	return &buf
+}
+
 // TestUpdateIfPendingNoWarnWhenActivityAlreadyReject 退回 pending 的表单随后由对账写回 reject 时，
 // 活动通常已是 reject（条件更新命中 0 行），属同结论写入，AfterUpdate 不应再打 WARN，
 // 否则这条正常路径会持续刷假告警。
 func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	var buf bytes.Buffer
-	old := log.Writer()
-	log.SetOutput(&buf)
-	t.Cleanup(func() { log.SetOutput(old) })
+	buf := captureStdLog(t)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
@@ -226,7 +236,7 @@ func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
 		WithArgs(int64(1001)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectQuery("SELECT `is_checking` FROM `activity` WHERE id = \\?").
+	mock.ExpectQuery("SELECT COALESCE\\(is_checking, ''\\) FROM `activity` WHERE id = \\?").
 		WithArgs(int64(1001)).
 		WillReturnRows(sqlmock.NewRows([]string{"is_checking"}).AddRow("reject"))
 	mock.ExpectCommit()
@@ -239,6 +249,39 @@ func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "WARN") {
 		t.Fatalf("same-conclusion reconcile write must stay quiet, got log: %s", buf.String())
+	}
+}
+
+// TestUpdateIfPendingWarnsWhenActivityMissing 活动查不到时 cur 为空串，
+// 说明结论没有真正落到活动上，AfterUpdate 必须告警而不是静默当成同结论。
+func TestUpdateIfPendingWarnsWhenActivityMissing(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	buf := captureStdLog(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
+			AddRow(42, "pending", "activity", 1001))
+	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking = 'pending_auditor'$").
+		WithArgs(int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	// 活动不存在：查询命中 0 行，cur 保持空串
+	mock.ExpectQuery("SELECT COALESCE\\(is_checking, ''\\) FROM `activity` WHERE id = \\?").
+		WithArgs(int64(1001)).
+		WillReturnRows(sqlmock.NewRows([]string{"is_checking"}))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "reject"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), `is_checking=""`) {
+		t.Fatalf("missing activity must WARN with empty is_checking, got log: %s", buf.String())
 	}
 }
 
@@ -291,8 +334,8 @@ func TestAuditorFormAfterUpdateRejectOnlyPending(t *testing.T) {
 	}
 }
 
-// TestUpdateIfPendingMissingIsIdempotent 表单已被撤销删除时，对账更新应幂等成功（与 Update 一致），
-// 避免撤销与对账并发时对已删行报错刷日志。
+// TestUpdateIfPendingMissingIsIdempotent 表单行已被删除时，对账更新应幂等成功（与 Update 一致），
+// 避免对已删行报错刷日志。
 func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
@@ -345,29 +388,7 @@ func TestRevertRejectToPendingSkipsWhenNotReject(t *testing.T) {
 	}
 }
 
-// TestFindOrphanPostFormsSQL 锁定"待撤销表单"的判据：subject='post' 且对应帖子已不存在（孤儿）。
-// 帖子是硬删除，故该判据精确等价于"帖子已被删"，不会误撤活帖子的表单。
-func TestFindOrphanPostFormsSQL(t *testing.T) {
-	repo, mock := newAuditorDaoForTest(t)
-
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE subject = \\? AND NOT EXISTS \\(SELECT 1 FROM post p WHERE p.id = auditor_form.activity_id\\)").
-		WithArgs("post").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "pushed_at"}).
-			AddRow(9, 1001, "post", nil))
-
-	forms, err := repo.FindOrphanPostForms(context.Background())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(forms) != 1 || forms[0].Id != 9 {
-		t.Fatalf("expected the single orphan form, got %+v", forms)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestUpdateAuditorFormMissingIsIdempotent 撤销后表单行已消失，迟到的审核回调应视为幂等成功，
+// TestUpdateAuditorFormMissingIsIdempotent 表单行已消失时，迟到的审核回调应视为幂等成功，
 // 而不是报错让平台无休止重试。
 func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
@@ -384,7 +405,7 @@ func TestUpdateAuditorFormMissingIsIdempotent(t *testing.T) {
 	}
 }
 
-// TestAuditorFormFindByIDSQL 断言按 id 回查表单（撤销前取最新状态）。
+// TestAuditorFormFindByIDSQL 断言按 id 回查表单。
 func TestAuditorFormFindByIDSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
@@ -533,22 +554,6 @@ func TestFindReasonsByActivityIDsEmpty(t *testing.T) {
 	}
 	if reasons == nil || len(reasons) != 0 {
 		t.Fatalf("expected empty non-nil map, got %+v", reasons)
-	}
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Fatal(err)
-	}
-}
-
-// TestAuditorFormDeleteSQL 断言按 id 删除本地表单行。
-func TestAuditorFormDeleteSQL(t *testing.T) {
-	repo, mock := newAuditorDaoForTest(t)
-
-	mock.ExpectExec("DELETE FROM `auditor_form` WHERE id = \\?").
-		WithArgs(int64(9)).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	if err := repo.Delete(context.Background(), 9); err != nil {
-		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
