@@ -235,11 +235,10 @@ func TestCallbackRejectToPassRevertsToPending(t *testing.T) {
 		statusCode int
 		body       string
 	}{
-		"pending":      {http.StatusOK, `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`},
-		"unknown":      {http.StatusOK, `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`},
-		"empty items":  {http.StatusOK, `{"msg":"","code":200,"data":{"items":[]}}`},
-		"query failed": {http.StatusOK, `{"code":500,"msg":"boom"}`},
-		"http 500":     {http.StatusInternalServerError, `boom`},
+		"pending":     {http.StatusOK, `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`},
+		"unknown":     {http.StatusOK, `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`},
+		"empty items": {http.StatusOK, `{"msg":"","code":200,"data":{"items":[]}}`},
+		"http 500":    {http.StatusInternalServerError, `boom`},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var hits int

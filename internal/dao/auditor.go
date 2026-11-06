@@ -70,7 +70,6 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 		return err
 	}
 	prevStatus := form.Status
-	form.PrevStatus = prevStatus
 	form.Status = status
 	// 原因只服务当前结论：非 reject 时清空，避免条目重置/对账把上一轮的旧原因当成当前原因展示；
 	// 批量查询已按 status='reject' 过滤，清空不损失展示。
@@ -242,10 +241,12 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 		if form.Status == status {
 			return nil
 		}
-		// 带出更新前状态，供 AfterUpdate 区分"结论真的变化"与"同结论重复写入"，
-		// 避免对账写回 reject 时打一条假的"activity not in pending_auditor"告警。
-		form.PrevStatus = form.Status
 		form.Status = status
+		// 原因只服务 reject 结论：写回非 reject 时清空。否则"驳回(有原因) -> 回查无法确认退回
+		// pending（保留原因） -> 对账写回 pass"后旧原因会残留，被后续不带原因的 reject 回调沿用。
+		if status != model.StanceReject {
+			form.Reason = ""
+		}
 		if err := tx.Save(&form).Error; err != nil {
 			a.l.Error("failed to update auditor form", zap.Error(err), zap.Int64("formId", formId))
 			return err
