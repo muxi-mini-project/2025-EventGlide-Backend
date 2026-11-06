@@ -56,7 +56,7 @@ func (a *AuditorRepo) Insert(c context.Context, activityId int64, formUrl string
 func (a *AuditorRepo) Update(c context.Context, formId int64, status string, reason string) error {
 	var form model.AuditorForm
 	if err := a.db.WithContext(c).Model(&model.AuditorForm{}).Where("id = ?", formId).First(&form).Error; err != nil {
-		// 回调查不到本地表单行：帖子撤销删除后迟到回调和"hook_id 与本地行对不上"都落在这里。
+		// 回调查不到本地表单行：hook_id 与本地行对不上、或表单已被清理，都会落在这里。
 		// 均返回成功（避免平台无休止重试），但升到 Warn 以便观测异常回调，而非静默 Info。
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			a.l.Warn("auditor form not found on update, treated as success", zap.Int64("formId", formId), zap.String("status", status))
@@ -77,7 +77,7 @@ func (a *AuditorRepo) Update(c context.Context, formId int64, status string, rea
 	} else {
 		form.Reason = ""
 	}
-	// 只写结论相关列：回调与上传/撤销并发时，读全行再 Save 会用旧快照覆盖 pushed_at/claimed_at，
+	// 只写结论相关列：回调与上传并发时，读全行再 Save 会用旧快照覆盖 pushed_at/claimed_at，
 	// 使已推送表单被当作未推送或占用被误清。
 	if err := a.db.WithContext(c).Model(&form).Select("Status", "Reason").Updates(&form).Error; err != nil {
 		a.l.Error("failed to update auditor form", zap.Error(err))
@@ -207,7 +207,7 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 		var form model.AuditorForm
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("id = ?", formId).First(&form).Error; err != nil {
-			// 表单已被撤销删除（帖子已删）：对账视为幂等成功，避免与撤销并发时对已删行报错刷日志。
+			// 表单行已被删除：对账视为幂等成功，避免对已删行报错刷日志。
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				a.l.Info("auditor form already gone on reconcile update, treated as success", zap.Int64("formId", formId))
 				return nil
@@ -259,7 +259,7 @@ func (a *AuditorRepo) RevertRejectToPending(c context.Context, formId int64) err
 	return nil
 }
 
-// FindByID 按主键回查表单最新状态（撤销前取，避免用到过期快照）。
+// FindByID 按主键回查表单最新状态。
 func (a *AuditorRepo) FindByID(c context.Context, formId int64) (model.AuditorForm, error) {
 	var form model.AuditorForm
 	err := a.db.WithContext(c).Where("id = ?", formId).First(&form).Error
