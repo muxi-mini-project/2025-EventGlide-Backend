@@ -95,8 +95,8 @@ func TestReleaseClaimSQL(t *testing.T) {
 func TestFindPushedPendingSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\? AND id > \\? ORDER BY id ASC LIMIT \\?").
-		WithArgs("pending", int64(10), 100).
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE pushed_at IS NOT NULL AND status = \\? AND subject <> \\? AND id > \\? ORDER BY id ASC LIMIT \\?").
+		WithArgs("pending", "post", int64(10), 100).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "pending"))
 
@@ -131,16 +131,41 @@ func TestUpdateIfPendingSkipsTerminal(t *testing.T) {
 	}
 }
 
-// TestUpdateIfPendingUpdatesWhenPending 表单仍为 pending 时正常写回。
-func TestUpdateIfPendingUpdatesWhenPending(t *testing.T) {
+// TestUpdateIfPendingUpdatesWhenChanged 表单仍为 pending 且平台给出不同结论时正常写回，
+// 并触发 AfterUpdate 推进活动状态。
+func TestUpdateIfPendingUpdatesWhenChanged(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
+			AddRow(42, "pending", "activity", 1001))
+	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	// AfterUpdate 的 pass 分支：仅当活动仍待审核且无未通过审批时才置为 pass
+	mock.ExpectExec("UPDATE activity SET is_checking = 'pass' WHERE id = \\? AND is_checking = 'pending_auditor' AND NOT EXISTS \\( SELECT 1 FROM approvement WHERE activity_id = \\? AND stance != 'pass' \\)").
+		WithArgs(int64(1001), int64(1001)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	if err := repo.UpdateIfPending(context.Background(), 42, "pass"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestUpdateIfPendingSkipsWhenUnchanged 平台结论与现值相同（仍为 pending）时不得写库，
+// 避免每轮对账反复刷新 updated_at。
+func TestUpdateIfPendingSkipsWhenUnchanged(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
 	mock.ExpectBegin()
 	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE id = \\?.*FOR UPDATE").
 		WithArgs(int64(42), 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject"}).AddRow(42, "pending", "activity"))
-	// 用 pending 目标状态，避免触发 AfterUpdate 对 activity/post 的写操作
-	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
+	// 不期望任何 UPDATE：状态未变化即返回
 	mock.ExpectCommit()
 
 	if err := repo.UpdateIfPending(context.Background(), 42, "pending"); err != nil {

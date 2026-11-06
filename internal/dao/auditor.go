@@ -147,13 +147,15 @@ func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil t
 	return nil
 }
 
-// FindPushedPending 按 id 游标分批返回"已推送但平台仍未给结论"的表单，
+// FindPushedPending 按 id 游标分批返回"已推送但平台仍未给结论"的活动表单，
 // 供定时对账分批回查（回调可能丢失，导致表单永久停在 pending）。
 // 以 id 升序、取 id > afterID 的前 limit 条；调用方处理完后推进游标，取完回绕。
+// 排除帖子表单：帖子已不审核，其历史表单在平台上可能已不存在，
+// 继续回查只会每轮刷告警且永远不收敛。
 func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
 	var forms []model.AuditorForm
 	err := a.db.WithContext(c).
-		Where("pushed_at IS NOT NULL AND status = ? AND id > ?", "pending", afterID).
+		Where("pushed_at IS NOT NULL AND status = ? AND subject <> ? AND id > ?", "pending", model.SubjectPost, afterID).
 		Order("id ASC").
 		Limit(limit).
 		Find(&forms).Error
@@ -167,7 +169,7 @@ func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit 
 // UpdateIfPending 仅在表单当前仍为 pending 时更新状态，避免对账用平台过期结果覆盖
 // 回调已写入的终态（pass/reject）。条件未命中（已被回调更新）时视为无需处理，返回 nil。
 // 在事务内对行加锁，使"读当前状态 -> 写回"对同一行的并发回调写入原子，消除 TOCTOU。
-// 仍走 Save，以触发 AuditorForm.AfterUpdate 推进活动/帖子。
+// 平台结论与现值一致时不写库；状态确有变化时仍走 Save，以触发 AuditorForm.AfterUpdate 推进活动。
 func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status string) error {
 	return a.db.WithContext(c).Transaction(func(tx *gorm.DB) error {
 		var form model.AuditorForm
@@ -184,6 +186,10 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 		if form.Status != "pending" {
 			a.l.Info("auditor form no longer pending, skip reconcile update",
 				zap.Int64("formId", formId), zap.String("status", form.Status))
+			return nil
+		}
+		// 平台结论与现值一致：跳过写库，避免每轮对账反复刷新 updated_at。
+		if form.Status == status {
 			return nil
 		}
 		form.Status = status

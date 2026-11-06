@@ -255,7 +255,8 @@ func (a *auditorService) ReleaseClaim(c context.Context, FormId int64, leaseUnti
 	return a.AuditorRepo.ReleaseClaim(c, FormId, leaseUntil)
 }
 
-// ReconcilePendingForms 回查"已推送但平台仍 pending"的表单，拉取平台结论并落库。
+// ReconcilePendingForms 回查"已推送但平台仍 pending"的活动表单，拉取平台结论并落库。
+// 帖子表单已在 FindPushedPending 中按 subject 排除（帖子不审核），不在对账范围内。
 // 平台回调可能丢失，此前的实现只在"上传被拒"时回查，导致丢失回调的表单永久停在 pending。
 // 对账只同步平台已有结论；若平台根本没有该条目（历史推送丢失），仅告警不自动重推——
 // 自动重推有重复创建风险（参见历史 "该条目已被创建" 事故），属需产品单独决策的扩展项。
