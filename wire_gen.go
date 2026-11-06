@@ -64,7 +64,7 @@ func InitApp() *server.Server {
 	feedHandler := handler.NewFeedHandler(engine, feedService, jwt, loggerSet)
 	interactionService := service.NewInteractionService(interactionRepo, mqHdl, subjectGetter, likeFavoriteRedis, loggerSet)
 	interactionHandler := handler.NewInteractionHandler(engine, interactionService, jwt, loggerSet)
-	callbackAuditorService := service.NewCallbackAuditor(auditorRepository, loggerSet)
+	callbackAuditorService := service.NewCallbackAuditor(auditorRepository, auditorService, loggerSet)
 	callbackAuditorHandler := handler.NewCallbackAuditorHandler(engine, callbackAuditorService, conf, loggerSet)
 	handlerHandler := handler.NewHandler(engine, cors, userHandler, actHandler, postHandler, commentHandler, feedHandler, interactionHandler, callbackAuditorHandler)
 	auditorUploadWorker := service.NewAuditorUploadWorker(activityRepo, postRepo, auditorService, loggerSet)
