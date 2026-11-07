@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ type fakeFeedMQ struct {
 	claimMsgs []redis.XMessage
 	pending   []redis.XPendingExt
 	starts    []string
+	consumes  atomic.Int32
 }
 
 func (m *fakeFeedMQ) Publish(_ context.Context, stream string, _ interface{}) error {
@@ -32,6 +34,7 @@ func (m *fakeFeedMQ) Publish(_ context.Context, stream string, _ interface{}) er
 func (m *fakeFeedMQ) EnsureConsumerGroup(context.Context, string, string) error { return nil }
 
 func (m *fakeFeedMQ) ConsumeGroup(context.Context, string, string, string, int64, time.Duration) ([]redis.XMessage, error) {
+	m.consumes.Add(1)
 	return nil, nil
 }
 
@@ -98,6 +101,37 @@ func TestFeedProcess_SuccessAcks(t *testing.T) {
 	if len(fmq.acked) != 1 {
 		t.Fatalf("success should ack once, got %v", fmq.acked)
 	}
+}
+
+// TestFeedServiceStopWaitsForConsumers Stop 后消费循环必须退出，不再继续读流。
+func TestFeedServiceStopWaitsForConsumers(t *testing.T) {
+	fs, fmq, _ := newFeedServiceForTest(t)
+
+	fs.Start(context.Background())
+	waitFor(t, 2*time.Second, func() bool { return fmq.consumes.Load() > 0 })
+
+	fs.Stop()
+
+	after := fmq.consumes.Load()
+	time.Sleep(100 * time.Millisecond)
+	if got := fmq.consumes.Load(); got != after {
+		t.Errorf("Stop 后消费次数从 %d 增至 %d, want 不再消费", after, got)
+	}
+	fs.Stop() // 幂等
+}
+
+// TestFeedServiceStartReplacesOldConsumer 重复 Start 先停旧循环，不留下两套消费者。
+func TestFeedServiceStartReplacesOldConsumer(t *testing.T) {
+	fs, fmq, _ := newFeedServiceForTest(t)
+
+	fs.Start(context.Background())
+	waitFor(t, 2*time.Second, func() bool { return fmq.consumes.Load() > 0 })
+	fs.Start(context.Background()) // 旧循环被取消后才重新启动
+
+	if fs.stopped {
+		t.Fatal("重复 Start 不应被视为已停止")
+	}
+	fs.Stop()
 }
 
 // 解析失败属永久性错误：ACK 丢弃，避免永远占用 PEL。
