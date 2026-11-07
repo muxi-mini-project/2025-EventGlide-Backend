@@ -28,18 +28,20 @@ type PostServiceHdl interface {
 }
 
 type PostService struct {
-	pdh *repo.PostRepo
-	ud  *repo.UserRepo
-	id  *repo.InteractionRepo
-	l   *zap.Logger
+	pdh       *repo.PostRepo
+	ud        *repo.UserRepo
+	id        *repo.InteractionRepo
+	imgWorker *ImageSizeWorker
+	l         *zap.Logger
 }
 
-func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, l *logger.LoggerSet) *PostService {
+func NewPostService(pdh *repo.PostRepo, ud *repo.UserRepo, id *repo.InteractionRepo, imgWorker *ImageSizeWorker, l *logger.LoggerSet) *PostService {
 	return &PostService{
-		pdh: pdh,
-		ud:  ud,
-		id:  id,
-		l:   l.Post.Named("service"),
+		pdh:       pdh,
+		ud:        ud,
+		id:        id,
+		imgWorker: imgWorker,
+		l:         l.Post.Named("service"),
 	}
 }
 
@@ -57,6 +59,10 @@ func (ps *PostService) CreatePost(c context.Context, post *model.Post) error {
 	if err := ps.pdh.CreatePost(c, post); err != nil {
 		ps.l.Error("Failed to create post", zap.Error(err), zap.Int64("id", post.Id))
 		return errs.ErrPostCreateFailed.Wrap(err)
+	}
+	// 前端为准：漏传/传错的宽高行走 pending，创建不阻塞，唤醒回填 worker 异步兜底。
+	if hasPendingImage(post.Images) {
+		ps.imgWorker.Notify()
 	}
 	return nil
 }
@@ -98,6 +104,9 @@ func (ps *PostService) CreateDraft(c context.Context, draft *model.PostDraft) er
 	if err := ps.pdh.CreateDraft(c, draft); err != nil {
 		ps.l.Error("Failed to create draft", zap.Error(err))
 		return errs.ErrInternal.Wrap(err)
+	}
+	if hasPendingImage(draft.Images) {
+		ps.imgWorker.Notify()
 	}
 	return nil
 }

@@ -49,8 +49,12 @@ func InitApp() *server.Server {
 	mqHdl := mq.NewMQ(client)
 	auditorRepository := dao.NewAuditorRepo(db, loggerSet)
 	auditorService := service.NewAuditorService(auditorRepository, conf, loggerSet)
-	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, loggerSet)
-	postService := service.NewPostService(postRepo, userRepo, interactionRepo, loggerSet)
+	imageDao := dao.NewImageDao(db, loggerSet)
+	imageRepo := repo.NewImageRepo(imageDao)
+	imageSizeResolver := service.NewImageSizeResolver(conf)
+	imageSizeWorker := service.NewImageSizeWorker(imageRepo, imageSizeResolver, loggerSet)
+	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, imageSizeWorker, loggerSet)
+	postService := service.NewPostService(postRepo, userRepo, interactionRepo, imageSizeWorker, loggerSet)
 	userService := service.NewUserService(userRepo, activityRepo, postRepo, interactionRepo, jwt, ccnuService, imgUploader, activityService, postService, loggerSet, conf)
 	userHandler := handler.NewUserHandler(engine, userService, jwt, loggerSet)
 	actHandler := handler.NewActHandler(engine, activityService, imgUploader, jwt, loggerSet)
@@ -71,6 +75,6 @@ func InitApp() *server.Server {
 	zapLogger := ioc.GetInteractionLogger(loggerSet)
 	interactionConsumer := mq.NewInteractionConsumer(mqHdl, interactionDao, zapLogger)
 	interactionSyncTask := ioc.NewInteractionSyncTask(likeFavoriteRedis, interactionDao, loggerSet)
-	serverServer := server.NewServer(handlerHandler, auditorUploadWorker, interactionConsumer, interactionSyncTask)
+	serverServer := server.NewServer(handlerHandler, auditorUploadWorker, imageSizeWorker, interactionConsumer, interactionSyncTask)
 	return serverServer
 }

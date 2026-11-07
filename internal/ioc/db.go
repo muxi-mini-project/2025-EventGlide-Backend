@@ -141,6 +141,12 @@ func migrate(db *gorm.DB) error {
 		return err
 	}
 
+	// 图片宽高改三态 size_status：存量行按 width/height 值回填状态，
+	// 并把历史 -1 失败标记改写为 status=2 + 宽高归零（负宽高不再入库/外露）。
+	if err := backfillImageSizeStatus(db); err != nil {
+		return err
+	}
+
 	return db.AutoMigrate(&model.Feed{})
 }
 
@@ -163,6 +169,37 @@ func backfillPostAuditStatus(db *gorm.DB) error {
 	}
 	if res.RowsAffected > 0 {
 		log.Printf("backfillPostAuditStatus: moved %d checking post(s) to pass\n", res.RowsAffected)
+	}
+	return nil
+}
+
+// backfillImageSizeStatus 图片宽高三态迁移：存量行按 width/height 值回填 size_status，
+// 并把历史 -1 失败标记改写为 status=2 + 宽高归零（负宽高不再入库/外露）。
+// 表不存在时跳过；幂等：条件不匹配即为空操作。
+func backfillImageSizeStatus(db *gorm.DB) error {
+	var exists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.tables " +
+			"WHERE table_schema = DATABASE() AND table_name = 'image'",
+	).Scan(&exists).Error; err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	res := db.Exec("UPDATE image SET size_status = 1 WHERE size_status = 0 AND width > 0 AND height > 0")
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("backfillImageSizeStatus: marked %d resolved image row(s) as ok\n", res.RowsAffected)
+	}
+	res = db.Exec("UPDATE image SET size_status = 2, width = 0, height = 0 WHERE width < 0 OR height < 0")
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected > 0 {
+		log.Printf("backfillImageSizeStatus: converted %d failed-mark row(s) to size_status=2\n", res.RowsAffected)
 	}
 	return nil
 }

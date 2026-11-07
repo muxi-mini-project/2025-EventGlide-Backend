@@ -19,3 +19,9 @@ type AuditWrapper struct {
 type GetUserInfoReq struct {
 	Id string `json:"id" validate:"required" form:"-" uri:"id"`
 }
+
+type Image struct {
+	Url    string `json:"url"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}

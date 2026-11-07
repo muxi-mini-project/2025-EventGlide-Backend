@@ -2229,7 +2229,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2310,7 +2310,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2387,7 +2387,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2404,7 +2404,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/req.Image"
                     }
                 },
                 "title": {
@@ -2532,6 +2532,20 @@
                     "type": "string"
                 },
                 "page": {
+                    "type": "integer"
+                }
+            }
+        },
+        "req.Image": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "width": {
                     "type": "integer"
                 }
             }
@@ -2773,7 +2787,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "signer": {
@@ -3054,6 +3068,20 @@
                 }
             }
         },
+        "resp.Image": {
+            "type": "object",
+            "properties": {
+                "height": {
+                    "type": "integer"
+                },
+                "url": {
+                    "type": "string"
+                },
+                "width": {
+                    "type": "integer"
+                }
+            }
+        },
         "resp.ImgBedResp": {
             "type": "object",
             "properties": {
@@ -3158,7 +3186,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "title": {
@@ -3205,7 +3233,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "title": {
@@ -3231,7 +3259,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "title": {
@@ -3254,7 +3282,7 @@
                 "showImg": {
                     "type": "array",
                     "items": {
-                        "type": "string"
+                        "$ref": "#/definitions/resp.Image"
                     }
                 },
                 "studentId": {

@@ -6,5 +6,6 @@ var Provider = wire.NewSet(
 	NewUserRepo,
 	NewActivityRepo,
 	NewPostRepo,
+	NewImageRepo,
 	NewInteractionRepo,
 )
