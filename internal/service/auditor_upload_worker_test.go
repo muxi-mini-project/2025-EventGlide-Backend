@@ -12,13 +12,12 @@ import (
 	"go.uber.org/zap"
 )
 
-type fakePendingPosts struct {
-	posts []model.Post
-	err   error
+type fakePendingActivities struct {
+	acts []model.Activity
 }
 
-func (f *fakePendingPosts) FindPendingAuditorPosts(context.Context) ([]model.Post, error) {
-	return f.posts, f.err
+func (f *fakePendingActivities) FindPendingAuditorActivities(context.Context) ([]model.Activity, error) {
+	return f.acts, nil
 }
 
 // fakeAuditorSvc 以单个内存 form 模拟审核服务，用于验证 worker 的幂等与重试序列。
@@ -30,9 +29,6 @@ type fakeAuditorSvc struct {
 	reconcileCnt int
 	lastSub      string
 	lastFormUrl  string
-	orphans      []model.AuditorForm
-	revoked      []int64
-	revokeErr    error
 	reasons      map[int64]string // GetReasons 的返回值
 	reasonIds    []int64          // GetReasons 收到的 activity id
 }
@@ -92,15 +88,6 @@ func (f *fakeAuditorSvc) ReconcilePendingForms(context.Context) {
 	f.reconcileCnt++
 }
 
-func (f *fakeAuditorSvc) FindOrphanPostForms(context.Context) ([]model.AuditorForm, error) {
-	return f.orphans, nil
-}
-
-func (f *fakeAuditorSvc) RevokeForm(_ context.Context, form model.AuditorForm) error {
-	f.revoked = append(f.revoked, form.Id)
-	return f.revokeErr
-}
-
 func (f *fakeAuditorSvc) GetReasons(_ context.Context, ids []int64) (map[int64]string, error) {
 	f.reasonIds = ids
 	out := make(map[int64]string, len(ids))
@@ -112,42 +99,46 @@ func (f *fakeAuditorSvc) GetReasons(_ context.Context, ids []int64) (map[int64]s
 	return out, nil
 }
 
-func newWorkerForTest(posts *fakePendingPosts, svc AuditorService) *AuditorUploadWorker {
+func (f *fakeAuditorSvc) PlatformStatus(context.Context, int64) (string, error) {
+	return "", errors.New("not used")
+}
+
+func newWorkerForTest(acts *fakePendingActivities, svc AuditorService) *AuditorUploadWorker {
 	return &AuditorUploadWorker{
-		postRepo:       posts,
+		activityRepo:   acts,
 		auditorService: svc,
 		logger:         &logger.LoggerSet{Auditor: zap.NewNop()},
 	}
 }
 
-// TestPostUpload_IdempotentAcrossTicks 首个 tick 成功送审后，后续 tick 因 form 已推送而跳过，
+// TestActivityUpload_IdempotentAcrossTicks 首个 tick 成功送审后，后续 tick 因 form 已推送而跳过，
 // 不重复远端上传——这是"回调到达前每 5s 重复送审"的回归点。
-func TestPostUpload_IdempotentAcrossTicks(t *testing.T) {
-	posts := &fakePendingPosts{posts: []model.Post{{Id: 1001, StudentID: "S1", Title: "t", IsChecking: "checking"}}}
+func TestActivityUpload_IdempotentAcrossTicks(t *testing.T) {
+	acts := &fakePendingActivities{acts: []model.Activity{{Id: 1001, StudentID: "S1", Title: "t", ActiveForm: "https://form"}}}
 	svc := &fakeAuditorSvc{}
-	w := newWorkerForTest(posts, svc)
+	w := newWorkerForTest(acts, svc)
 
-	w.processPendingAuditorPosts(context.Background())
+	w.processPendingAuditorActivities(context.Background())
 	if svc.uploadCnt != 1 {
 		t.Fatalf("first tick should upload once, got %d", svc.uploadCnt)
 	}
-	if svc.lastSub != SubjectPost || svc.lastFormUrl != "" {
-		t.Fatalf("post form must use subject=%q formUrl=%q, got subject=%q formUrl=%q", SubjectPost, "", svc.lastSub, svc.lastFormUrl)
+	if svc.lastSub != SubjectActivity || svc.lastFormUrl != "https://form" {
+		t.Fatalf("activity form must use subject=%q formUrl=%q, got subject=%q formUrl=%q", SubjectActivity, "https://form", svc.lastSub, svc.lastFormUrl)
 	}
 
-	w.processPendingAuditorPosts(context.Background())
+	w.processPendingAuditorActivities(context.Background())
 	if svc.uploadCnt != 1 {
 		t.Fatalf("already-pushed form must not be re-uploaded, got %d uploads", svc.uploadCnt)
 	}
 }
 
-// TestPostUpload_RetriesAfterFailure 上传失败应释放占用，使下个 tick 能立即重试成功。
-func TestPostUpload_RetriesAfterFailure(t *testing.T) {
-	posts := &fakePendingPosts{posts: []model.Post{{Id: 1001, StudentID: "S1", Title: "t", IsChecking: "checking"}}}
+// TestActivityUpload_RetriesAfterFailure 上传失败应释放占用，使下个 tick 能立即重试成功。
+func TestActivityUpload_RetriesAfterFailure(t *testing.T) {
+	acts := &fakePendingActivities{acts: []model.Activity{{Id: 1001, StudentID: "S1", Title: "t", ActiveForm: "https://form"}}}
 	svc := &fakeAuditorSvc{uploadErr: errors.New("network")}
-	w := newWorkerForTest(posts, svc)
+	w := newWorkerForTest(acts, svc)
 
-	w.processPendingAuditorPosts(context.Background())
+	w.processPendingAuditorActivities(context.Background())
 	if svc.uploadCnt != 1 {
 		t.Fatalf("first tick should attempt upload once, got %d", svc.uploadCnt)
 	}
@@ -159,7 +150,7 @@ func TestPostUpload_RetriesAfterFailure(t *testing.T) {
 	}
 
 	svc.uploadErr = nil
-	w.processPendingAuditorPosts(context.Background())
+	w.processPendingAuditorActivities(context.Background())
 	if svc.uploadCnt != 2 {
 		t.Fatalf("next tick should retry the upload, got %d", svc.uploadCnt)
 	}
@@ -171,42 +162,11 @@ func TestPostUpload_RetriesAfterFailure(t *testing.T) {
 // TestWorkerReconcileInvokesService 对账 tick 应把控制权交给 AuditorService.ReconcilePendingForms。
 func TestWorkerReconcileInvokesService(t *testing.T) {
 	svc := &fakeAuditorSvc{}
-	w := newWorkerForTest(&fakePendingPosts{}, svc)
+	w := newWorkerForTest(&fakePendingActivities{}, svc)
 
 	w.reconcile(context.Background())
 	if svc.reconcileCnt != 1 {
 		t.Fatalf("expected reconcile invoked once, got %d", svc.reconcileCnt)
-	}
-}
-
-// TestProcessPendingAuditorRevokes_RevokesAllOrphans 每个孤儿表单（帖子已删）都应触发一次撤销。
-func TestProcessPendingAuditorRevokes_RevokesAllOrphans(t *testing.T) {
-	now := time.Now()
-	svc := &fakeAuditorSvc{orphans: []model.AuditorForm{
-		{Id: 1, Subject: SubjectPost, PushedAt: &now},
-		{Id: 2, Subject: SubjectPost},
-	}}
-	w := newWorkerForTest(&fakePendingPosts{}, svc)
-
-	w.processPendingAuditorRevokes(context.Background())
-
-	if len(svc.revoked) != 2 || svc.revoked[0] != 1 || svc.revoked[1] != 2 {
-		t.Fatalf("expected both orphan forms revoked, got %v", svc.revoked)
-	}
-}
-
-// TestProcessPendingAuditorRevokes_ContinuesAfterFailure 单个撤销失败不应中断整轮，
-// 且失败项保留在孤儿集合里由下一轮重试。
-func TestProcessPendingAuditorRevokes_ContinuesAfterFailure(t *testing.T) {
-	svc := &fakeAuditorSvc{
-		orphans:   []model.AuditorForm{{Id: 1}, {Id: 2}},
-		revokeErr: errors.New("auditor down"),
-	}
-	w := newWorkerForTest(&fakePendingPosts{}, svc)
-
-	w.processPendingAuditorRevokes(context.Background())
-	if len(svc.revoked) != 2 {
-		t.Fatalf("worker should attempt every orphan even if one fails, got %v", svc.revoked)
 	}
 }
 
@@ -269,14 +229,12 @@ func (f *ctxCheckingSvc) CreateAuditorForm(context.Context, int64, string, strin
 
 func (f *ctxCheckingSvc) ReconcilePendingForms(context.Context) {}
 
-func (f *ctxCheckingSvc) FindOrphanPostForms(context.Context) ([]model.AuditorForm, error) {
+func (f *ctxCheckingSvc) GetReasons(context.Context, []int64) (map[int64]string, error) {
 	return nil, nil
 }
 
-func (f *ctxCheckingSvc) RevokeForm(context.Context, model.AuditorForm) error { return nil }
-
-func (f *ctxCheckingSvc) GetReasons(context.Context, []int64) (map[int64]string, error) {
-	return nil, nil
+func (f *ctxCheckingSvc) PlatformStatus(context.Context, int64) (string, error) {
+	return "", errors.New("not used")
 }
 
 // blockingUploadSvc 让上传挂起直到 ctx 取消，用于验证 Stop 能取消在途送审。
@@ -305,11 +263,11 @@ func TestAuditorWorkerStopCancelsUpload(t *testing.T) {
 		entered:        make(chan struct{}, 1),
 		canceled:       make(chan struct{}, 1),
 	}
-	posts := &fakePendingPosts{posts: []model.Post{{Id: 1001, StudentID: "S1"}}}
-	w := newWorkerForTest(posts, svc)
+	acts := &fakePendingActivities{acts: []model.Activity{{Id: 1001, StudentID: "S1"}}}
+	w := newWorkerForTest(acts, svc)
 
 	// 未 Start 时 Stop 是幂等空操作。
-	newWorkerForTest(posts, &fakeAuditorSvc{}).Stop()
+	newWorkerForTest(acts, &fakeAuditorSvc{}).Stop()
 
 	w.Start(context.Background())
 	select {
@@ -334,12 +292,12 @@ func TestAuditorWorkerStopCancelsUpload(t *testing.T) {
 // TestUpload_IndependentContextPerRecord 整轮 tick 的 ctx（带 tickCtxKey 标记）不得传入单条记录的
 // 送审序列；回归点：修复前 uploadPendingForm 复用整轮 ctx，同 tick 内一条挂死会拖垮后续记录。
 func TestUpload_IndependentContextPerRecord(t *testing.T) {
-	posts := &fakePendingPosts{posts: []model.Post{{Id: 1001, StudentID: "S1", Title: "t", IsChecking: "checking"}}}
+	acts := &fakePendingActivities{acts: []model.Activity{{Id: 1001, StudentID: "S1", Title: "t", ActiveForm: "https://form"}}}
 	svc := &ctxCheckingSvc{}
-	w := newWorkerForTest(posts, svc)
+	w := newWorkerForTest(acts, svc)
 
 	tickCtx := context.WithValue(context.Background(), tickCtxKey{}, true)
-	w.processPendingAuditorPosts(tickCtx)
+	w.processPendingAuditorActivities(tickCtx)
 
 	if svc.sawTickCtx {
 		t.Fatalf("record processing received the tick ctx; it must use an independent ctx")

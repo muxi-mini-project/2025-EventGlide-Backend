@@ -15,13 +15,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// pendingActivitySource / pendingPostSource 抽象待送审数据的读取，便于单测注入。
+// pendingActivitySource 抽象待送审数据的读取，便于单测注入。
 type pendingActivitySource interface {
 	FindPendingAuditorActivities(ctx context.Context) ([]model.Activity, error)
-}
-
-type pendingPostSource interface {
-	FindPendingAuditorPosts(ctx context.Context) ([]model.Post, error)
 }
 
 // perRecordUploadTimeout 单条记录送审序列（取/建 form -> 占用租约 -> 上传 -> 标记）的超时预算。
@@ -39,7 +35,6 @@ var (
 
 type AuditorUploadWorker struct {
 	activityRepo   pendingActivitySource
-	postRepo       pendingPostSource
 	auditorService AuditorService
 	logger         *logger.LoggerSet
 
@@ -51,10 +46,9 @@ type AuditorUploadWorker struct {
 	wg      sync.WaitGroup
 }
 
-func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, postRepo *repo.PostRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
+func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
 	return &AuditorUploadWorker{
 		activityRepo:   activityRepo,
-		postRepo:       postRepo,
 		auditorService: auditorService,
 		logger:         logger,
 	}
@@ -127,12 +121,6 @@ func (w *AuditorUploadWorker) run(ctx context.Context) {
 			// 每轮单独 recover：单条数据的 panic 不应让整个 worker 永久停摆。
 			safe.Run(w.logger.Auditor, "auditor-worker.activities", func() {
 				w.processWithTimeout(ctx, w.processPendingAuditorActivities)
-			})
-			safe.Run(w.logger.Auditor, "auditor-worker.posts", func() {
-				w.processWithTimeout(ctx, w.processPendingAuditorPosts)
-			})
-			safe.Run(w.logger.Auditor, "auditor-worker.revokes", func() {
-				w.processWithTimeout(ctx, w.processPendingAuditorRevokes)
 			})
 		}
 	}
@@ -208,42 +196,6 @@ func (w *AuditorUploadWorker) processPendingAuditorActivities(ctx context.Contex
 			CactReq:   converter.ActivityToAuditReq(&act),
 		}
 		w.uploadPendingForm(act.Id, act.ActiveForm, SubjectActivity, aw, zap.Int64("actId", act.Id))
-	}
-}
-
-func (w *AuditorUploadWorker) processPendingAuditorPosts(ctx context.Context) {
-	posts, err := w.postRepo.FindPendingAuditorPosts(ctx)
-	if err != nil {
-		w.logger.Auditor.Error("Failed to find pending auditor posts", zap.Error(err))
-		return
-	}
-
-	for _, post := range posts {
-		aw := &req.AuditWrapper{
-			Subject:   SubjectPost,
-			StudentId: post.StudentID,
-			CpostReq:  converter.PostToAuditReq(&post),
-		}
-		w.uploadPendingForm(post.Id, "", SubjectPost, aw, zap.Int64("postId", post.Id))
-	}
-}
-
-// processPendingAuditorRevokes 撤销"帖子已不存在"的审核表单（远端条目 + 本地行）。
-// 单个失败只记日志、不中断整轮；失败的行仍是孤儿，下一轮自动重试。
-func (w *AuditorUploadWorker) processPendingAuditorRevokes(ctx context.Context) {
-	forms, err := w.auditorService.FindOrphanPostForms(ctx)
-	if err != nil {
-		w.logger.Auditor.Error("Failed to find orphan auditor forms", zap.Error(err))
-		return
-	}
-
-	for _, form := range forms {
-		// 每条记录独立超时，与整轮 tick 的 ctx 解耦：单个挂死的远端删除不应拖垮同 tick 后续撤销。
-		rctx, cancel := w.recordCtx(perRecordUploadTimeout)
-		if err := w.auditorService.RevokeForm(rctx, form); err != nil {
-			w.logger.Auditor.Error("Failed to revoke auditor form", zap.Error(err), zap.Int64("formId", form.Id))
-		}
-		cancel()
 	}
 }
 

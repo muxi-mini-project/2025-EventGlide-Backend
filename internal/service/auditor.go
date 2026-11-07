@@ -38,9 +38,8 @@ type AuditorService interface {
 	ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error
 	MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error
 	ReconcilePendingForms(c context.Context)
-	FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error)
-	RevokeForm(c context.Context, form model.AuditorForm) error
 	GetReasons(c context.Context, activityIds []int64) (map[int64]string, error)
+	PlatformStatus(c context.Context, formId int64) (string, error)
 }
 
 type auditorService struct {
@@ -141,7 +140,14 @@ func (a *auditorService) syncExistingFormStatus(c context.Context, id int64) (bo
 	if len(resp.Items) == 0 {
 		return false, nil
 	}
-	// 只查询单个非零 id，平台按 ids 过滤返回，故返回的条目必为所查项。
+	if len(resp.Items) != 1 {
+		// 无法确认哪一条对应该表单：不采信、不写库，但按"平台存在"处理以止住重传，
+		// 避免条目数异常时被反复当成"不存在"重新推送。
+		a.l.Warn("Auditor get items returned unexpected count, treated as existing",
+			zap.Int("count", len(resp.Items)), zap.Int64("formId", id))
+		return true, nil
+	}
+	// 只查询单个非零 id，平台按 ids 过滤返回，故恰好一条时即为所查项。
 	mapped := tools.StatusMapper(resp.Items[0].Status)
 	if mapped == "" {
 		a.l.Warn("Auditor item exists but status unmapped", zap.String("status", resp.Items[0].Status), zap.Int64("formId", id))
@@ -197,52 +203,32 @@ func (a *auditorService) MarkPushed(c context.Context, FormId int64, pushedAt ti
 	return a.AuditorRepo.MarkPushed(c, FormId, pushedAt)
 }
 
-// FindOrphanPostForms 返回帖子已不存在的审核表单（待撤销队列）。
-func (a *auditorService) FindOrphanPostForms(c context.Context) ([]model.AuditorForm, error) {
-	return a.AuditorRepo.FindOrphanPostForms(c)
-}
-
 // GetReasons 批量返回活动的审核原因（activity_id -> reason）。
 func (a *auditorService) GetReasons(c context.Context, activityIds []int64) (map[int64]string, error) {
 	return a.AuditorRepo.FindReasonsByActivityIDs(c, activityIds)
 }
 
-// RevokeForm 撤销一条帖子审核表单：远端可能存在的条目调用 DeleteItem 删除，成功后删本地行。
-// 远端失败时保留本地行，交由后台下一轮重试。
-//
-// 判据不用调用方传入的快照，而是按 id 回查最新状态：
-//   - 行已被其它实例撤销 → 幂等成功；
-//   - pushed_at 或 claimed_at 任一非空即视为"可能已上传到远端"（上传成功但标记 pushed_at
-//     失败会保留 claimed_at），据此决定是否调远端；
-//   - 二者皆空 = 从未占用，直接删本地行。
-func (a *auditorService) RevokeForm(c context.Context, form model.AuditorForm) error {
-	current, err := a.AuditorRepo.FindByID(c, form.Id)
+// PlatformStatus 回查平台条目的审核状态，返回映射后的 pass/reject/pending；
+// 平台状态无法识别时返回空串（未知），返回条目数不为 1 或查询失败返回 error。
+// 回调无顺序号，延迟到达的旧 pass 回调可能把已驳回的活动错误放行，放行前据此确认当前结论。
+func (a *auditorService) PlatformStatus(c context.Context, formId int64) (string, error) {
+	req, err := request.NewGetItemsStatusReq([]int{int(formId)})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
-		}
-		return err
+		return "", err
 	}
-	if current.PushedAt != nil || current.ClaimedAt != nil {
-		req, err := request.NewDeleteReq(uint(current.Id))
-		if err != nil {
-			return errs.ErrUploadFormFailed.Wrap(err)
-		}
-		resp, err := a.MuxiCli.DeleteItem(c, req)
-		if err != nil {
-			a.l.Error("Revoke auditor form failed", zap.Error(err), zap.Int64("formId", current.Id))
-			return err
-		}
-		if resp.Basic.Code != sdkerrorx.SuccessCode {
-			a.l.Error("Auditor delete not accepted",
-				zap.Int("code", resp.Basic.Code),
-				zap.String("msg", resp.Basic.Msg),
-				zap.Int64("formId", current.Id),
-			)
-			return fmt.Errorf("auditor rejected delete: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
-		}
+	resp, err := a.MuxiCli.GetItems(c, req)
+	if err != nil {
+		return "", err
 	}
-	return a.AuditorRepo.Delete(c, current.Id)
+	if resp.Basic.Code != sdkerrorx.SuccessCode {
+		return "", fmt.Errorf("auditor get items not success: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
+	}
+	if len(resp.Items) != 1 {
+		// 仅当恰好返回一条时才采信：条目数异常时无法确认哪一条对应本次回查，
+		// 取错条目会得出错误结论，因此一律报错交由调用方 fail-closed 处理。
+		return "", fmt.Errorf("auditor item count unexpected: formId=%d count=%d", formId, len(resp.Items))
+	}
+	return tools.StatusMapper(resp.Items[0].Status), nil
 }
 
 // ClaimForUpload 上传前原子占用该表单的上传权；返回租约到期时间与是否获得占用

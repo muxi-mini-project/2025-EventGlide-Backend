@@ -135,8 +135,8 @@ func migrate(db *gorm.DB) error {
 		return migrateErr
 	}
 
-	// 帖子不再送审：存量仍停在 checking 的帖子一次性回填为 pass，使其在 slow 模式下也立即可见，
-	// 并让送审 worker 的 FindPendingAuditorPosts 不再捞到帖子。reject 的历史帖保持隐藏。
+	// 帖子不再送审：存量仍停在 checking 的帖子一次性回填为 pass，使其在 slow 模式下也立即可见。
+	// reject 的历史帖保持隐藏。
 	if err := backfillPostAuditStatus(db); err != nil {
 		return err
 	}

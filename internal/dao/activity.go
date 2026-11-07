@@ -396,9 +396,11 @@ func (ad *ActDao) FindRejectedAct(c context.Context, studentID, title, startTime
 	return act, nil
 }
 
+// FindPendingAuditorActivities 返回待送审的活动。已过期的活动不再送审：
+// 它们在所有列表都不可见，送进平台只会占用审核队列且永远不会对用户生效。
 func (ad *ActDao) FindPendingAuditorActivities(c context.Context) ([]model.Activity, error) {
 	var acts []model.Activity
-	err := ad.db.WithContext(c).Where("is_checking = 'pending_auditor'").Preload("Signers").Preload("Images").Find(&acts).Error
+	err := ad.db.WithContext(c).Where("is_checking = 'pending_auditor'").Where("end_time > ?", time.Now()).Preload("Signers").Preload("Images").Find(&acts).Error
 	if err != nil {
 		return nil, err
 	}

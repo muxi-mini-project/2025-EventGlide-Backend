@@ -20,16 +20,16 @@ import (
 type fakeAuditorRepo struct {
 	existing      *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
 	byID          *model.AuditorForm // FindByID 的返回值，nil 表示未找到
+	findErr       error              // 非 nil 时 FindByID 返回该错误
 	insertCnt     int
 	lastFormId    int64
 	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
 	updatedTo     string              // Update 写入的最后一个状态
 	updatedReason string              // Update 写入的最后一个原因
+	revertCnt     int                 // RevertRejectToPending 调用次数
+	revertFormId  int64               // RevertRejectToPending 收到的表单 id
 	reasons       map[int64]string    // FindReasonsByActivityIDs 的返回值
 	pushedPending []model.AuditorForm // FindPushedPending 的返回值
-	orphans       []model.AuditorForm
-	deletedId     int64
-	deleteCnt     int
 }
 
 var _ dao.AuditorRepository = (*fakeAuditorRepo)(nil)
@@ -75,11 +75,12 @@ func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status str
 	return nil
 }
 
-func (f *fakeAuditorRepo) Get(context.Context, int64) (model.AuditorForm, error) {
-	return model.AuditorForm{}, nil
+// RevertRejectToPending 模拟条件更新：真实 DAO 只在 status='reject' 时命中。
+func (f *fakeAuditorRepo) RevertRejectToPending(_ context.Context, formId int64) error {
+	f.revertCnt++
+	f.revertFormId = formId
+	return nil
 }
-
-func (f *fakeAuditorRepo) IsRejected(context.Context, int64) (bool, error) { return false, nil }
 
 func (f *fakeAuditorRepo) FindByActivity(_ context.Context, _ int64, _ string) (model.AuditorForm, error) {
 	if f.existing == nil {
@@ -129,21 +130,14 @@ func (f *fakeAuditorRepo) ReleaseClaim(_ context.Context, formId int64, leaseUnt
 	return nil
 }
 
-func (f *fakeAuditorRepo) FindOrphanPostForms(context.Context) ([]model.AuditorForm, error) {
-	return f.orphans, nil
-}
-
 func (f *fakeAuditorRepo) FindByID(_ context.Context, formId int64) (model.AuditorForm, error) {
+	if f.findErr != nil {
+		return model.AuditorForm{}, f.findErr
+	}
 	if f.byID == nil || f.byID.Id != formId {
 		return model.AuditorForm{}, gorm.ErrRecordNotFound
 	}
 	return *f.byID, nil
-}
-
-func (f *fakeAuditorRepo) Delete(_ context.Context, formId int64) error {
-	f.deleteCnt++
-	f.deletedId = formId
-	return nil
 }
 
 func newAuditorServiceForTest(repo dao.AuditorRepository) *auditorService {
@@ -346,6 +340,33 @@ func TestSyncExistingFormStatus_EmptyItems(t *testing.T) {
 	}
 }
 
+// TestSyncExistingFormStatus_MultipleItems 平台返回多条时无法确认哪条对应本表单：
+// 按"存在"处理以止住重传，但不得写库。
+func TestSyncExistingFormStatus_MultipleItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1},{"status":2}]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	ok, err := svc.syncExistingFormStatus(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatalf("multiple items should be treated as existing")
+	}
+	if repo.updatedTo != "" {
+		t.Fatalf("multiple items must not be written back, got %q", repo.updatedTo)
+	}
+}
+
 // TestReconcilePendingForms_SyncsConclusion 平台已出结论时，对账应把状态落库。
 func TestReconcilePendingForms_SyncsConclusion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -422,102 +443,47 @@ func newAuditorServiceWithServer(t *testing.T, handler http.HandlerFunc) (*audit
 	return &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}, repo
 }
 
-// TestRevokeForm_DeletesRemoteForPushed 已推送表单撤销时须调远端 DELETE，成功后才删本地行。
-func TestRevokeForm_DeletesRemoteForPushed(t *testing.T) {
-	now := time.Now()
-	var hits int
-	var gotPath string
-	svc, repo := newAuditorServiceWithServer(t, func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		gotPath = r.URL.Path
-		_, _ = w.Write([]byte(`{"code":20010,"msg":"ok","data":9}`))
-	})
-	repo.byID = &model.AuditorForm{Id: 9, ActivityId: 1001, Subject: SubjectPost, PushedAt: &now}
+// TestPlatformStatus 平台状态映射与条目数校验：仅当恰好一条时才采信，否则报错。
+func TestPlatformStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		statusCode int
+		body       string
+		want       string
+		wantError  bool
+	}{
+		{name: "pending", body: `{"msg":"","code":200,"data":{"items":[{"status":0}]}}`, want: "pending"},
+		{name: "pass", body: `{"msg":"","code":200,"data":{"items":[{"status":1}]}}`, want: "pass"},
+		{name: "reject", body: `{"msg":"","code":200,"data":{"items":[{"status":2}]}}`, want: "reject"},
+		{name: "unknown status", body: `{"msg":"","code":200,"data":{"items":[{"status":99}]}}`, want: ""},
+		{name: "empty items", body: `{"msg":"","code":200,"data":{"items":[]}}`, wantError: true},
+		{name: "two items", body: `{"msg":"","code":200,"data":{"items":[{"status":1},{"status":2}]}}`, wantError: true},
+		{name: "data type illegal", body: `{"msg":"","code":200,"data":"boom"}`, wantError: true},
+		{name: "http 500", statusCode: http.StatusInternalServerError, body: `boom`, wantError: true},
+	}
 
-	err := svc.RevokeForm(context.Background(), model.AuditorForm{Id: 9})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if hits != 1 || gotPath != "/remove/delete/9" {
-		t.Fatalf("expected one DELETE /remove/delete/9, got hits=%d path=%q", hits, gotPath)
-	}
-	if repo.deletedId != 9 || repo.deleteCnt != 1 {
-		t.Fatalf("local row must be deleted after remote success, got id=%d cnt=%d", repo.deletedId, repo.deleteCnt)
-	}
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+				if tt.statusCode != 0 {
+					w.WriteHeader(tt.statusCode)
+				}
+				_, _ = w.Write([]byte(tt.body))
+			})
 
-// TestRevokeForm_RevokesWhenOnlyClaimed 上传成功但标记 pushed_at 失败时表单会被保留占用（claimed_at 非空）。
-// 这种行也可能已在远端存在，撤销时必须照常调远端，否则远端条目永久残留。
-func TestRevokeForm_RevokesWhenOnlyClaimed(t *testing.T) {
-	now := time.Now()
-	var hits int
-	svc, repo := newAuditorServiceWithServer(t, func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		_, _ = w.Write([]byte(`{"code":20010,"msg":"ok","data":9}`))
-	})
-	repo.byID = &model.AuditorForm{Id: 9, ActivityId: 1001, Subject: SubjectPost, ClaimedAt: &now}
-
-	if err := svc.RevokeForm(context.Background(), model.AuditorForm{Id: 9}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if hits != 1 {
-		t.Fatalf("form with recorded upload claim must be revoked remotely, got %d calls", hits)
-	}
-	if repo.deleteCnt != 1 {
-		t.Fatalf("local row must be deleted, got %d", repo.deleteCnt)
-	}
-}
-
-// TestRevokeForm_SkipsRemoteForUnpushed 从未占用/推送的表单只需删本地行，不触碰远端。
-func TestRevokeForm_SkipsRemoteForUnpushed(t *testing.T) {
-	var hits int
-	svc, repo := newAuditorServiceWithServer(t, func(w http.ResponseWriter, r *http.Request) {
-		hits++
-		_, _ = w.Write([]byte(`{"code":20010,"msg":"ok","data":9}`))
-	})
-	repo.byID = &model.AuditorForm{Id: 9, ActivityId: 1001, Subject: SubjectPost}
-
-	err := svc.RevokeForm(context.Background(), model.AuditorForm{Id: 9})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if hits != 0 {
-		t.Fatalf("never-uploaded form must not call remote, got %d calls", hits)
-	}
-	if repo.deletedId != 9 {
-		t.Fatalf("local row must still be deleted, got id=%d", repo.deletedId)
-	}
-}
-
-// TestRevokeForm_KeepsLocalRowOnRemoteFailure 远端删除失败时保留本地行，交由后台下一轮重试。
-func TestRevokeForm_KeepsLocalRowOnRemoteFailure(t *testing.T) {
-	now := time.Now()
-	svc, repo := newAuditorServiceWithServer(t, func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"code":20010,"msg":"ok"}`)) // 缺 data → SDK 判为 SeverDataIllegalCode（非成功码）
-	})
-	repo.byID = &model.AuditorForm{Id: 9, ActivityId: 1001, Subject: SubjectPost, PushedAt: &now}
-
-	err := svc.RevokeForm(context.Background(), model.AuditorForm{Id: 9})
-	if err == nil {
-		t.Fatalf("expected error when remote delete is not accepted")
-	}
-	if repo.deleteCnt != 0 {
-		t.Fatalf("local row must be kept for retry when remote delete fails, got %d deletes", repo.deleteCnt)
-	}
-}
-
-// TestRevokeForm_IdempotentWhenRowGone 表单已被（其它实例）撤销删除时，回查不到应幂等成功，不报错。
-func TestRevokeForm_IdempotentWhenRowGone(t *testing.T) {
-	var hits int
-	svc, repo := newAuditorServiceWithServer(t, func(w http.ResponseWriter, r *http.Request) {
-		hits++
-	})
-	// repo.existing 为 nil → FindByID 返回 ErrRecordNotFound
-
-	if err := svc.RevokeForm(context.Background(), model.AuditorForm{Id: 9}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if hits != 0 || repo.deleteCnt != 0 {
-		t.Fatalf("gone form must be a no-op, got remote=%d local=%d", hits, repo.deleteCnt)
+			got, err := svc.PlatformStatus(context.Background(), 42)
+			if tt.wantError {
+				if err == nil {
+					t.Fatalf("expected error, got status %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("expected status %q, got %q", tt.want, got)
+			}
+		})
 	}
 }
