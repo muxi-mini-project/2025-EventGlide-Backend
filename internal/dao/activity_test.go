@@ -61,6 +61,27 @@ func TestDeleteDraftsByStudentIDRemovesImages(t *testing.T) {
 	}
 }
 
+// TestFindPendingAuditorActivitiesSkipsExpired 已过期活动不再送审：它们在所有列表都不可见，
+// 送进平台只会占用审核队列。
+func TestFindPendingAuditorActivitiesSkipsExpired(t *testing.T) {
+	dao, mock := newActDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE is_checking = 'pending_auditor' AND end_time > \\?").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	acts, err := dao.FindPendingAuditorActivities(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(acts) != 0 {
+		t.Fatalf("expected no activities, got %+v", acts)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestFindActByOwnerIDAll_NoAuditStatusFilter 本人"全部活动"列表不得按 is_checking 过滤，
 // 否则审核中(pending_*)与被拒(reject)的活动对本人不可见（前端 review 页拿不到被拒活动）。
 // 与 FindActByOwnerID 的区别正是去掉 SetEffect；本测试断言 SQL 不含 is_checking。

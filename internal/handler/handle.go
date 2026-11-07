@@ -41,6 +41,12 @@ func NewHandler(e *gin.Engine, cors *middleware.Cors, uh *UserHandler, ah *ActHa
 func (r *Handler) RegisterHandlers() {
 	r.cors.HandleCors()
 	r.RegisterSwagger()
+	r.e.GET("/healthz", r.healthz)
+}
+
+// healthz 供容器 HEALTHCHECK 探测进程与 HTTP 可用性；不查 DB/Redis，避免依赖抖动放大故障。
+func (r *Handler) healthz(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
 func (r *Handler) Run() (error, func()) {
