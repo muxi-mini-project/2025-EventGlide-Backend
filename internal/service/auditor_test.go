@@ -26,8 +26,8 @@ type fakeAuditorRepo struct {
 	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
 	updatedTo     string              // Update 写入的最后一个状态
 	updatedReason string              // Update 写入的最后一个原因
-	revertCnt     int                 // RevertRejectToPending 调用次数
-	revertFormId  int64               // RevertRejectToPending 收到的表单 id
+	parkCnt       int                 // ParkAsPending 调用次数
+	parkFormId    int64               // ParkAsPending 收到的表单 id
 	reasons       map[int64]string    // FindReasonsByActivityIDs 的返回值
 	pushedPending []model.AuditorForm // FindPushedPending 的返回值
 }
@@ -75,10 +75,10 @@ func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status str
 	return nil
 }
 
-// RevertRejectToPending 模拟条件更新：真实 DAO 只在 status='reject' 时命中。
-func (f *fakeAuditorRepo) RevertRejectToPending(_ context.Context, formId int64) error {
-	f.revertCnt++
-	f.revertFormId = formId
+// ParkAsPending 模拟条件更新：真实 DAO 只在 status<>'pending' 时写行。
+func (f *fakeAuditorRepo) ParkAsPending(_ context.Context, formId int64) error {
+	f.parkCnt++
+	f.parkFormId = formId
 	return nil
 }
 

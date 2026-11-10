@@ -33,79 +33,77 @@ type AuditorForm struct {
 func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 	// 帖子不审核：审核结论不再回写帖子状态。否则部署时已在审核中的帖子被回填为 pass 后，
 	// 平台迟到的 reject 回调会把它重新置为隐藏，与"帖子不审核"矛盾。
-	if af.Subject == SubjectPost {
+	// 非活动表单一律不同步活动：ParkAsPending 之类的条件更新不加载整行，hook 收到的是零值表单
+	// （Subject 为空），若按 activity_id=0 去改活动会误伤无关数据。
+	if af.Subject != SubjectActivity {
 		return nil
 	}
 
 	if af.Status == StancePass {
-		table := af.Subject
-		if table == SubjectActivity {
-			// 平台在"通过方向"上是审核结论的权威源：条目先被判不通过、之后又被改判为通过时，
-			// 已置为 reject 的活动必须跟着放行，否则会出现"平台显示通过、用户侧仍被拒"的错位。
-			// reject 分支不做对称扩展（不把已 pass 的活动改判为 reject 下架）：下架属于产品本次划定
-			// 范围之外的场景，留待后续评估，与上面的放行不冲突，勿顺手补成对称条件。
-			update := tx.Exec(`
-				UPDATE activity
-				SET is_checking = 'pass'
-				WHERE id = ?
-				AND is_checking IN ('pending_auditor','reject')
-				AND NOT EXISTS (
-					SELECT 1
-					FROM approvement
-					WHERE activity_id = ?
-					AND stance != 'pass'
-				)
-			`, af.ActivityId, af.ActivityId)
-			if update.Error != nil {
-				log.Println("auditorform AfterUpdate error when passing activity:", update.Error)
-				return update.Error
-			}
-			if update.RowsAffected > 0 {
-				log.Println("auditorform AfterUpdate passed successfully for activity:", af.ActivityId)
-				return nil
-			}
-			// 命中 0 行时以活动当前状态判断是否异常：已经 pass（例如退回 pending 后又由对账写回）
-			// 属同结论写入，静默跳过；只有活动确实没到该结论才告警。
-			var cur string
-			if qerr := tx.Model(&Activity{}).Select("COALESCE(is_checking, '')").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
-				log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but failed to load activity status: %v", af.Id, af.Status, af.Subject, af.ActivityId, qerr)
-				return nil
-			}
-			if cur == af.Status {
-				return nil
-			}
-			log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity is_checking=%q (signer guard not met or activity missing)", af.Id, af.Status, af.Subject, af.ActivityId, cur)
-		}
+		// 平台在"通过方向"上是审核结论的权威源：条目先被判不通过、之后又被改判为通过时，
+		// 已置为 reject 的活动必须跟着放行，否则会出现"平台显示通过、用户侧仍被拒"的错位。
+		// replaced_by = 0：被新申请替代的旧活动即使平台改判通过也不重新上架。
+		return af.syncActivityChecking(tx, "pass", `
+			UPDATE activity
+			SET is_checking = 'pass'
+			WHERE id = ?
+			AND is_checking IN ('pending_auditor','reject')
+			AND replaced_by = 0
+			AND NOT EXISTS (
+				SELECT 1
+				FROM approvement
+				WHERE activity_id = ?
+				AND stance != 'pass'
+			)
+		`, af.ActivityId, af.ActivityId)
 	}
 
 	if af.Status == StanceReject {
-		if af.Subject == SubjectActivity {
-			update := tx.Exec(`
-				UPDATE activity
-				SET is_checking = 'reject'
-				WHERE id = ?
-				AND is_checking = 'pending_auditor'
-			`, af.ActivityId)
-			if update.Error != nil {
-				log.Println("auditorform AfterUpdate error when rejecting activity:", update.Error)
-				return update.Error
-			}
-			if update.RowsAffected > 0 {
-				log.Println("auditorform AfterUpdate rejected successfully for activity:", af.ActivityId)
-				return nil
-			}
-			// 命中 0 行时以活动当前状态判断是否异常：已经是 reject（同结论重复写入）静默跳过，
-			// 只有活动确实没被驳回才告警，避免对账写回时持续刷假告警。
-			var cur string
-			if qerr := tx.Model(&Activity{}).Select("COALESCE(is_checking, '')").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
-				log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but failed to load activity status: %v", af.Id, af.Status, af.Subject, af.ActivityId, qerr)
-				return nil
-			}
-			if cur == af.Status {
-				return nil
-			}
-			log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity is_checking=%q (not pending_auditor)", af.Id, af.Status, af.Subject, af.ActivityId, cur)
-		}
+		// 已发布（pass）的活动被改判不通过时也要下架，否则平台显示不通过、用户侧仍可见。
+		return af.syncActivityChecking(tx, "reject", `
+			UPDATE activity
+			SET is_checking = 'reject'
+			WHERE id = ?
+			AND is_checking IN ('pending_auditor','pass')
+		`, af.ActivityId)
 	}
+
+	if af.Status == StancePending {
+		// 平台把条目重置为未审核：已出结论的活动退回审核中，结论由后续回调/对账重新落库。
+		// 已过期的活动不在对账范围内（见 FindPushedPending），被替代的旧活动也不再参与审核流转。
+		return af.syncActivityChecking(tx, "pending_auditor", `
+			UPDATE activity
+			SET is_checking = 'pending_auditor'
+			WHERE id = ?
+			AND is_checking IN ('pass','reject')
+			AND replaced_by = 0
+		`, af.ActivityId)
+	}
+
+	return nil
+}
+
+// syncActivityChecking 执行一条活动状态迁移，并在命中 0 行时以活动当前状态判断是否需要告警：
+// 活动已处于 target 表示同结论此前已落库（例如退回待审后又由对账写回），属正常路径静默跳过；
+// 只有结论确实没落到活动上才告警，避免对账每轮刷假告警。
+func (af *AuditorForm) syncActivityChecking(tx *gorm.DB, target, query string, args ...interface{}) error {
+	update := tx.Exec(query, args...)
+	if update.Error != nil {
+		log.Printf("auditorform AfterUpdate error when setting activity is_checking=%s (form=%d activity=%d): %v", target, af.Id, af.ActivityId, update.Error)
+		return update.Error
+	}
+	if update.RowsAffected > 0 {
+		log.Printf("auditorform AfterUpdate: activity %d is_checking -> %s (form=%d)", af.ActivityId, target, af.Id)
+		return nil
+	}
+	var cur string
+	if qerr := tx.Model(&Activity{}).Select("COALESCE(is_checking, '')").Where("id = ?", af.ActivityId).Scan(&cur).Error; qerr != nil {
+		log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but failed to load activity status: %v", af.Id, af.Status, af.Subject, af.ActivityId, qerr)
+		return nil
+	}
+	if cur == target {
+		return nil
+	}
+	log.Printf("auditorform AfterUpdate WARN: form(id=%d) status=%s subject=%s activity=%d saved, but activity is_checking=%q (expected %s)", af.Id, af.Status, af.Subject, af.ActivityId, cur, target)
 	return nil
 }
