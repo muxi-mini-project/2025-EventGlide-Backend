@@ -373,10 +373,13 @@ func buildActQuery(db *gorm.DB, a *req.ActSearchReq) *gorm.DB {
 	return q
 }
 
+// GetChecking 返回本人仍处于审核中的活动（/user/checking）。
+// 已过期的活动不再返回：它们不会再送审、也不会再有结论，继续显示"审核中"没有意义。
 func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, error) {
 	var acts []model.Activity
 	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").
 		Where("student_id = ? AND is_checking IN ?", sid, []string{"pending_signers", "pending_auditor"}).
+		Where("end_time > ?", time.Now()).
 		Find(&acts).Error
 	if err != nil {
 		ad.l.Error("Failed to get checking activities", zap.Error(err), zap.String("student_id", sid))
