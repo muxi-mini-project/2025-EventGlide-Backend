@@ -45,7 +45,9 @@ func NewSubjectGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentD
 }
 
 // ActivityVisibleTo reports whether the activity is visible to viewer. It mirrors the detail
-// endpoint: a rejected (taken-down) activity is only visible to its creator and signers.
+// endpoint (handler.activityVisibleToViewer) and the comment read/write checks; keep the three
+// in sync when the rule changes.
+// A rejected (taken-down) activity is only visible to its creator and signers.
 // A missing activity is treated as not visible so a stale comment row cannot leak content.
 func (g *subjectGetter) ActivityVisibleTo(ctx context.Context, id int64, viewer string) (bool, error) {
 	act, err := g.ad.FindActAuditBrief(ctx, id)

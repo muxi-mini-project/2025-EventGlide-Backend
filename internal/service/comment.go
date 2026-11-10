@@ -124,6 +124,18 @@ func (cs *CommentService) CreateComment(c context.Context, cmt *model.Comment, s
 		}
 	}
 
+	// 活动同理：已下架（reject）的活动按不存在拒绝，避免知道 id 的人继续写入并打扰创建者。
+	if targetActID := commentTargetActivityID(subject, rootSubject); targetActID != 0 {
+		visible, err := cs.sg.ActivityVisibleTo(c, targetActID, studentID)
+		if err != nil {
+			cs.l.Error("Failed to check activity visibility when commenting", zap.Error(err), zap.Int64("activityId", targetActID))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return nil, errs.ErrActivityNotFound
+		}
+	}
+
 	err = cs.cd.CreateComment(c, cmt)
 	cs.l.Info("CreateComment",
 		zap.Int64("id", cmt.Id),
@@ -303,6 +315,18 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 		}
 		if !visible {
 			return nil, errs.ErrPostNotFound
+		}
+	}
+
+	// 活动同理：已下架（reject）的活动按不存在拒绝，避免旧 id 直连写入。
+	if root.Subject == SubjectActivity {
+		visible, err := cs.sg.ActivityVisibleTo(c, root.Id, studentID)
+		if err != nil {
+			cs.l.Error("Failed to check activity visibility when answering", zap.Error(err), zap.Int64("activityId", root.Id))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return nil, errs.ErrActivityNotFound
 		}
 	}
 
@@ -544,6 +568,17 @@ func commentTargetPostID(subject, rootSubject SubjectInfo) int64 {
 		return subject.Id
 	}
 	if rootSubject.Subject == SubjectPost {
+		return rootSubject.Id
+	}
+	return 0
+}
+
+// commentTargetActivityID 返回评论/回复所挂靠的活动 id；目标不是活动时返回 0。
+func commentTargetActivityID(subject, rootSubject SubjectInfo) int64 {
+	if subject.Subject == SubjectActivity {
+		return subject.Id
+	}
+	if rootSubject.Subject == SubjectActivity {
 		return rootSubject.Id
 	}
 	return 0

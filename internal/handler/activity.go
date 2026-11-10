@@ -308,6 +308,7 @@ func rejectReasonVisible(act model.Activity, viewer string, isSigner bool) bool 
 
 // activityVisibleToViewer 判断活动详情是否对该用户可见。
 // 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理。
+// 评论读写路径用的是同一规则（service.SubjectGetter.ActivityVisibleTo），改动时两处要一起改。
 func activityVisibleToViewer(act model.Activity, viewer string, isSigner bool) bool {
 	if act.IsChecking != model.StanceReject {
 		return true
