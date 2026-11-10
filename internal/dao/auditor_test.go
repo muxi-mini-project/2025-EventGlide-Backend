@@ -94,11 +94,11 @@ func TestReleaseClaimSQL(t *testing.T) {
 	}
 }
 
-// TestFindPushedPendingSQL 断言对账查询按 id 游标只取"已推送但平台仍 pending"的表单。
+// TestFindPushedPendingSQL 断言对账查询按 id 游标只取"已推送但平台仍 pending"且未被撤销的表单。
 func TestFindPushedPendingSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE \\(pushed_at IS NOT NULL AND status = \\? AND subject <> \\? AND id > \\?\\) AND \\(EXISTS \\(SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time > \\?\\)\\) ORDER BY id ASC LIMIT \\?").
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE \\(pushed_at IS NOT NULL AND status = \\? AND subject <> \\? AND revoked_at IS NULL AND id > \\?\\) AND \\(EXISTS \\(SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time > \\?\\)\\) ORDER BY id ASC LIMIT \\?").
 		WithArgs("pending", "post", int64(10), sqlmock.AnyArg(), 100).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
 			AddRow(42, 7, "activity", "pending"))
@@ -109,6 +109,44 @@ func TestFindPushedPendingSQL(t *testing.T) {
 	}
 	if len(forms) != 1 || forms[0].Id != 42 {
 		t.Fatalf("expected one form id=42, got %+v", forms)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindExpiredPushedPendingSQL 断言撤销查询只取 subject=activity、仍 pending、未被撤销且所属活动已过期的表单。
+func TestFindExpiredPushedPendingSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `auditor_form` WHERE \\(subject = \\? AND status = \\? AND pushed_at IS NOT NULL AND revoked_at IS NULL AND id > \\?\\) AND \\(EXISTS \\(SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time <= \\?\\)\\) ORDER BY id ASC LIMIT \\?").
+		WithArgs("activity", "pending", int64(10), sqlmock.AnyArg(), 50).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "activity_id", "subject", "status"}).
+			AddRow(42, 7, "activity", "pending"))
+
+	forms, err := repo.FindExpiredPushedPending(context.Background(), 10, 50)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(forms) != 1 || forms[0].Id != 42 {
+		t.Fatalf("expected one form id=42, got %+v", forms)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestMarkRevokedSQL 断言撤销标记只写 revoked_at 一列，且以 revoked_at IS NULL 保证幂等。
+func TestMarkRevokedSQL(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+	now := time.Now()
+
+	mock.ExpectExec("UPDATE `auditor_form` SET `revoked_at`=\\? WHERE id = \\? AND revoked_at IS NULL").
+		WithArgs(now, int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if err := repo.MarkRevoked(context.Background(), 42, now); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -191,7 +229,7 @@ func TestUpdateIfPendingClearsReasonForNonReject(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id", "reason", "form_url"}).
 			AddRow(42, "pending", "activity", 1001, "旧原因", ""))
 	mock.ExpectExec("UPDATE `auditor_form` SET").
-		WithArgs("activity", int64(1001), "pass", "", "", nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
+		WithArgs("activity", int64(1001), "pass", "", "", nil, nil, nil, sqlmock.AnyArg(), sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("UPDATE activity SET is_checking = 'pass'").
 		WithArgs(int64(1001), int64(1001)).
