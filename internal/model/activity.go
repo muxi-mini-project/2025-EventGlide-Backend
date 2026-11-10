@@ -9,8 +9,8 @@ type Activity struct {
 
 	StudentID      string           `gorm:"type:varchar(255);column:student_id;not null;uniqueIndex:idx_activity_unique"`
 	Title          string           `gorm:"type:varchar(255);column:title;not null;uniqueIndex:idx_activity_unique"`
-	Revision       int              `gorm:"type:int;column:revision;not null;default:0;uniqueIndex:idx_activity_unique,priority:5"` // 重新送审次数，0 为原始申请
-	ReplacedBy     int64            `gorm:"type:bigint;column:replaced_by;not null;default:0;index"`                                // 替代它的新申请 id，0 表示未被替代
+	Revision       int              `gorm:"type:int;column:revision;not null;default:0;uniqueIndex:idx_activity_unique,priority:11"` // 重新送审次数，0 为原始申请；priority 大于默认 10，排在唯一索引末位以保住 (student_id, title, start_time, end_time) 前缀
+	ReplacedBy     int64            `gorm:"type:bigint;column:replaced_by;not null;default:0;index"`                                 // 替代它的新申请 id，0 表示未被替代
 	Introduce      string           `gorm:"type:text;column:introduce;not null"`
 	HolderType     string           `gorm:"type:varchar(255);column:holder_type;not null"`
 	OrganizerUnit  string           `gorm:"type:varchar(255);not null;default:'';column:organizer_unit"`

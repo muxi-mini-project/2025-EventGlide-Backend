@@ -2842,7 +2842,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "revision": {
-                    "description": "Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 非空表示该申请已被新版本替代。",
+                    "description": "Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 为替代它的新申请 id，\n序列化成字符串，\"0\" 表示未被替代（不是空串或 null）。",
                     "type": "integer"
                 },
                 "showImg": {

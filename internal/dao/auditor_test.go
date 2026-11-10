@@ -271,7 +271,7 @@ func TestUpdateIfPendingNoWarnWhenActivityAlreadyReject(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
 			AddRow(42, "pending", "activity", 1001))
 	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking IN \\('pending_auditor','pass'\\)$").
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking IN \\('pending_auditor','pass'\\) AND replaced_by = 0$").
 		WithArgs(int64(1001)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT COALESCE\\(is_checking, ''\\) FROM `activity` WHERE id = \\?").
@@ -303,7 +303,7 @@ func TestUpdateIfPendingWarnsWhenActivityMissing(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "subject", "activity_id"}).
 			AddRow(42, "pending", "activity", 1001))
 	mock.ExpectExec("UPDATE `auditor_form` SET").WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking IN \\('pending_auditor','pass'\\)$").
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking IN \\('pending_auditor','pass'\\) AND replaced_by = 0$").
 		WithArgs(int64(1001)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 	// 活动不存在：查询命中 0 行，cur 保持空串
@@ -360,7 +360,7 @@ func TestAuditorFormAfterUpdateRejectDemotesPass(t *testing.T) {
 	mock.ExpectExec("UPDATE `auditor_form` SET `status`=\\?,`reason`=\\?,`updated_at`=\\? WHERE `id` = \\?").
 		WithArgs("reject", "", sqlmock.AnyArg(), int64(42)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking IN \\('pending_auditor','pass'\\)$").
+	mock.ExpectExec("UPDATE activity SET is_checking = 'reject' WHERE id = \\? AND is_checking IN \\('pending_auditor','pass'\\) AND replaced_by = 0$").
 		WithArgs(int64(7)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 

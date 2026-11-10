@@ -61,11 +61,14 @@ func (af *AuditorForm) AfterUpdate(tx *gorm.DB) (err error) {
 
 	if af.Status == StanceReject {
 		// 已发布（pass）的活动被改判不通过时也要下架，否则平台显示不通过、用户侧仍可见。
+		// replaced_by = 0：与 pass/pending 两条迁移对齐。重送只能从 reject 发起，
+		// 被替代的旧活动恒为 reject，这个条件不会改变结果，只避免对旧版本做无谓更新。
 		return af.syncActivityChecking(tx, "reject", `
 			UPDATE activity
 			SET is_checking = 'reject'
 			WHERE id = ?
 			AND is_checking IN ('pending_auditor','pass')
+			AND replaced_by = 0
 		`, af.ActivityId)
 	}
 
