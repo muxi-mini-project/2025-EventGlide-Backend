@@ -338,6 +338,17 @@ func (ad *ActDao) FindActById(c context.Context, id int64) (model.Activity, erro
 	return act, nil
 }
 
+// FindActAuditBrief 只取可见性判断需要的列，不预加载签署人与图片，
+// 供评论列表等高频读路径使用。
+func (ad *ActDao) FindActAuditBrief(c context.Context, id int64) (model.Activity, error) {
+	var act model.Activity
+	err := ad.db.WithContext(c).Select("id", "student_id", "is_checking").Where("id = ?", id).First(&act).Error
+	if err != nil {
+		return model.Activity{}, err
+	}
+	return act, nil
+}
+
 func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
 	if ad.effect == "slow" {
 		return func(db *gorm.DB) *gorm.DB {

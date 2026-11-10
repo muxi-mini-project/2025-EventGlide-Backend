@@ -222,6 +222,12 @@ func (r *ActivityRepo) MarkReplaced(ctx context.Context, tx *gorm.DB, srcID, new
 	return r.dao.MarkActivityReplaced(ctx, tx, srcID, newID)
 }
 
+// FindActAuditBrief loads only the fields needed for visibility checks, without preloading
+// signers or images (this runs on hot read paths such as loading an activity's comments).
+func (r *ActivityRepo) FindActAuditBrief(ctx context.Context, id int64) (model.Activity, error) {
+	return r.dao.FindActAuditBrief(ctx, id)
+}
+
 // ExistsApprovement 判断某学号是否为该活动的签署人。
 func (r *ActivityRepo) ExistsApprovement(ctx context.Context, activityID int64, studentID string) (bool, error) {
 	return r.dao.ExistsApprovement(ctx, activityID, studentID)

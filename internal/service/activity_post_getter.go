@@ -6,6 +6,7 @@ import (
 
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/errs"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"gorm.io/gorm"
 )
@@ -24,6 +25,9 @@ type SubjectInfo struct {
 
 type SubjectGetter interface {
 	GetSubjectInfo(ctx context.Context, id int64, sub string) (SubjectInfo, error)
+	// ActivityVisibleTo mirrors the activity detail rule: a rejected (taken-down)
+	// activity is only visible to its creator and signers.
+	ActivityVisibleTo(ctx context.Context, id int64, viewer string) (bool, error)
 }
 
 type subjectGetter struct {
@@ -38,6 +42,29 @@ func NewSubjectGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentD
 		pd: pd,
 		cd: cd,
 	}
+}
+
+// ActivityVisibleTo reports whether the activity is visible to viewer. It mirrors the detail
+// endpoint: a rejected (taken-down) activity is only visible to its creator and signers.
+// A missing activity is treated as not visible so a stale comment row cannot leak content.
+func (g *subjectGetter) ActivityVisibleTo(ctx context.Context, id int64, viewer string) (bool, error) {
+	act, err := g.ad.FindActAuditBrief(ctx, id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	if act.IsChecking != model.StanceReject {
+		return true, nil
+	}
+	if viewer == "" {
+		return false, nil
+	}
+	if act.StudentID == viewer {
+		return true, nil
+	}
+	return g.ad.ExistsApprovement(ctx, act.Id, viewer)
 }
 
 func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string) (SubjectInfo, error) {

@@ -349,24 +349,37 @@ func (cs *CommentService) AnswerComment(c context.Context, cmt *model.Comment, s
 	return cmt, nil
 }
 
-// LoadComments 加载目标（帖子/活动）下的一级评论。目标为他人私密帖时返回空，
-// 与"帖子不存在"表现一致，避免通过评论列表泄露私密帖的存在与内容。
+// LoadComments 加载目标（帖子/活动）下的一级评论。目标为他人私密帖、或已下架（reject）的活动
+// 且 viewer 不是创建者/签署人时返回空，与"目标不存在"表现一致，避免通过评论列表泄露其内容。
 func (cs *CommentService) LoadComments(c context.Context, parentID int64, viewer string) ([]model.Comment, error) {
 	cmts, err := cs.cd.LoadComments(c, parentID)
 	if err != nil {
 		cs.l.Error("Error load comments failed", zap.Error(err))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
-	if len(cmts) == 0 || cmts[0].Subject != SubjectPost {
+	if len(cmts) == 0 {
 		return cmts, nil
 	}
-	visible, err := cs.id.IsPostVisibleTo(c, parentID, viewer)
-	if err != nil {
-		cs.l.Error("Failed to check post visibility when loading comments", zap.Error(err), zap.Int64("postId", parentID))
-		return nil, errs.ErrInternal.Wrap(err)
-	}
-	if !visible {
-		return []model.Comment{}, nil
+	switch cmts[0].Subject {
+	case SubjectPost:
+		visible, err := cs.id.IsPostVisibleTo(c, parentID, viewer)
+		if err != nil {
+			cs.l.Error("Failed to check post visibility when loading comments", zap.Error(err), zap.Int64("postId", parentID))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return []model.Comment{}, nil
+		}
+	case SubjectActivity:
+		// 与活动详情保持一致：被驳回（下架）的活动只有创建者与签署人能看到评论区。
+		visible, err := cs.sg.ActivityVisibleTo(c, parentID, viewer)
+		if err != nil {
+			cs.l.Error("Failed to check activity visibility when loading comments", zap.Error(err), zap.Int64("activityId", parentID))
+			return nil, errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return []model.Comment{}, nil
+		}
 	}
 	return cmts, nil
 }
