@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/raiki02/EG/internal/dao"
@@ -13,6 +14,10 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+// callbackConfirmTimeout 回查平台当前状态的超时：回调处理是同步的，
+// 平台慢响应不能长时间占住连接，超时按"无法确认"处理（退回 pending 交给对账）。
+const callbackConfirmTimeout = 3 * time.Second
 
 type CallbackAuditorService interface {
 	UpdateStatus(c context.Context, id int64, status string, reason string) error
@@ -30,50 +35,80 @@ func (ad *callbackAuditorService) UpdateStatus(c context.Context, id int64, stat
 		return errs.ErrAuditorStatusInvalid.Wrap(errors.New("unknown auditor status: " + status))
 	}
 
-	// 回调没有顺序号/版本号，延迟到达的旧 pass 回调会把已驳回的活动错误放行。
-	// 退回待审后平台还可能重投同一条 pass（try 字段不是递增序号，无法据此识别），
-	// 若只看本地 reject 就会走"pending 直接放行"的快路径、再次绕过确认。
-	// 因此只要本地尚未通过（pending/reject）就向平台回查当前结论：
-	//   - 平台明确 pass：照常放行；
-	//   - 平台明确 reject：忽略这条回调，保持本地现状；
-	//   - pending/未知/回查失败：无法确认结论，退回待审（fail-closed）。
-	// pass 不可回退：reject 分支只接受 pending_auditor 的活动，一旦误放行就无法
-	// 再由回调纠正，所以无法确认时宁可退回 pending，交给 10 分钟一次的对账在
-	// 平台给出结论后再决定；对账只扫 status='pending'，退回后正好进入其范围。
-	// 已经是 pass 的表单不再回查，直接走下方原有写库逻辑（幂等）。
-	if mapped == model.StancePass {
-		form, err := ad.repo.FindByID(c, id)
+	form, err := ad.repo.FindByID(c, id)
+	switch {
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		// 回调查不到本地表单行：hook_id 与本地行对不上、或表单已被清理，返回成功避免平台无休止重试。
+		return nil
+	case err != nil:
+		// 读不到本地状态就无法做回查确认：返回 error 让平台重试，连续失败最终交给对账兜底。
+		ad.l.Warn("find auditor form failed, return error for retry",
+			zap.Int64("formId", id), zap.Error(err))
+		return err
+	}
+
+	// 帖子已不审核，其表单也不在对账范围内，保持直接写库；活动回调则必须先向平台确认。
+	if form.Subject == model.SubjectActivity {
+		// 回调没有顺序号/版本号：延迟到达的旧 pass/reject 会盖掉新一轮结论，
+		// 平台重置为未审核的 pending 也可能已被后续结论取代。落结论前回查平台当前状态，
+		// 以平台为权威源决定写什么。此路径非原子：FindByID -> 回查 -> 写库之间没有行锁，
+		// 极端并发下仍可能互相覆盖；本改动只解决延迟到达的旧回调，不承诺并发原子性。
+		ctx, cancel := context.WithTimeout(c, callbackConfirmTimeout)
+		platformStatus, confirmErr := ad.aud.PlatformStatus(ctx, id)
+		cancel()
+
 		switch {
-		case errors.Is(err, gorm.ErrRecordNotFound):
-			// 行不存在时交给 repo.Update 幂等处理，它查不到行会直接返回成功。
-		case err != nil:
-			// 读不到本地状态就无法判断是否需要回查：返回 error 让平台重试，
-			// 连续失败最终交给对账兜底，不要再放行。
-			ad.l.Warn("find auditor form failed, return error for retry",
-				zap.Int64("formId", id), zap.Error(err))
-			return err
-		case form.Subject == model.SubjectActivity && form.Status != model.StancePass:
-			// 此路径非原子：FindByID -> 平台回查 -> 条件更新之间没有行锁，
-			// 极端并发下仍可能被后到的回调覆盖；本改动只解决延迟到达的旧回调，
-			// 不承诺并发原子性。
-			ctx, cancel := context.WithTimeout(c, 3*time.Second)
-			defer cancel()
-			platformStatus, confirmErr := ad.aud.PlatformStatus(ctx, id)
-			switch {
-			case confirmErr == nil && platformStatus == model.StancePass:
-				ad.l.Info("accept pass callback: platform status confirmed pass",
-					zap.Int64("formId", id), zap.String("platformStatus", platformStatus))
-			case confirmErr == nil && platformStatus == model.StanceReject:
-				ad.l.Warn("ignore delayed pass callback: platform status is reject",
-					zap.Int64("formId", id), zap.String("platformStatus", platformStatus))
-				return nil
-			default:
-				ad.l.Warn("cannot confirm platform status, revert form to pending",
+		case confirmErr != nil || platformStatus == "":
+			// 无法确认平台结论。重置回调不能退回 pending：park 成 pending 后对账的
+			// UpdateIfPending 读到 pending == pending 会早退，表单再也推不动，
+			// 已出结论的活动也就永远退不回审核中。改为返回 error 让平台重试。
+			if mapped == model.StancePending {
+				ad.l.Warn("cannot confirm platform status for reset callback, return error for retry",
 					zap.Int64("formId", id),
 					zap.String("platformStatus", platformStatus),
 					zap.Error(confirmErr))
-				return ad.repo.RevertRejectToPending(c, id)
+				if confirmErr != nil {
+					return confirmErr
+				}
+				return fmt.Errorf("cannot confirm platform status for reset callback: formId=%d", id)
 			}
+			// 终态回调无法确认时不应用本次回调：退回 pending，由 10 分钟一次的对账
+			// 在平台给出结论后收敛（对账只扫 pending）。
+			ad.l.Warn("cannot confirm platform status, park form as pending",
+				zap.Int64("formId", id),
+				zap.String("callbackStatus", mapped),
+				zap.String("platformStatus", platformStatus),
+				zap.Error(confirmErr))
+			return ad.repo.ParkAsPending(c, id)
+
+		case platformStatus == model.StancePending:
+			// 平台还没有结论。此时应用终态可能是读延迟造成的误判，会把已发布活动短暂拉下来；
+			// 退回 pending 同样会扰动，两者都不如忽略——回调丢失由对账兜底。
+			if mapped != model.StancePending {
+				ad.l.Warn("ignore terminal callback while platform still pending",
+					zap.Int64("formId", id),
+					zap.String("callbackStatus", mapped))
+				return nil
+			}
+			// 重置回调与平台一致，落到下方正常写库，由 AfterUpdate 把活动退回 pending_auditor。
+
+		default:
+			// 平台已有结论。本地与之一致说明回调是旧的或重复的，忽略以免抖动、
+			// 也避免驳回原因被短暂清空；不一致时以平台为准，只有回调与平台一致才带上回调里的原因。
+			if form.Status == platformStatus {
+				ad.l.Info("ignore callback already consistent with platform status",
+					zap.Int64("formId", id), zap.String("status", platformStatus))
+				return nil
+			}
+			if mapped != platformStatus {
+				ad.l.Warn("callback conflicts with platform status, align to platform",
+					zap.Int64("formId", id),
+					zap.String("callbackStatus", mapped),
+					zap.String("platformStatus", platformStatus))
+				return ad.repo.Update(c, id, platformStatus, "")
+			}
+			ad.l.Info("auditor callback confirmed by platform status",
+				zap.Int64("formId", id), zap.String("status", mapped))
 		}
 	}
 

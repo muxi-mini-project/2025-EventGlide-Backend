@@ -23,7 +23,7 @@ type AuditorRepository interface {
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
 	FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error)
 	UpdateIfPending(c context.Context, formId int64, status string) error
-	RevertRejectToPending(c context.Context, formId int64) error
+	ParkAsPending(c context.Context, formId int64) error
 	FindByID(c context.Context, formId int64) (model.AuditorForm, error)
 }
 type AuditorRepo struct {
@@ -238,23 +238,27 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 	})
 }
 
-// RevertRejectToPending 仅在表单当前仍为 reject 时退回 pending。
-// 改判回查无法确认平台结论时用它代替无条件的 Update：条件更新不会覆盖并发路径已写入的
-// 终态（例如已确认的 pass），也不会因非 reject 写入而清空驳回原因。
-// 条件未命中（状态已被回调/对账推进）视为幂等成功。
-func (a *AuditorRepo) RevertRejectToPending(c context.Context, formId int64) error {
-	form := model.AuditorForm{Id: formId, Status: "pending"}
+// ParkAsPending 把表单退回 pending：仅在表单当前不是 pending 时生效。
+// 回调回查无法确认平台结论时用它代替无条件的 Update：只写 status 一列，
+// 不碰 reason/pushed_at/claimed_at，避免清空驳回原因或冲掉上传信息；
+// 条件未命中（已是 pending，或行已被删除）视为幂等成功。
+// 这不是保护终态的乐观锁：条件只看 status，并发路径刚写入的 pass/reject 可能被覆盖成 pending，
+// 被覆盖的终态会由下一次对账按平台当前状态重新收敛。
+// 这里不加载整行、只带 id+status 更新，AuditorForm.AfterUpdate 因 Subject 为空而跳过活动同步：
+// 仅凭一次失败的平台回查不能把已发布/已驳回的活动改回待审核，活动结论留给对账收敛后再落。
+func (a *AuditorRepo) ParkAsPending(c context.Context, formId int64) error {
+	form := model.AuditorForm{Id: formId, Status: model.StancePending}
 	res := a.db.WithContext(c).
 		Model(&model.AuditorForm{}).
-		Where("id = ? AND status = ?", formId, model.StanceReject).
+		Where("id = ? AND status <> ?", formId, model.StancePending).
 		Select("Status").
 		Updates(&form)
 	if res.Error != nil {
-		a.l.Error("failed to revert auditor form to pending", zap.Error(res.Error), zap.Int64("formId", formId))
+		a.l.Error("failed to park auditor form as pending", zap.Error(res.Error), zap.Int64("formId", formId))
 		return res.Error
 	}
 	if res.RowsAffected == 0 {
-		a.l.Info("auditor form no longer reject, skip revert to pending", zap.Int64("formId", formId))
+		a.l.Info("auditor form already pending or gone, skip parking", zap.Int64("formId", formId))
 	}
 	return nil
 }

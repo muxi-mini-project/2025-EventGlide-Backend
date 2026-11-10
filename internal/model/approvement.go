@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	StancePass   = "pass"
-	StanceReject = "reject"
+	StancePending = "pending"
+	StancePass    = "pass"
+	StanceReject  = "reject"
 )
 
 type Approvement struct {
