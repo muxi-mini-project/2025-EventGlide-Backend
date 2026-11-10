@@ -177,6 +177,23 @@ func TestCallbackBackfillsRejectReason(t *testing.T) {
 	}
 }
 
+// TestCallbackBackfillOnlyForRejectCallback 本地与平台都已驳回且本地缺原因时，
+// 带消息的旧 pass 回调不能借"补原因"分支改写状态，否则会把已下架的活动重新上架。
+func TestCallbackBackfillOnlyForRejectCallback(t *testing.T) {
+	local := activityForm(model.StanceReject)
+	local.Reason = ""
+	repo := &fakeAuditorRepo{byID: local}
+	aud := &stubAuditorSvc{status: model.StanceReject}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+	if err := svc.UpdateStatus(context.Background(), 42, "通过", "已通过"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.updatedTo != "" {
+		t.Fatalf("pass callback must not rewrite confirmed reject, got %q", repo.updatedTo)
+	}
+}
+
 // TestCallbackTerminalIgnoredWhilePlatformPending 平台还没有结论时，终态回调可能只是
 // 读延迟：应用它会把已发布活动短暂拉下来，退回 pending 同样会扰动，因此一律忽略。
 func TestCallbackTerminalIgnoredWhilePlatformPending(t *testing.T) {
