@@ -31,6 +31,16 @@ func (r *ActivityRepo) Transaction(ctx context.Context, fn func(tx *gorm.DB) err
 }
 
 func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
+	return r.createActivity(ctx, tx, act, signers, studentID, true)
+}
+
+// CreateActivityKeepDraft 与 CreateActivity 相同，但保留该学生的活动草稿。
+// 重新送审编辑的是已存在的活动，不应连带清掉用户正在新建的另一条活动的草稿。
+func (r *ActivityRepo) CreateActivityKeepDraft(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
+	return r.createActivity(ctx, tx, act, signers, studentID, false)
+}
+
+func (r *ActivityRepo) createActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string, clearDraft bool) error {
 	act.Signers = nil
 
 	signerCount := 0
@@ -47,8 +57,10 @@ func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *mod
 		act.IsChecking = "pending_auditor"
 	}
 
-	if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
-		return err
+	if clearDraft {
+		if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
+			return err
+		}
 	}
 
 	if err := r.dao.CreateActivity(ctx, tx, act); err != nil {

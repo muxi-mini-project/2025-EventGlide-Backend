@@ -418,11 +418,13 @@ func (ad *ActDao) FindActsByIds(c context.Context, ids []int64) ([]model.Activit
 	return acts, err
 }
 
-// MarkActivityReplaced 把源活动的 replaced_by 指向新活动，条件更新保证并发下只有一次成功。
-// 返回 false 表示源活动已被替代（此时调用方应回滚事务）。
+// MarkActivityReplaced 把源活动的 replaced_by 指向新活动。
+// 条件更新同时校验 replaced_by = 0 与 is_checking = reject：并发重复提交只有一个能成功，
+// 且在读取源活动与本次更新之间被平台改判（reject -> pass）时不会替代一条已公开的活动。
+// 返回 false 表示条件未命中（已被替代或状态已变化），调用方应回滚事务。
 func (ad *ActDao) MarkActivityReplaced(c context.Context, tx *gorm.DB, srcID, newID int64) (bool, error) {
 	res := tx.WithContext(c).Model(&model.Activity{}).
-		Where("id = ? AND replaced_by = 0", srcID).
+		Where("id = ? AND replaced_by = 0 AND is_checking = ?", srcID, model.StanceReject).
 		Update("replaced_by", newID)
 	if res.Error != nil {
 		return false, res.Error

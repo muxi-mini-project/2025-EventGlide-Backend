@@ -48,10 +48,23 @@ func newResubmitServiceForTest(t *testing.T, maxResubmit int) (*ActivityService,
 }
 
 // expectResubmitSourceLoad 模拟 findById 读取源活动及其 Signers/Images 预加载。
-func expectResubmitSourceLoad(mock sqlmock.Sqlmock, srcID int64, revision int) {
+func expectResubmitSourceLoad(mock sqlmock.Sqlmock, srcID int64, revision int, replacedBy int64) {
 	rows := sqlmock.NewRows([]string{
 		"id", "student_id", "is_checking", "revision", "replaced_by", "title", "start_time", "end_time",
-	}).AddRow(srcID, "S20250001", "reject", revision, int64(0), "源活动标题", "2026-01-01 10:00:00", "2026-01-01 12:00:00")
+	}).AddRow(srcID, "S20250001", "reject", revision, replacedBy, "源活动标题", "2026-01-01 10:00:00", "2026-01-01 12:00:00")
+
+	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE id = \\? ORDER BY `activity`.`id` LIMIT \\?").
+		WithArgs(srcID, 1).
+		WillReturnRows(rows)
+	mock.ExpectQuery("SELECT \\* FROM `image`").WillReturnRows(sqlmock.NewRows([]string{"owner_id"}))
+	mock.ExpectQuery("SELECT \\* FROM `activity_signer`").WillReturnRows(sqlmock.NewRows([]string{"activity_id"}))
+}
+
+// expectResubmitSourceState 模拟并发冲突后重读源活动：is_checking 与 replaced_by 决定错误码。
+func expectResubmitSourceState(mock sqlmock.Sqlmock, srcID int64, isChecking string, replacedBy int64) {
+	rows := sqlmock.NewRows([]string{
+		"id", "student_id", "is_checking", "revision", "replaced_by", "title", "start_time", "end_time",
+	}).AddRow(srcID, "S20250001", isChecking, 0, replacedBy, "源活动标题", "2026-01-01 10:00:00", "2026-01-01 12:00:00")
 
 	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE id = \\? ORDER BY `activity`.`id` LIMIT \\?").
 		WithArgs(srcID, 1).
@@ -61,21 +74,16 @@ func expectResubmitSourceLoad(mock sqlmock.Sqlmock, srcID int64, revision int) {
 }
 
 // expectResubmitCreate 模拟回写源活动 replaced_by 并创建新活动的完整事务。
-func expectResubmitCreate(mock sqlmock.Sqlmock, studentID string, newID, srcID int64, withSigners bool, replacedRows int64) {
+// 重新送审保留用户正在编辑的活动草稿，因此不应出现 activity_draft 的查询与删除。
+func expectResubmitCreate(mock sqlmock.Sqlmock, newID, srcID int64, withSigners bool, replacedRows int64) {
 	mock.ExpectBegin()
-	mock.ExpectExec("UPDATE `activity` SET `replaced_by`=\\? WHERE id = \\? AND replaced_by = 0").
-		WithArgs(newID, srcID).
+	mock.ExpectExec("UPDATE `activity` SET `replaced_by`=\\? WHERE id = \\? AND replaced_by = 0 AND is_checking = \\?").
+		WithArgs(newID, srcID, "reject").
 		WillReturnResult(sqlmock.NewResult(0, replacedRows))
 	if replacedRows == 0 {
 		mock.ExpectRollback()
 		return
 	}
-	mock.ExpectQuery("SELECT `id` FROM `activity_draft` WHERE student_id = \\?").
-		WithArgs(studentID).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectExec("DELETE FROM `activity_draft` WHERE student_id = \\?").
-		WithArgs(studentID).
-		WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec("INSERT INTO `activity`").WillReturnResult(sqlmock.NewResult(0, 1))
 	if withSigners {
 		mock.ExpectExec("INSERT INTO `activity_signer`").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -111,8 +119,8 @@ func TestResubmitActivityCreatesNewRevision(t *testing.T) {
 	act := newResubmitAct()
 	signers := []model.Signer{{StudentID: "S20250002", Name: "张三"}}
 
-	expectResubmitSourceLoad(mock, srcID, 1)
-	expectResubmitCreate(mock, "S20250001", act.Id, srcID, true, 1)
+	expectResubmitSourceLoad(mock, srcID, 1, 0)
+	expectResubmitCreate(mock, act.Id, srcID, true, 1)
 
 	if err := svc.ResubmitActivity(context.Background(), srcID, act, signers, "S20250001"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -134,8 +142,8 @@ func TestResubmitActivityWithoutSignersKeepsPendingAuditor(t *testing.T) {
 	srcID := int64(10002)
 	act := newResubmitAct()
 
-	expectResubmitSourceLoad(mock, srcID, 0)
-	expectResubmitCreate(mock, "S20250001", act.Id, srcID, false, 1)
+	expectResubmitSourceLoad(mock, srcID, 0, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 1)
 
 	if err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -157,12 +165,34 @@ func TestResubmitActivityRollbackWhenAlreadyReplaced(t *testing.T) {
 	srcID := int64(10003)
 	act := newResubmitAct()
 
-	expectResubmitSourceLoad(mock, srcID, 1)
-	expectResubmitCreate(mock, "S20250001", act.Id, srcID, false, 0)
+	expectResubmitSourceLoad(mock, srcID, 1, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 0)
+	// 条件更新未命中后重读源活动：已被指向新申请。
+	expectResubmitSourceState(mock, srcID, "reject", 10004)
 
 	err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001")
 	if !errors.Is(err, errs.ErrActivityAlreadyReplaced) {
 		t.Fatalf("err = %v, want ErrActivityAlreadyReplaced", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResubmitActivityRollbackWhenRejectedVerdictChanged 读取源活动后被平台改判为通过：
+// 条件更新因 is_checking 不再是 reject 而未命中，返回"未驳回"而不是"已替代"。
+func TestResubmitActivityRollbackWhenRejectedVerdictChanged(t *testing.T) {
+	svc, mock := newResubmitServiceForTest(t, 5)
+	srcID := int64(10005)
+	act := newResubmitAct()
+
+	expectResubmitSourceLoad(mock, srcID, 1, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 0)
+	expectResubmitSourceState(mock, srcID, model.StancePass, 0)
+
+	err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001")
+	if !errors.Is(err, errs.ErrActivityNotRejected) {
+		t.Fatalf("err = %v, want ErrActivityNotRejected", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

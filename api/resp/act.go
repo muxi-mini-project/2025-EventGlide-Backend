@@ -38,7 +38,8 @@ type ListActivitiesResp struct {
 	ShowImg       []string          `json:"showImg"`
 	IsChecking    string            `json:"isChecking"`
 	RejectReason  string            `json:"rejectReason"`
-	// 以下字段只在活动详情中按权限返回（创建者/签署人），列表接口共用该结构，保持空值。
+	// 以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；
+	// activeForm/signer 只在详情中返回。公开列表共用该结构，这些字段均为空值。
 	Revision   int               `json:"revision"`
 	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
 	ActiveForm string            `json:"activeForm"`

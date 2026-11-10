@@ -157,6 +157,26 @@ func TestCallbackIgnoredWhenLocalMatchesPlatform(t *testing.T) {
 	}
 }
 
+// TestCallbackBackfillsRejectReason 本地已驳回但没记原因（对账写入的 reject 不带原因），
+// 随后带原因的驳回回调不能被当成重复回调丢掉，否则原因会永久缺失。
+func TestCallbackBackfillsRejectReason(t *testing.T) {
+	local := activityForm(model.StanceReject)
+	local.Reason = ""
+	repo := &fakeAuditorRepo{byID: local}
+	aud := &stubAuditorSvc{status: model.StanceReject}
+	svc := newCallbackAuditorWithAudForTest(repo, aud)
+
+	if err := svc.UpdateStatus(context.Background(), 42, "不通过", "资料不全"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.updatedTo != model.StanceReject {
+		t.Fatalf("expected status reject, got %q", repo.updatedTo)
+	}
+	if repo.updatedReason != "资料不全" {
+		t.Fatalf("expected reason backfilled, got %q", repo.updatedReason)
+	}
+}
+
 // TestCallbackTerminalIgnoredWhilePlatformPending 平台还没有结论时，终态回调可能只是
 // 读延迟：应用它会把已发布活动短暂拉下来，退回 pending 同样会扰动，因此一律忽略。
 func TestCallbackTerminalIgnoredWhilePlatformPending(t *testing.T) {

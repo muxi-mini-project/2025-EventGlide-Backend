@@ -79,6 +79,9 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 	return nil
 }
 
+// errResubmitConflict 表示源活动的条件更新未命中：已被替代，或在读取之后被平台改判。
+var errResubmitConflict = errors.New("source activity no longer resubmittable")
+
 // ResubmitActivity 重新送审被驳回的活动：用用户编辑后的完整内容创建一条新申请（新 revision、
 // 新的签署人审批记录），并在同一事务内把源活动的 replaced_by 指向新活动。源活动与其审核表单保留。
 // 新活动的审核表单由后台送审 worker 在下一轮创建并推送，此处不复制。
@@ -94,23 +97,25 @@ func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act 
 
 	act.Revision = src.Revision + 1
 
-	alreadyReplaced := false
+	conflict := false
 	err = as.ad.Transaction(c, func(tx *gorm.DB) error {
 		// 先条件更新源活动的 replaced_by：并发重复提交时只有一个事务能把 0 改为新 id，
 		// 其余请求在这里即被判为已替代，不依赖唯一索引兜底，错误码更准确。
+		// 条件同时含 is_checking = reject，避免把刚被平台改判为通过的活动替换掉。
 		replaced, err := as.ad.MarkReplaced(c, tx, srcID, act.Id)
 		if err != nil {
 			return err
 		}
 		if !replaced {
-			alreadyReplaced = true
-			return errors.New("source activity already replaced")
+			conflict = true
+			return errResubmitConflict
 		}
-		return as.ad.CreateActivity(c, tx, act, signers, studentID)
+		// 保留用户正在编辑的其它活动草稿：重送不是新建活动。
+		return as.ad.CreateActivityKeepDraft(c, tx, act, signers, studentID)
 	})
 	if err != nil {
-		if alreadyReplaced {
-			return errs.ErrActivityAlreadyReplaced
+		if conflict {
+			return as.classifyResubmitConflict(c, srcID)
 		}
 		as.l.Error("failed to resubmit activity tx", zap.Error(err), zap.Int64("srcId", srcID))
 		return errs.ErrActivityCreateFailed.Wrap(err)
@@ -126,6 +131,24 @@ func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act 
 	safe.Go(as.l, "publishFeeds", func() { as.publishFeeds(act, signers, studentID) })
 
 	return nil
+}
+
+// classifyResubmitConflict 在条件更新未命中后重新读取源活动，返回准确的错误码：
+// 已被新申请替代与已被平台改判是两种不同的用户可见结果，不能都报"已替代"。
+func (as *ActivityService) classifyResubmitConflict(c context.Context, srcID int64) error {
+	src, err := as.ad.FindActById(c, srcID)
+	if err != nil {
+		as.l.Warn("failed to reload source activity after resubmit conflict",
+			zap.Error(err), zap.Int64("srcId", srcID))
+		return errs.ErrActivityAlreadyReplaced
+	}
+	if src.ReplacedBy != 0 {
+		return errs.ErrActivityAlreadyReplaced
+	}
+	if src.IsChecking != model.StanceReject {
+		return errs.ErrActivityNotRejected
+	}
+	return errs.ErrActivityAlreadyReplaced
 }
 
 // validateResubmit 校验重新送审的前置条件：仅创建者可操作，源活动必须被驳回且未被替代，

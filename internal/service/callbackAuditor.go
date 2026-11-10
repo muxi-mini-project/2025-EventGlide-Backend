@@ -95,12 +95,16 @@ func (ad *callbackAuditorService) UpdateStatus(c context.Context, id int64, stat
 		default:
 			// 平台已有结论。本地与之一致说明回调是旧的或重复的，忽略以免抖动、
 			// 也避免驳回原因被短暂清空；不一致时以平台为准，只有回调与平台一致才带上回调里的原因。
-			if form.Status == platformStatus {
+			// 例外：本地已驳回但没记原因（对账写入的 reject 不带原因），此时带原因的驳回回调
+			// 要落库补上，否则原因会永久缺失。
+			backfillReason := form.Status == platformStatus && platformStatus == model.StanceReject &&
+				form.Reason == "" && reason != ""
+			if form.Status == platformStatus && !backfillReason {
 				ad.l.Info("ignore callback already consistent with platform status",
 					zap.Int64("formId", id), zap.String("status", platformStatus))
 				return nil
 			}
-			if mapped != platformStatus {
+			if form.Status != platformStatus && mapped != platformStatus {
 				ad.l.Warn("callback conflicts with platform status, align to platform",
 					zap.Int64("formId", id),
 					zap.String("callbackStatus", mapped),
