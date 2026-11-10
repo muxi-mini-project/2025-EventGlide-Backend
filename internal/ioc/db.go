@@ -237,6 +237,8 @@ func renameLegacyActivityUniqueIndex(db *gorm.DB) error {
 
 // dropLegacyActivityUniqueIndex 在新 5 列索引建好后清掉改名保留的旧索引。
 // 索引不存在（全新库、已清理过）时为空操作，保证重复启动幂等。
+// 只有确认新索引（含 revision）已存在才删旧索引：否则会留下"没有任何唯一约束"的表，
+// 与本次改动想避免的窗口对称——重复行一旦写入，下次启动建索引失败且旧索引已没了。
 func dropLegacyActivityUniqueIndex(db *gorm.DB) error {
 	var exists bool
 	if err := db.Raw(
@@ -247,6 +249,19 @@ func dropLegacyActivityUniqueIndex(db *gorm.DB) error {
 		return err
 	}
 	if !exists {
+		return nil
+	}
+
+	var newIndexReady bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? AND column_name = 'revision'",
+		"activity", "idx_activity_unique",
+	).Scan(&newIndexReady).Error; err != nil {
+		return err
+	}
+	if !newIndexReady {
+		log.Printf("dropLegacyActivityUniqueIndex: new index missing, keep %s for next start\n", legacyActivityIndexName)
 		return nil
 	}
 

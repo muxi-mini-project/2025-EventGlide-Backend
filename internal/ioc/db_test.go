@@ -130,10 +130,12 @@ func TestRenameLegacyActivityUniqueIndex(t *testing.T) {
 	})
 }
 
-// TestDropLegacyActivityUniqueIndex 新索引建成后清理改名保留的旧索引；不存在时为空操作。
+// TestDropLegacyActivityUniqueIndex 新索引建成后才清理改名保留的旧索引；
+// 新索引缺失时保留旧索引（宁可不清理，也不能让表失去唯一约束）。
 func TestDropLegacyActivityUniqueIndex(t *testing.T) {
 	const (
 		indexQuery = "SELECT COUNT\\(\\*\\) > 0 FROM information_schema.statistics WHERE table_schema = DATABASE\\(\\) AND table_name = \\? AND index_name = \\?"
+		colQuery   = "SELECT COUNT\\(\\*\\) > 0 FROM information_schema.statistics WHERE table_schema = DATABASE\\(\\) AND table_name = \\? AND index_name = \\? AND column_name = 'revision'"
 		dropStmt   = "DROP INDEX idx_activity_unique_legacy ON activity"
 	)
 
@@ -150,9 +152,26 @@ func TestDropLegacyActivityUniqueIndex(t *testing.T) {
 		}
 	})
 
-	t.Run("旧索引存在时删除", func(t *testing.T) {
+	t.Run("新索引缺失时保留旧索引", func(t *testing.T) {
 		db, mock := newDBForMigrationTest(t)
 		mock.ExpectQuery(indexQuery).WithArgs("activity", "idx_activity_unique_legacy").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(colQuery).WithArgs("activity", "idx_activity_unique").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		if err := dropLegacyActivityUniqueIndex(db); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("新索引就绪后删除旧索引", func(t *testing.T) {
+		db, mock := newDBForMigrationTest(t)
+		mock.ExpectQuery(indexQuery).WithArgs("activity", "idx_activity_unique_legacy").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(colQuery).WithArgs("activity", "idx_activity_unique").
 			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 		mock.ExpectExec(regexp.QuoteMeta(dropStmt)).WillReturnResult(sqlmock.NewResult(0, 0))
 

@@ -1674,6 +1674,7 @@ const docTemplate = `{
         },
         "/user/checking": {
             "get": {
+                "description": "已过期的活动不再返回：end_time \u003c= now 的活动不会再送审、也不会有审核结论。",
                 "produces": [
                     "application/json"
                 ],
