@@ -31,3 +31,31 @@ func TestDetailFieldsVisible(t *testing.T) {
 		})
 	}
 }
+
+// TestActivityVisibleToViewer 被驳回（下架）的活动只对创建者与签署人可见，其他人按"不存在"处理。
+func TestActivityVisibleToViewer(t *testing.T) {
+	cases := []struct {
+		name     string
+		status   string
+		viewer   string
+		isSigner bool
+		want     bool
+	}{
+		{name: "已通过对所有人可见", status: model.StancePass, viewer: "S20250003", want: true},
+		{name: "审核中对所有人可见", status: "pending_auditor", viewer: "S20250003", want: true},
+		{name: "被驳回时创建者可见", status: model.StanceReject, viewer: "S20250001", want: true},
+		{name: "被驳回时签署人可见", status: model.StanceReject, viewer: "S20250002", isSigner: true, want: true},
+		{name: "被驳回时他人不可见", status: model.StanceReject, viewer: "S20250002", want: false},
+		{name: "被驳回时空 viewer 不可见", status: model.StanceReject, viewer: "", want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			act := model.Activity{StudentID: "S20250001", IsChecking: tc.status}
+			if got := activityVisibleToViewer(act, tc.viewer, tc.isSigner); got != tc.want {
+				t.Fatalf("activityVisibleToViewer(status=%q, viewer=%q, isSigner=%v) = %v, want %v",
+					tc.status, tc.viewer, tc.isSigner, got, tc.want)
+			}
+		})
+	}
+}
