@@ -30,6 +30,7 @@ type AuditorUploadWorker struct {
 	logger          *logger.LoggerSet
 	ticker          *time.Ticker
 	reconcileTicker *time.Ticker
+	revokeTicker    *time.Ticker
 }
 
 func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, auditorService AuditorService, logger *logger.LoggerSet) *AuditorUploadWorker {
@@ -39,9 +40,13 @@ func NewAuditorUploadWorker(activityRepo *repo.ActivityRepo, auditorService Audi
 		logger:          logger,
 		ticker:          time.NewTicker(5 * time.Second),
 		reconcileTicker: time.NewTicker(10 * time.Minute),
+		// 过期条目撤销是低频运维动作（活动过期后才需要），一小时一轮足够，
+		// 放在独立 ticker 里避免与上传/对账互相拖延。
+		revokeTicker: time.NewTicker(time.Hour),
 	}
 	safe.Go(logger.Auditor, "auditor-worker.upload", w.run)
 	safe.Go(logger.Auditor, "auditor-worker.reconcile", w.runReconcile)
+	safe.Go(logger.Auditor, "auditor-worker.revoke", w.runRevoke)
 	return w
 }
 
@@ -65,6 +70,19 @@ func (w *AuditorUploadWorker) runReconcile() {
 // reconcile 回查已推送但仍 pending 的表单，弥补平台回调丢失。
 func (w *AuditorUploadWorker) reconcile() {
 	w.processWithTimeoutFor(2*time.Minute, w.auditorService.ReconcilePendingForms)
+}
+
+// runRevoke 撤销所属活动已过期、平台仍 pending 的审核条目。
+func (w *AuditorUploadWorker) runRevoke() {
+	for range w.revokeTicker.C {
+		safe.Run(w.logger.Auditor, "auditor-worker.revoke", w.revoke)
+	}
+}
+
+// revoke 整轮超时给到 5 分钟：单批 revokeBatchSize 条、条间有限流，
+// 既要覆盖一批慢请求，又不能无限期占用 goroutine。
+func (w *AuditorUploadWorker) revoke() {
+	w.processWithTimeoutFor(5*time.Minute, w.auditorService.RevokeExpiredForms)
 }
 
 func (w *AuditorUploadWorker) processWithTimeout(fn func(context.Context)) {
@@ -177,5 +195,8 @@ func (w *AuditorUploadWorker) Stop() {
 	}
 	if w.reconcileTicker != nil {
 		w.reconcileTicker.Stop()
+	}
+	if w.revokeTicker != nil {
+		w.revokeTicker.Stop()
 	}
 }

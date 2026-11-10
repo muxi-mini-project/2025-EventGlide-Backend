@@ -129,3 +129,24 @@ func TestAccessiblePostBatchSQL(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestAccessibleActivityBatchSQL 断言活动可展示性批量判断按活动主键一次 IN 查询，
+// 且只排除审核结论为 reject 的活动（is_checking 为 NULL 的历史行仍算可展示）。
+func TestAccessibleActivityBatchSQL(t *testing.T) {
+	fd, mock := newFeedDaoForTest(t)
+
+	mock.ExpectQuery("SELECT `id` FROM `activity` WHERE id IN \\(\\?,\\?\\) AND \\(is_checking IS NULL OR is_checking <> \\?\\)").
+		WithArgs(int64(2001), int64(2002), "reject").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(2001))
+
+	accessible, err := fd.AccessibleActivityBatch(context.Background(), []int64{2001, 2002})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !accessible[2001] || accessible[2002] {
+		t.Fatalf("expected only 2001 to be accessible, got %+v", accessible)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
