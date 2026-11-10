@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/converter"
 	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/model"
@@ -18,6 +20,8 @@ import (
 
 type ActivityServiceHdl interface {
 	CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error
+	ResubmitActivity(c context.Context, srcID int64, act *model.Activity, signers []model.Signer, studentID string) error
+	IsApprover(c context.Context, act model.Activity, viewer string) bool
 	CreateDraft(c context.Context, draft *model.ActivityDraft) error
 	LoadDraft(c context.Context, sid string) (model.ActivityDraft, error)
 	FindActBySearches(c context.Context, search *req.ActSearchReq) (*model.PaginatedActivities, error)
@@ -33,22 +37,24 @@ type ActivityServiceHdl interface {
 }
 
 type ActivityService struct {
-	ad  *repo.ActivityRepo
-	ud  *repo.UserRepo
-	id  *repo.InteractionRepo
-	mq  mq.MQHdl
-	aud AuditorService
-	l   *zap.Logger
+	ad          *repo.ActivityRepo
+	ud          *repo.UserRepo
+	id          *repo.InteractionRepo
+	mq          mq.MQHdl
+	aud         AuditorService
+	maxResubmit int
+	l           *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, l *logger.LoggerSet) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
 	return &ActivityService{
-		ad:  ad,
-		ud:  ud,
-		id:  id,
-		aud: aud,
-		mq:  mq,
-		l:   l.Activity.Named("service"),
+		ad:          ad,
+		ud:          ud,
+		id:          id,
+		aud:         aud,
+		mq:          mq,
+		maxResubmit: cfg.Auditor.ResubmitLimit(),
+		l:           l.Activity.Named("service"),
 	}
 }
 
@@ -71,6 +77,87 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 	)
 
 	return nil
+}
+
+// ResubmitActivity 重新送审被驳回的活动：用用户编辑后的完整内容创建一条新申请（新 revision、
+// 新的签署人审批记录），并在同一事务内把源活动的 replaced_by 指向新活动。源活动与其审核表单保留。
+// 新活动的审核表单由后台送审 worker 在下一轮创建并推送，此处不复制。
+func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act *model.Activity, signers []model.Signer, studentID string) error {
+	src, err := as.ad.FindActById(c, srcID)
+	if err != nil {
+		as.l.Error("Failed to find source activity for resubmit", zap.Error(err), zap.Int64("srcId", srcID))
+		return errs.ErrActivityNotFound.Wrap(err)
+	}
+	if err := validateResubmit(src, studentID, as.maxResubmit); err != nil {
+		return err
+	}
+
+	act.Revision = src.Revision + 1
+
+	alreadyReplaced := false
+	err = as.ad.Transaction(c, func(tx *gorm.DB) error {
+		// 先条件更新源活动的 replaced_by：并发重复提交时只有一个事务能把 0 改为新 id，
+		// 其余请求在这里即被判为已替代，不依赖唯一索引兜底，错误码更准确。
+		replaced, err := as.ad.MarkReplaced(c, tx, srcID, act.Id)
+		if err != nil {
+			return err
+		}
+		if !replaced {
+			alreadyReplaced = true
+			return errors.New("source activity already replaced")
+		}
+		return as.ad.CreateActivity(c, tx, act, signers, studentID)
+	})
+	if err != nil {
+		if alreadyReplaced {
+			return errs.ErrActivityAlreadyReplaced
+		}
+		as.l.Error("failed to resubmit activity tx", zap.Error(err), zap.Int64("srcId", srcID))
+		return errs.ErrActivityCreateFailed.Wrap(err)
+	}
+
+	as.l.Info("resubmit activity tx",
+		zap.Int64("srcId", srcID),
+		zap.Int64("actId", act.Id),
+		zap.Int("revision", act.Revision),
+	)
+
+	// 与新建一致：新申请需要重新通知签署人签署（源申请的签署记录不能复用）。
+	safe.Go(as.l, "publishFeeds", func() { as.publishFeeds(act, signers, studentID) })
+
+	return nil
+}
+
+// validateResubmit 校验重新送审的前置条件：仅创建者可操作，源活动必须被驳回且未被替代，
+// 且新的 revision 不超过配置的次数上限。
+func validateResubmit(src model.Activity, studentID string, maxResubmit int) error {
+	if src.StudentID != studentID {
+		return errs.ErrActivityNotOwner
+	}
+	if src.IsChecking != model.StanceReject {
+		return errs.ErrActivityNotRejected
+	}
+	if src.ReplacedBy != 0 {
+		return errs.ErrActivityAlreadyReplaced
+	}
+	if src.Revision+1 > maxResubmit {
+		return errs.ErrActivityResubmitLimit
+	}
+	return nil
+}
+
+// IsApprover 判断 viewer 是否是该活动的签署人（approvement 中登记过）。
+// 创建者不算签署人，权限判断由调用方另行处理。
+func (as *ActivityService) IsApprover(c context.Context, act model.Activity, viewer string) bool {
+	if viewer == "" || act.StudentID == viewer {
+		return false
+	}
+	ok, err := as.ad.ExistsApprovement(c, act.Id, viewer)
+	if err != nil {
+		as.l.Error("Failed to check activity approver", zap.Error(err), zap.Int64("actId", act.Id))
+		return false
+	}
+	return ok
 }
 
 func (as *ActivityService) CreateDraft(c context.Context, draft *model.ActivityDraft) error {

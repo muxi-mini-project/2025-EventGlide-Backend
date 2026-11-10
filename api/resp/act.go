@@ -15,7 +15,10 @@ type CreateActivityResp struct {
 	IsChecking    string            `json:"isChecking"`
 	ActiveForm    string            `json:"activeForm"`
 	Signer        []Signer          `json:"signer"`
-	UserInfo      UserInfo          `json:"userInfo"`
+	// Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 非空表示该申请已被新版本替代。
+	Revision   int               `json:"revision"`
+	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
+	UserInfo   UserInfo          `json:"userInfo"`
 }
 
 type ListActivitiesResp struct {
@@ -35,6 +38,11 @@ type ListActivitiesResp struct {
 	ShowImg       []string          `json:"showImg"`
 	IsChecking    string            `json:"isChecking"`
 	RejectReason  string            `json:"rejectReason"`
+	// 以下字段只在活动详情中按权限返回（创建者/签署人），列表接口共用该结构，保持空值。
+	Revision   int               `json:"revision"`
+	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
+	ActiveForm string            `json:"activeForm"`
+	Signer     []Signer          `json:"signer"`
 
 	LikeNum    uint `json:"likeNum"`
 	CollectNum uint `json:"collectNum"`

@@ -110,6 +110,12 @@ func migrate(db *gorm.DB) error {
 		return err
 	}
 
+	// activity 唯一索引由 4 列扩展为含 revision 的 5 列，AutoMigrate 不会修改已存在的索引，
+	// 需先删掉旧索引，再由 AutoMigrate 重建。
+	if err := dropLegacyActivityUniqueIndex(db); err != nil {
+		return err
+	}
+
 	// auditor_form 将建 (activity_id, subject) 唯一索引，需先清掉存量重复行
 	// （历史 worker 每 5s 重复送审累积的），否则 AutoMigrate 建索引失败。
 	// 去重后若仍有并发写入造成重复（滚动发布期间旧实例仍在写），建唯一索引会因 1062
@@ -164,6 +170,56 @@ func backfillPostAuditStatus(db *gorm.DB) error {
 	if res.RowsAffected > 0 {
 		log.Printf("backfillPostAuditStatus: moved %d checking post(s) to pass\n", res.RowsAffected)
 	}
+	return nil
+}
+
+// dropLegacyActivityUniqueIndex 删除 activity 旧的 4 列唯一索引 idx_activity_unique，
+// 由 AutoMigrate 重建为含 revision 的 5 列索引。全新库（表不存在）、索引不存在、
+// 或索引已含 revision 时跳过，保证重复启动幂等。
+func dropLegacyActivityUniqueIndex(db *gorm.DB) error {
+	const (
+		tableName = "activity"
+		indexName = "idx_activity_unique"
+	)
+	var tableExists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.tables "+
+			"WHERE table_schema = DATABASE() AND table_name = ?", tableName,
+	).Scan(&tableExists).Error; err != nil {
+		return err
+	}
+	if !tableExists {
+		return nil
+	}
+
+	var indexExists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+		tableName, indexName,
+	).Scan(&indexExists).Error; err != nil {
+		return err
+	}
+	if !indexExists {
+		return nil
+	}
+
+	var hasRevision bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? AND column_name = 'revision'",
+		tableName, indexName,
+	).Scan(&hasRevision).Error; err != nil {
+		return err
+	}
+	if hasRevision {
+		return nil
+	}
+
+	if err := db.Exec("DROP INDEX " + indexName + " ON " + tableName).Error; err != nil {
+		return err
+	}
+	log.Printf("dropLegacyActivityUniqueIndex: dropped legacy index %s on %s\n", indexName, tableName)
 	return nil
 }
 

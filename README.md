@@ -189,6 +189,7 @@ auditor:
   apiKey: apiKey
   webhookPath: /api/v1/auditor/webhook
   effect: slow # slow为先审后发，fast为先发后审
+  maxResubmit: 5 # 活动被驳回后允许重新送审的最大次数，<=0 时按 5 处理
 ```
 
 ---

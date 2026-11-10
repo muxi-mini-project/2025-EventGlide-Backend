@@ -63,6 +63,19 @@ type AuditorConf struct {
 	ApiKey      string `yaml:"apiKey"`
 	WebHookPath string `yaml:"webhookPath"`
 	Effect      string `yaml:"effect"`
+	MaxResubmit int    `yaml:"maxResubmit"`
+}
+
+// DefaultMaxResubmit 未配置或配置非法时的重新送审次数上限。
+const DefaultMaxResubmit = 5
+
+// ResubmitLimit 返回生效的重新送审次数上限：非正值按默认值处理，
+// 避免误配 0/负数导致用户无法重新送审。
+func (c AuditorConf) ResubmitLimit() int {
+	if c.MaxResubmit <= 0 {
+		return DefaultMaxResubmit
+	}
+	return c.MaxResubmit
 }
 
 type KafkaConf struct {

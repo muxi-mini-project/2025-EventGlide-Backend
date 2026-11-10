@@ -37,6 +37,8 @@ type ActDaoHdl interface {
 	BatchCreateSigners(context.Context, *gorm.DB, []model.ActivitySigner) error
 	FindRejectedAct(context.Context, string, string, string, string) (model.Activity, error) // studentID, title, startTime, endTime
 	FindPendingAuditorActivities(context.Context) ([]model.Activity, error)
+	MarkActivityReplaced(context.Context, *gorm.DB, int64, int64) (bool, error) // srcID, newID
+	ExistsApprovement(context.Context, int64, string) (bool, error)             // activityID, studentID
 }
 
 type ActDao struct {
@@ -414,4 +416,28 @@ func (ad *ActDao) FindActsByIds(c context.Context, ids []int64) ([]model.Activit
 	var acts []model.Activity
 	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("id IN ?", ids).Find(&acts).Error
 	return acts, err
+}
+
+// MarkActivityReplaced 把源活动的 replaced_by 指向新活动，条件更新保证并发下只有一次成功。
+// 返回 false 表示源活动已被替代（此时调用方应回滚事务）。
+func (ad *ActDao) MarkActivityReplaced(c context.Context, tx *gorm.DB, srcID, newID int64) (bool, error) {
+	res := tx.WithContext(c).Model(&model.Activity{}).
+		Where("id = ? AND replaced_by = 0", srcID).
+		Update("replaced_by", newID)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// ExistsApprovement 判断某学号是否为该活动的签署人（approvement 只记录除申请人外的签署人）。
+func (ad *ActDao) ExistsApprovement(c context.Context, activityID int64, studentID string) (bool, error) {
+	var count int64
+	err := ad.db.WithContext(c).Model(&model.Approvement{}).
+		Where("activity_id = ? AND student_id = ?", activityID, studentID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

@@ -513,6 +513,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/act/{id}/resubmit": {
+            "post": {
+                "description": "用编辑后的完整内容创建一条新申请（revision+1），并把源活动标记为已被替代",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Activity"
+                ],
+                "summary": "重新送审被驳回的活动",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "源活动 id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "编辑后的活动内容",
+                        "name": "activity",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/req.CreateActReq"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "token",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/resp.Resp"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/resp.CreateActivityResp"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
         "/comment/answer": {
             "post": {
                 "produces": [
@@ -2778,6 +2838,13 @@ const docTemplate = `{
                 "position": {
                     "type": "string"
                 },
+                "replacedBy": {
+                    "type": "integer"
+                },
+                "revision": {
+                    "description": "Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 非空表示该申请已被新版本替代。",
+                    "type": "integer"
+                },
                 "showImg": {
                     "type": "array",
                     "items": {
@@ -3118,6 +3185,9 @@ const docTemplate = `{
         "resp.ListActivitiesResp": {
             "type": "object",
             "properties": {
+                "activeForm": {
+                    "type": "string"
+                },
                 "address": {
                     "type": "string"
                 },
@@ -3163,10 +3233,23 @@ const docTemplate = `{
                 "rejectReason": {
                     "type": "string"
                 },
+                "replacedBy": {
+                    "type": "integer"
+                },
+                "revision": {
+                    "description": "以下字段只在活动详情中按权限返回（创建者/签署人），列表接口共用该结构，保持空值。",
+                    "type": "integer"
+                },
                 "showImg": {
                     "type": "array",
                     "items": {
                         "type": "string"
+                    }
+                },
+                "signer": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/resp.Signer"
                     }
                 },
                 "title": {

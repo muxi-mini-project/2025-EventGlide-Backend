@@ -16,10 +16,14 @@ const (
 
 	// 服务错误
 	// Activity
-	ActivityNotFound     = 30000
-	ActivityExpired      = 30001
-	ActivityCreateFailed = 30002
-	DraftNotFound        = 30003
+	ActivityNotFound        = 30000
+	ActivityExpired         = 30001
+	ActivityCreateFailed    = 30002
+	DraftNotFound           = 30003
+	ActivityResubmitLimit   = 30004
+	ActivityNotRejected     = 30005
+	ActivityAlreadyReplaced = 30006
+	ActivityNotOwner        = 30007
 
 	// Post
 	PostNotFound     = 31000

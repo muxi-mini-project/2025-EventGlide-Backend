@@ -1,8 +1,14 @@
 package ioc
 
 import (
+	"regexp"
 	"testing"
 	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 func TestConnLifetimeOrDefaults(t *testing.T) {
@@ -29,4 +35,97 @@ func TestConnLifetimeOrDefaults(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newDBForMigrationTest(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	t.Helper()
+
+	sqlDB, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	db, err := gorm.Open(mysql.New(mysql.Config{Conn: sqlDB, SkipInitializeWithVersion: true}), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{SingularTable: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, mock
+}
+
+// TestDropLegacyActivityUniqueIndex 锁住迁移的三条分支：全新库/无索引不动手，
+// 旧索引（不含 revision）被删除，已迁移索引保持不动（重复启动幂等）。
+func TestDropLegacyActivityUniqueIndex(t *testing.T) {
+	const (
+		tableQuery = "SELECT COUNT\\(\\*\\) > 0 FROM information_schema.tables WHERE table_schema = DATABASE\\(\\) AND table_name = \\?"
+		indexQuery = "SELECT COUNT\\(\\*\\) > 0 FROM information_schema.statistics WHERE table_schema = DATABASE\\(\\) AND table_name = \\? AND index_name = \\?"
+		colQuery   = "SELECT COUNT\\(\\*\\) > 0 FROM information_schema.statistics WHERE table_schema = DATABASE\\(\\) AND table_name = \\? AND index_name = \\? AND column_name = 'revision'"
+		dropStmt   = "DROP INDEX idx_activity_unique ON activity"
+	)
+
+	t.Run("全新库表不存在时跳过", func(t *testing.T) {
+		db, mock := newDBForMigrationTest(t)
+		mock.ExpectQuery(tableQuery).WithArgs("activity").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+		mock.ExpectationsWereMet()
+
+		if err := dropLegacyActivityUniqueIndex(db); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("索引不存在时跳过", func(t *testing.T) {
+		db, mock := newDBForMigrationTest(t)
+		mock.ExpectQuery(tableQuery).WithArgs("activity").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(indexQuery).WithArgs("activity", "idx_activity_unique").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
+		if err := dropLegacyActivityUniqueIndex(db); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("旧索引不含 revision 时删除", func(t *testing.T) {
+		db, mock := newDBForMigrationTest(t)
+		mock.ExpectQuery(tableQuery).WithArgs("activity").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(indexQuery).WithArgs("activity", "idx_activity_unique").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(colQuery).WithArgs("activity", "idx_activity_unique").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+		mock.ExpectExec(regexp.QuoteMeta(dropStmt)).WillReturnResult(sqlmock.NewResult(0, 0))
+
+		if err := dropLegacyActivityUniqueIndex(db); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("索引已含 revision 时跳过", func(t *testing.T) {
+		db, mock := newDBForMigrationTest(t)
+		mock.ExpectQuery(tableQuery).WithArgs("activity").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(indexQuery).WithArgs("activity", "idx_activity_unique").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+		mock.ExpectQuery(colQuery).WithArgs("activity", "idx_activity_unique").
+			WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+		if err := dropLegacyActivityUniqueIndex(db); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }

@@ -177,6 +177,8 @@ func ToCreateActivityResp(d model.ActivityDetail) resp.CreateActivityResp {
 	res.IfRegister = act.IfRegister
 	res.Signer = ActivitySignersToResp(act.Signers)
 	res.IsChecking = act.IsChecking
+	res.Revision = act.Revision
+	res.ReplacedBy = utils.SnowflakeID(act.ReplacedBy)
 	res.UserInfo.School = d.Author.School
 	res.UserInfo.Username = d.Author.Name
 	res.UserInfo.Avatar = d.Author.Avatar

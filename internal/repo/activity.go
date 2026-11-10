@@ -203,3 +203,14 @@ func (r *ActivityRepo) FindPendingAuditorActivities(ctx context.Context) ([]mode
 func (r *ActivityRepo) FindActsByIds(ctx context.Context, ids []int64) ([]model.Activity, error) {
 	return r.dao.FindActsByIds(ctx, ids)
 }
+
+// MarkReplaced 在同一事务内把源活动的 replaced_by 指向新活动。
+// 返回 false 表示源活动已被其他请求替代，调用方须回滚本次创建。
+func (r *ActivityRepo) MarkReplaced(ctx context.Context, tx *gorm.DB, srcID, newID int64) (bool, error) {
+	return r.dao.MarkActivityReplaced(ctx, tx, srcID, newID)
+}
+
+// ExistsApprovement 判断某学号是否为该活动的签署人。
+func (r *ActivityRepo) ExistsApprovement(ctx context.Context, activityID int64, studentID string) (bool, error) {
+	return r.dao.ExistsApprovement(ctx, activityID, studentID)
+}
