@@ -31,6 +31,7 @@ type fakeAuditorRepo struct {
 	updatedReason  string              // Update 写入的最后一个原因
 	parkCnt        int                 // ParkAsPending 调用次数
 	parkFormId     int64               // ParkAsPending 收到的表单 id
+	parkObserved   string              // ParkAsPending 收到的读取时状态
 	reasons        map[int64]string    // FindReasonsByActivityIDs 的返回值
 	pushedPending  []model.AuditorForm // FindPushedPending 的返回值
 	expiredForms   []model.AuditorForm // FindExpiredPushedPending 的返回值
@@ -80,10 +81,11 @@ func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status str
 	return nil
 }
 
-// ParkAsPending 模拟条件更新：真实 DAO 只在 status<>'pending' 时写行。
-func (f *fakeAuditorRepo) ParkAsPending(_ context.Context, formId int64) error {
+// ParkAsPending 模拟条件更新：真实 DAO 只在状态与读取时一致时才写行。
+func (f *fakeAuditorRepo) ParkAsPending(_ context.Context, formId int64, observedStatus string) error {
 	f.parkCnt++
 	f.parkFormId = formId
+	f.parkObserved = observedStatus
 	return nil
 }
 

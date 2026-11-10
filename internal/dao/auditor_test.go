@@ -3,6 +3,7 @@ package dao
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log"
 	"strings"
 	"testing"
@@ -396,11 +397,11 @@ func TestUpdateIfPendingMissingIsIdempotent(t *testing.T) {
 func TestParkAsPendingSQL(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status <> \\?$").
-		WithArgs("pending", sqlmock.AnyArg(), int64(42), "pending").
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	if err := repo.ParkAsPending(context.Background(), 42); err != nil {
+	if err := repo.ParkAsPending(context.Background(), 42, "reject"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -408,17 +409,40 @@ func TestParkAsPendingSQL(t *testing.T) {
 	}
 }
 
-// TestParkAsPendingSkipsWhenAlreadyPending 条件未命中（已是 pending，或行已删除）时不写行，
-// 并视为幂等成功。同时确认退回 pending 不会触发活动同步：只失败一次回查不能把活动改回待审核。
+// TestParkAsPendingSkipsWhenAlreadyPending 条件未命中且当前已是 pending（另一个回调先 park 了），
+// 视为幂等成功。同时确认退回 pending 不会触发活动同步。
 func TestParkAsPendingSkipsWhenAlreadyPending(t *testing.T) {
 	repo, mock := newAuditorDaoForTest(t)
 
-	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status <> \\?$").
-		WithArgs("pending", sqlmock.AnyArg(), int64(42), "pending").
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT `status` FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("pending"))
 
-	if err := repo.ParkAsPending(context.Background(), 42); err != nil {
+	if err := repo.ParkAsPending(context.Background(), 42, "reject"); err != nil {
 		t.Fatalf("rows affected=0 must be idempotent success, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestParkAsPendingKeepsConcurrentConclusion 回查期间结论被并发写入（reject -> pass）时，
+// 不能把 pass 覆盖成 pending，返回冲突让平台重试。
+func TestParkAsPendingKeepsConcurrentConclusion(t *testing.T) {
+	repo, mock := newAuditorDaoForTest(t)
+
+	mock.ExpectExec("^UPDATE `auditor_form` SET `status`=\\?,`updated_at`=\\? WHERE id = \\? AND status = \\?$").
+		WithArgs("pending", sqlmock.AnyArg(), int64(42), "reject").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery("SELECT `status` FROM `auditor_form` WHERE id = \\? ORDER BY `auditor_form`.`id` LIMIT \\?").
+		WithArgs(int64(42), 1).
+		WillReturnRows(sqlmock.NewRows([]string{"status"}).AddRow("pass"))
+
+	if err := repo.ParkAsPending(context.Background(), 42, "reject"); !errors.Is(err, ErrAuditorParkConflict) {
+		t.Fatalf("err = %v, want ErrAuditorParkConflict", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

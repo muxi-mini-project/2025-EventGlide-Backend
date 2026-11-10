@@ -367,6 +367,10 @@ func TestCallbackUnconfirmedParksAsPending(t *testing.T) {
 			if repo.parkCnt != 1 || repo.parkFormId != 42 {
 				t.Fatalf("unconfirmed platform status must park form as pending, got park=%d id=%d", repo.parkCnt, repo.parkFormId)
 			}
+			// 条件更新必须带上读取时的状态，避免覆盖并发写入的终态。
+			if repo.parkObserved != model.StanceReject {
+				t.Fatalf("park must carry the observed status, got %q", repo.parkObserved)
+			}
 			if repo.updatedTo != "" {
 				t.Fatalf("unconfirmed platform status must not write status directly, got %q", repo.updatedTo)
 			}

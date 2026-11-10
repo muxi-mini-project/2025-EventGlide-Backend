@@ -79,7 +79,7 @@ func (ad *callbackAuditorService) UpdateStatus(c context.Context, id int64, stat
 				zap.String("callbackStatus", mapped),
 				zap.String("platformStatus", platformStatus),
 				zap.Error(confirmErr))
-			return ad.repo.ParkAsPending(c, id)
+			return ad.repo.ParkAsPending(c, id, form.Status)
 
 		case platformStatus == model.StancePending:
 			// 平台还没有结论。此时应用终态可能是读延迟造成的误判，会把已发布活动短暂拉下来；
