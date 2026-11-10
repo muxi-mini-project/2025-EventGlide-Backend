@@ -505,7 +505,7 @@ func TestRevokeExpiredForms_RevokesOnlyPending(t *testing.T) {
 			if ids == "43" {
 				status = 1 // pass：平台已出结论，不应撤销
 			}
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"msg":"","code":200,"data":{"items":[{"status":%d,"hook_id":%s}]}}`, status, ids)))
+			_, _ = fmt.Fprintf(w, `{"msg":"","code":200,"data":{"items":[{"status":%d,"hook_id":%s}]}}`, status, ids)
 		case http.MethodDelete:
 			mu.Lock()
 			deleted = append(deleted, r.URL.Path)
