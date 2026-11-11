@@ -21,6 +21,9 @@ type SubjectInfo struct {
 	Subject   string
 	StudentID string
 	Id        int64
+	// RootObjectType / RootObjectID 仅评论使用：点赞/收藏评论时据其校验所属根对象的可见性。
+	RootObjectType string
+	RootObjectID   int64
 }
 
 type SubjectGetter interface {
@@ -107,9 +110,11 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string
 		}
 
 		return SubjectInfo{
-			Subject:   SubjectComment,
-			StudentID: cmt.StudentID,
-			Id:        cmt.Id,
+			Subject:        SubjectComment,
+			StudentID:      cmt.StudentID,
+			Id:             cmt.Id,
+			RootObjectType: cmt.RootObjectType,
+			RootObjectID:   cmt.RootObjectID,
 		}, nil
 	}
 
