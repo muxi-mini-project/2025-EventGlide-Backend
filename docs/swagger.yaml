@@ -97,7 +97,7 @@ definitions:
       content:
         type: string
       parentId:
-        type: integer
+        type: string
       subject:
         type: string
     required:
@@ -157,14 +157,14 @@ definitions:
   req.DeleteCommentReq:
     properties:
       targetId:
-        type: integer
+        type: string
     required:
     - targetId
     type: object
   req.DeletePostReq:
     properties:
       targetId:
-        type: integer
+        type: string
     required:
     - targetId
     type: object
@@ -270,7 +270,7 @@ definitions:
       subject:
         type: string
       targetId:
-        type: integer
+        type: string
     required:
     - subject
     - targetId
@@ -302,7 +302,7 @@ definitions:
   req.SetPostVisibilityReq:
     properties:
       id:
-        type: integer
+        type: string
       visibility:
         enum:
         - public
@@ -385,13 +385,13 @@ definitions:
       creator:
         $ref: '#/definitions/resp.Creator'
       id:
-        type: integer
+        type: string
       isLike:
         type: string
       likeNum:
         type: integer
       parentId:
-        type: integer
+        type: string
       reply:
         items:
           $ref: '#/definitions/resp.ReplyResp'
@@ -399,7 +399,7 @@ definitions:
       replyNum:
         type: integer
       rootId:
-        type: integer
+        type: string
     type: object
   resp.CreateActivityResp:
     properties:
@@ -408,7 +408,7 @@ definitions:
       address:
         type: string
       id:
-        type: integer
+        type: string
       ifRegister:
         type: string
       introduce:
@@ -420,7 +420,7 @@ definitions:
       position:
         type: string
       replacedBy:
-        type: integer
+        type: string
       revision:
         description: |-
           Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 为替代它的新申请 id，
@@ -466,17 +466,17 @@ definitions:
       PublishedAt:
         type: string
       RootId:
-        type: integer
+        type: string
       RootType:
         type: string
       Subject:
         type: string
       TargetId:
-        type: integer
+        type: string
       Userinfo:
         $ref: '#/definitions/resp.FeedUserInfo'
       id:
-        type: integer
+        type: string
       status:
         type: string
       targetDeleted:
@@ -491,17 +491,17 @@ definitions:
       PublishedAt:
         type: string
       RootId:
-        type: integer
+        type: string
       RootType:
         type: string
       Subject:
         type: string
       TargetId:
-        type: integer
+        type: string
       Userinfo:
         $ref: '#/definitions/resp.FeedUserInfo'
       id:
-        type: integer
+        type: string
       status:
         type: string
       targetDeleted:
@@ -516,17 +516,17 @@ definitions:
       PublishedAt:
         type: string
       RootId:
-        type: integer
+        type: string
       RootType:
         type: string
       Subject:
         type: string
       TargetId:
-        type: integer
+        type: string
       Userinfo:
         $ref: '#/definitions/resp.FeedUserInfo'
       id:
-        type: integer
+        type: string
       status:
         type: string
       targetDeleted:
@@ -541,17 +541,17 @@ definitions:
       PublishedAt:
         type: string
       RootId:
-        type: integer
+        type: string
       RootType:
         type: string
       Subject:
         type: string
       TargetId:
-        type: integer
+        type: string
       Userinfo:
         $ref: '#/definitions/resp.FeedUserInfo'
       id:
-        type: integer
+        type: string
       status:
         type: string
     type: object
@@ -564,17 +564,17 @@ definitions:
       PublishedAt:
         type: string
       RootId:
-        type: integer
+        type: string
       RootType:
         type: string
       Subject:
         type: string
       TargetId:
-        type: integer
+        type: string
       Userinfo:
         $ref: '#/definitions/resp.FeedUserInfo'
       id:
-        type: integer
+        type: string
       status:
         type: string
       targetDeleted:
@@ -671,7 +671,7 @@ definitions:
       holderType:
         type: string
       id:
-        type: integer
+        type: string
       ifRegister:
         type: string
       introduce:
@@ -691,7 +691,7 @@ definitions:
       rejectReason:
         type: string
       replacedBy:
-        type: integer
+        type: string
       revision:
         description: |-
           以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；
@@ -719,7 +719,7 @@ definitions:
       commentNum:
         type: integer
       id:
-        type: integer
+        type: string
       introduce:
         type: string
       isChecking:
@@ -761,7 +761,7 @@ definitions:
       createdAt:
         type: string
       id:
-        type: integer
+        type: string
       introduce:
         type: string
       showImg:
@@ -828,13 +828,13 @@ definitions:
   resp.ReplyResp:
     properties:
       id:
-        type: integer
+        type: string
       isLike:
         type: string
       likeNum:
         type: integer
       parentId:
-        type: integer
+        type: string
       parentUserName:
         type: string
       replyContent:
@@ -848,7 +848,7 @@ definitions:
       replyTime:
         type: string
       rootId:
-        type: integer
+        type: string
     type: object
   resp.Resp:
     properties:
@@ -935,7 +935,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       - description: 编辑后的活动内容
         in: body
         name: activity

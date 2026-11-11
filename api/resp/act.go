@@ -3,7 +3,7 @@ package resp
 import "github.com/raiki02/EG/pkg/utils"
 
 type CreateActivityResp struct {
-	Id            utils.SnowflakeID `json:"id"`
+	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Title         string            `json:"title"`
 	Introduce     string            `json:"introduce"`
 	ShowImg       []Image           `json:"showImg"`
@@ -18,7 +18,7 @@ type CreateActivityResp struct {
 	// Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 为替代它的新申请 id，
 	// 序列化成字符串，"0" 表示未被替代（不是空串或 null）。
 	Revision   int               `json:"revision"`
-	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
+	ReplacedBy utils.SnowflakeID `json:"replacedBy" swaggertype:"string"`
 	UserInfo   UserInfo          `json:"userInfo"`
 }
 
@@ -28,7 +28,7 @@ type ListActivitiesResp struct {
 	DetailTime DetailTime `json:"detailTime"`
 
 	Title         string            `json:"title"`
-	Id            utils.SnowflakeID `json:"id"`
+	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Introduce     string            `json:"introduce"`
 	OrganizerUnit string            `json:"organizerUnit"`
 	Position      string            `json:"position"`
@@ -42,7 +42,7 @@ type ListActivitiesResp struct {
 	// 以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；
 	// activeForm/signer 只在详情中返回。公开列表共用该结构，这些字段均为空值。
 	Revision   int               `json:"revision"`
-	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
+	ReplacedBy utils.SnowflakeID `json:"replacedBy" swaggertype:"string"`
 	ActiveForm string            `json:"activeForm"`
 	Signer     []Signer          `json:"signer"`
 

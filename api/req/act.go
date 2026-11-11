@@ -41,7 +41,7 @@ type FindActByDateReq struct {
 }
 
 type FindActByIdReq struct {
-	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id" swaggertype:"string"`
 }
 
 // ResubmitActReq 重新送审请求：路径参数带源活动 id，请求体复用创建活动的完整内容。
