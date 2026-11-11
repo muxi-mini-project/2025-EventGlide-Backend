@@ -63,12 +63,13 @@ type ActivityService struct {
 	id          *repo.InteractionRepo
 	mq          mq.MQHdl
 	aud         AuditorService
+	imgWorker   *ImageSizeWorker
 	maxResubmit int
 	effect      string
 	l           *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgWorker *ImageSizeWorker, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
 	lg := l.Activity.Named("service")
 	effect := cfg.Auditor.EffectMode()
 	if effect != cfg.Auditor.Effect {
@@ -81,6 +82,7 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.Inter
 		id:          id,
 		aud:         aud,
 		mq:          mq,
+		imgWorker:   imgWorker,
 		maxResubmit: cfg.Auditor.ResubmitLimit(),
 		effect:      effect,
 		l:           lg,
@@ -99,6 +101,12 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 	if err != nil {
 		as.l.Error("failed to create activity tx", zap.Error(err))
 		return errs.ErrActivityCreateFailed.Wrap(err)
+	}
+
+	// 前端为准：宽高随请求入库；漏传/传错的行走 pending，创建不阻塞，
+	// 落库成功后唤醒回填 worker 异步兜底。
+	if hasPendingImage(act.Images) {
+		as.imgWorker.Notify()
 	}
 
 	safe.Go(as.l, "publishFeeds", func() { as.publishFeeds(act, signers, studentID) })
@@ -221,6 +229,11 @@ func (as *ActivityService) CreateDraft(c context.Context, draft *model.ActivityD
 	if err := as.ad.CreateDraft(c, draft); err != nil {
 		as.l.Error("Failed to create draft", zap.Error(err))
 		return errs.ErrInternal.Wrap(err)
+	}
+	// 草稿图片同样可能漏传宽高：唤醒回填 worker 兜底。
+	// 草稿反复保存会整批删旧插新，同 URL 行由 CopySizeFromDuplicates 免费复制。
+	if hasPendingImage(draft.Images) {
+		as.imgWorker.Notify()
 	}
 	return nil
 }

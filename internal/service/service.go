@@ -10,6 +10,8 @@ var Provider = wire.NewSet(
 	NewAuditorService,
 	NewFeedService,
 	NewCallbackAuditor,
+	NewImageSizeResolver,
+	NewImageSizeWorker,
 	NewImgUploader,
 	NewPostService,
 	NewInteractionService,

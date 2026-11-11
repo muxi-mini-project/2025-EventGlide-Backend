@@ -6,7 +6,7 @@ type CreateActivityResp struct {
 	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Title         string            `json:"title"`
 	Introduce     string            `json:"introduce"`
-	ShowImg       []string          `json:"showImg"`
+	ShowImg       []Image           `json:"showImg"`
 	Type          string            `json:"type"`
 	OrganizerUnit string            `json:"organizerUnit"`
 	Position      string            `json:"position"`
@@ -36,7 +36,7 @@ type ListActivitiesResp struct {
 	Type          string            `json:"type"`
 	HolderType    string            `json:"holderType"`
 	IfRegister    string            `json:"ifRegister"`
-	ShowImg       []string          `json:"showImg"`
+	ShowImg       []Image           `json:"showImg"`
 	IsChecking    string            `json:"isChecking"`
 	RejectReason  string            `json:"rejectReason"`
 	// 以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；
@@ -62,9 +62,9 @@ type PaginatedListActivitiesResp struct {
 }
 
 type LoadActivitiesDraftResp struct {
-	Title     string   `json:"title"`
-	Introduce string   `json:"introduce"`
-	ShowImg   []string `json:"showImg"`
+	Title     string  `json:"title"`
+	Introduce string  `json:"introduce"`
+	ShowImg   []Image `json:"showImg"`
 
 	LabelForm LabelForm `json:"labelform"`
 }
