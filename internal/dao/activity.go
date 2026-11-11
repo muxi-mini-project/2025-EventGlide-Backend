@@ -25,6 +25,7 @@ type ActDaoHdl interface {
 	FindActByName(context.Context, string, int, int) (*model.PaginatedActivities, error)
 	FindActByDate(context.Context, string, int, int) (*model.PaginatedActivities, error)
 	FindActByOwnerID(context.Context, string, int, int) (*model.PaginatedActivities, error)
+	FindActListForStudent(context.Context, string, string, string, int, int) (*model.PaginatedActivities, error)
 	FindActBySearches(context.Context, *req.ActSearchReq) (*model.PaginatedActivities, error)
 	FindActById(context.Context, int64) (model.Activity, error)
 	DeleteActivityDraft(context.Context, *gorm.DB, string) error
@@ -275,20 +276,57 @@ func (ad *ActDao) FindActByOwnerID(c context.Context, s string, page, limit int)
 	}, nil
 }
 
-// FindActByOwnerIDAll 仅用于本人查看自己全部活动：返回其全部审核状态（含 pending_signers/
-// pending_auditor/pass/reject），不套 SetEffect——本人应能看到自己的审核中与被拒活动。
-// 仍限定 end_time > now，与既有"我的活动"列表的时间维度一致。勿用于查看他人。
-func (ad *ActDao) FindActByOwnerIDAll(c context.Context, s string, page, limit int) (*model.PaginatedActivities, error) {
+// FindActListForStudent 返回学生本人视角的活动列表：默认只含自己创建的活动，
+// role 可扩展到"我签署的"（approvement 子查询）；scope 控制时间范围与已结束活动的审核状态。
+// 不套 SetEffect——本人应能看到自己的审核中与被拒活动。
+// scope/role 需已由上层用 req.ActScope*/req.ActRole* 归一化，未知值按 active/creator 处理。
+// 列表与 count 通过同一份条件闭包构造，保证口径一致。
+func (ad *ActDao) FindActListForStudent(c context.Context, s string, scope string, role string, page, limit int) (*model.PaginatedActivities, error) {
 	var as []model.Activity
 	var total int64
 	offset := (page - 1) * limit
+	now := time.Now()
+	base := ad.db.WithContext(c)
 
-	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").Where("student_id = ?", s).Where("end_time > ?", time.Now()).Order("start_time ASC").Limit(limit).Offset(offset).Find(&as).Error
-	if err != nil {
+	conds := func(db *gorm.DB) *gorm.DB {
+		db = db.Model(&model.Activity{})
+
+		switch role {
+		case req.ActRoleParticipant:
+			db = db.Where("id IN (?)", base.Model(&model.Approvement{}).Select("activity_id").Where("student_id = ?", s))
+		case req.ActRoleAll:
+			db = db.Where("(student_id = ? OR id IN (?))", s,
+				base.Model(&model.Approvement{}).Select("activity_id").Where("student_id = ?", s))
+		default:
+			db = db.Where("student_id = ?", s)
+		}
+
+		switch scope {
+		case req.ActScopeEnded:
+			// 已结束：只保留已通过的活动，pending/reject 不再出现在本人列表。
+			db = db.Where("end_time <= ?", now).Where("is_checking = ?", model.StancePass)
+		case req.ActScopeAll:
+			db = db.Where("(end_time > ? OR is_checking = ?)", now, model.StancePass)
+		default:
+			db = db.Where("end_time > ?", now)
+		}
+		return db
+	}
+
+	// 次级排序键保证同一时间点的多行在翻页时顺序稳定，避免重复或遗漏。
+	order := "start_time ASC, id ASC"
+	switch scope {
+	case req.ActScopeEnded:
+		order = "end_time DESC, id DESC"
+	case req.ActScopeAll:
+		order = "start_time DESC, id DESC"
+	}
+
+	if err := conds(base).Preload("Signers").Preload("Images").
+		Order(order).Limit(limit).Offset(offset).Find(&as).Error; err != nil {
 		return nil, err
 	}
-	err = ad.db.WithContext(c).Where("student_id = ?", s).Where("end_time > ?", time.Now()).Model(&model.Activity{}).Count(&total).Error
-	if err != nil {
+	if err := conds(base).Count(&total).Error; err != nil {
 		return nil, err
 	}
 

@@ -315,6 +315,7 @@ const docTemplate = `{
         },
         "/act/own": {
             "post": {
+                "description": "scope：active(默认，进行中，全部审核状态) | ended(已结束且已通过) | all(进行中或已通过)；role：creator(默认，我创建的) | participant(我签署的) | all(两者)。空值与非法值按默认处理。",
                 "consumes": [
                     "application/json"
                 ],
@@ -324,7 +325,7 @@ const docTemplate = `{
                 "tags": [
                     "Activity"
                 ],
-                "summary": "通过创建者id查找活动（本人全部状态，含审核中与被拒）",
+                "summary": "本人活动列表（支持 scope/role 筛选）",
                 "parameters": [
                     {
                         "type": "string",
@@ -334,7 +335,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "分页请求",
+                        "description": "分页与 scope/role 筛选（均可选）",
                         "name": "req",
                         "in": "body",
                         "required": true,
@@ -416,6 +417,7 @@ const docTemplate = `{
         },
         "/act/student/{studentId}": {
             "post": {
+                "description": "查看他人时按 auditor.effect 过滤：slow（默认）只返回已通过且未结束；fast 下未过审也可返回，仅挡被驳回。查看自己时与 /act/own 一致，scope/role 生效且返回审核字段。",
                 "consumes": [
                     "application/json"
                 ],
@@ -425,7 +427,7 @@ const docTemplate = `{
                 "tags": [
                     "Activity"
                 ],
-                "summary": "通过学号获取活动",
+                "summary": "通过学号获取活动（看自己时支持 scope/role 筛选）",
                 "parameters": [
                     {
                         "type": "string",
@@ -442,7 +444,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "分页请求",
+                        "description": "分页与 scope/role 筛选（仅本人视角生效，均可选）",
                         "name": "req",
                         "in": "body",
                         "required": true,
@@ -2546,6 +2548,14 @@ const docTemplate = `{
                 },
                 "page": {
                     "type": "integer"
+                },
+                "role": {
+                    "description": "Role 归属范围：creator(默认，我创建的) | participant(我签署的) | all(两者)。\n空值与非法值按 creator 处理。",
+                    "type": "string"
+                },
+                "scope": {
+                    "description": "Scope 时间范围：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。\n空值与非法值按 active 处理。",
+                    "type": "string"
                 }
             }
         },
@@ -2557,6 +2567,14 @@ const docTemplate = `{
                 },
                 "page": {
                     "type": "integer"
+                },
+                "role": {
+                    "description": "Role 仅查看本人时生效：creator(默认，我创建的) | participant(我签署的) | all(两者)。\n空值与非法值按 creator 处理；查看他人时忽略。",
+                    "type": "string"
+                },
+                "scope": {
+                    "description": "Scope 仅查看本人时生效：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。\n空值与非法值按 active 处理；查看他人时忽略。",
+                    "type": "string"
                 },
                 "studentId": {
                     "type": "string"

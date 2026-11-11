@@ -61,15 +61,38 @@ type ListAllActsReq struct {
 	Limit int `json:"limit"`
 }
 
+// 活动列表 scope / role 的合法取值。
+const (
+	ActScopeActive = "active" // 进行中（默认）
+	ActScopeEnded  = "ended"  // 已结束且已通过
+	ActScopeAll    = "all"    // 进行中或已通过
+
+	ActRoleCreator     = "creator"     // 我创建的（默认）
+	ActRoleParticipant = "participant" // 我签署的
+	ActRoleAll         = "all"         // 我创建的 + 我签署的
+)
+
 type FindActByOwnerIDReq struct {
 	Page  int `json:"page"`
 	Limit int `json:"limit"`
+	// Scope 时间范围：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。
+	// 空值与非法值按 active 处理。
+	Scope string `json:"scope"`
+	// Role 归属范围：creator(默认，我创建的) | participant(我签署的) | all(两者)。
+	// 空值与非法值按 creator 处理。
+	Role string `json:"role"`
 }
 
 type FindActByStudentIDReq struct {
 	StudentID string `json:"studentId" form:"studentId" uri:"studentId"`
 	Page      int    `json:"page"`
 	Limit     int    `json:"limit"`
+	// Scope 仅查看本人时生效：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。
+	// 空值与非法值按 active 处理；查看他人时忽略。
+	Scope string `json:"scope"`
+	// Role 仅查看本人时生效：creator(默认，我创建的) | participant(我签署的) | all(两者)。
+	// 空值与非法值按 creator 处理；查看他人时忽略。
+	Role string `json:"role"`
 }
 
 type Signer struct {
