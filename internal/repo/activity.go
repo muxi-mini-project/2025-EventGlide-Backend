@@ -184,8 +184,8 @@ func (r *ActivityRepo) FindActByOwnerID(ctx context.Context, sid string, page, l
 	return r.dao.FindActByOwnerID(ctx, sid, page, limit)
 }
 
-func (r *ActivityRepo) FindActByOwnerIDAll(ctx context.Context, sid string, page, limit int) (*model.PaginatedActivities, error) {
-	return r.dao.FindActByOwnerIDAll(ctx, sid, page, limit)
+func (r *ActivityRepo) FindActListForStudent(ctx context.Context, sid string, scope string, role string, page, limit int) (*model.PaginatedActivities, error) {
+	return r.dao.FindActListForStudent(ctx, sid, scope, role, page, limit)
 }
 
 func (r *ActivityRepo) ListAllActs(ctx context.Context, page, limit int) (*model.PaginatedActivities, error) {

@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/dao"
 	"github.com/raiki02/EG/internal/errs"
-	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/repo"
 	"gorm.io/gorm"
 )
@@ -21,34 +21,38 @@ type SubjectInfo struct {
 	Subject   string
 	StudentID string
 	Id        int64
+	// RootObjectType / RootObjectID 仅评论使用：点赞/收藏评论时据其校验所属根对象的可见性。
+	RootObjectType string
+	RootObjectID   int64
 }
 
 type SubjectGetter interface {
 	GetSubjectInfo(ctx context.Context, id int64, sub string) (SubjectInfo, error)
-	// ActivityVisibleTo mirrors the activity detail rule: a rejected (taken-down)
-	// activity is only visible to its creator and signers.
+	// ActivityVisibleTo reports whether the activity is visible to viewer, using the
+	// same rule as the detail endpoint (service.ActivityVisible).
 	ActivityVisibleTo(ctx context.Context, id int64, viewer string) (bool, error)
 }
 
 type subjectGetter struct {
-	ad *repo.ActivityRepo
-	pd *repo.PostRepo
-	cd *dao.CommentDao
+	ad     *repo.ActivityRepo
+	pd     *repo.PostRepo
+	cd     *dao.CommentDao
+	effect string
 }
 
-func NewSubjectGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentDao) SubjectGetter {
+func NewSubjectGetter(ad *repo.ActivityRepo, pd *repo.PostRepo, cd *dao.CommentDao, cfg *config.Conf) SubjectGetter {
 	return &subjectGetter{
-		ad: ad,
-		pd: pd,
-		cd: cd,
+		ad:     ad,
+		pd:     pd,
+		cd:     cd,
+		effect: cfg.Auditor.EffectMode(),
 	}
 }
 
-// ActivityVisibleTo reports whether the activity is visible to viewer. It mirrors the detail
-// endpoint (handler.activityVisibleToViewer) and the comment read/write checks; keep the three
-// in sync when the rule changes.
-// A rejected (taken-down) activity is only visible to its creator and signers.
-// A missing activity is treated as not visible so a stale comment row cannot leak content.
+// ActivityVisibleTo reports whether the activity is visible to viewer.
+// The rule itself lives in ActivityVisible; a missing activity is treated as not visible
+// so a stale comment row cannot leak content. The approvement lookup runs only when the
+// effect rule already denies access, keeping the hot read path free of an extra query.
 func (g *subjectGetter) ActivityVisibleTo(ctx context.Context, id int64, viewer string) (bool, error) {
 	act, err := g.ad.FindActAuditBrief(ctx, id)
 	if err != nil {
@@ -57,16 +61,17 @@ func (g *subjectGetter) ActivityVisibleTo(ctx context.Context, id int64, viewer 
 		}
 		return false, err
 	}
-	if act.IsChecking != model.StanceReject {
+	if ActivityVisible(act.IsChecking, act.StudentID, viewer, false, g.effect) {
 		return true, nil
 	}
 	if viewer == "" {
 		return false, nil
 	}
-	if act.StudentID == viewer {
-		return true, nil
+	isSigner, err := g.ad.ExistsApprovement(ctx, act.Id, viewer)
+	if err != nil {
+		return false, err
 	}
-	return g.ad.ExistsApprovement(ctx, act.Id, viewer)
+	return ActivityVisible(act.IsChecking, act.StudentID, viewer, isSigner, g.effect), nil
 }
 
 func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string) (SubjectInfo, error) {
@@ -105,9 +110,11 @@ func (g *subjectGetter) GetSubjectInfo(ctx context.Context, id int64, sub string
 		}
 
 		return SubjectInfo{
-			Subject:   SubjectComment,
-			StudentID: cmt.StudentID,
-			Id:        cmt.Id,
+			Subject:        SubjectComment,
+			StudentID:      cmt.StudentID,
+			Id:             cmt.Id,
+			RootObjectType: cmt.RootObjectType,
+			RootObjectID:   cmt.RootObjectID,
 		}, nil
 	}
 

@@ -25,6 +25,12 @@ import (
 // newCommentServiceForTest 构造 sqlmock DB + miniredis 的 CommentService，
 // 覆盖 CreateComment/AnswerComment 的 root_id 继承逻辑。
 func newCommentServiceForTest(t *testing.T) (*CommentService, sqlmock.Sqlmock) {
+	return newCommentServiceWithEffectForTest(t, config.EffectFast)
+}
+
+// newCommentServiceWithEffectForTest 与 newCommentServiceForTest 相同，但可指定审核模式，
+// 用于覆盖线上 slow 与先发后审 fast 两种可见性分支。
+func newCommentServiceWithEffectForTest(t *testing.T, effect string) (*CommentService, sqlmock.Sqlmock) {
 	t.Helper()
 
 	// EncryptedString 写库需要 PII 密钥
@@ -56,11 +62,11 @@ func newCommentServiceForTest(t *testing.T) (*CommentService, sqlmock.Sqlmock) {
 	ud := repo.NewUserRepo(dao.NewUserDao(gdb, ls), nil)
 	lfr := cache.NewLikeFavoriteRedis(rdb)
 	cfg := &config.Conf{}
-	cfg.Auditor.Effect = "fast"
+	cfg.Auditor.Effect = effect
 	ar := repo.NewActivityRepo(dao.NewActDao(gdb, cfg, ls), cache.NewCache(rdb))
 	pr := repo.NewPostRepo(dao.NewPostDao(gdb, cfg, ls), cache.NewCache(rdb), ls)
 	ir := repo.NewInteractionRepo(dao.NewInteractionDao(gdb, ls), nil, ar, pr, lfr)
-	sg := NewSubjectGetter(ar, pr, cd)
+	sg := NewSubjectGetter(ar, pr, cd, cfg)
 	testMQ := mq.NewMQ(rdb)
 	svc := NewCommentService(cd, ud, ir, testMQ, sg, ls)
 	return svc, mock
@@ -74,18 +80,25 @@ const (
 )
 
 // mockActivityPreloads 预置 FindActById 的主查询与两个 Preload 查询（Images -> Signers），
-// 以及评论写入时对活动可见性的轻量查询（默认未下架）。
+// 以及评论写入时对活动可见性的轻量查询（默认已通过）。
 func mockActivityPreloads(mock sqlmock.Sqlmock) {
+	mockActivityPreloadsFor(mock, model.StancePass)
+}
+
+// mockActivityPreloadsFor 与 mockActivityPreloads 相同，但可指定活动审核状态，
+// 用于覆盖审核中/被驳回等活动走不同可见性分支的场景。
+func mockActivityPreloadsFor(mock sqlmock.Sqlmock, isChecking string) {
 	mock.ExpectQuery("SELECT \\* FROM `activity`").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id"}).AddRow(actID, userA))
 	mock.ExpectQuery("SELECT \\* FROM `image`").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	mock.ExpectQuery("SELECT \\* FROM `activity_signer`").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mockActivityVisible(mock, actID, userA, "pass")
+	mockActivityVisible(mock, actID, userA, isChecking)
 }
 
-// mockActivityVisible 预置评论写路径的活动可见性检查（未下架时只查一次轻量查询）。
+// mockActivityVisible 预置评论写路径的活动可见性检查：只打"轻量查询"这一条，
+// 需要签署关系兜底的用例由调用方自行追加 approvement 查询。
 func mockActivityVisible(mock sqlmock.Sqlmock, activityID int64, owner, isChecking string) {
 	mock.ExpectQuery("SELECT `id`,`student_id`,`is_checking` FROM `activity` WHERE id = \\? ORDER BY `activity`.`id` LIMIT \\?").
 		WithArgs(activityID, 1).
@@ -850,5 +863,109 @@ func TestAnswerCommentOnTakenDownActivityRejected(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
+	}
+}
+
+// TestLoadCommentsOnPendingActivitySlowEffect slow 先审后发：审核中的活动评论区只对创建者与签署人可见，
+// 普通访客与详情页一致按"活动不存在"处理。
+func TestLoadCommentsOnPendingActivitySlowEffect(t *testing.T) {
+	cases := []struct {
+		name     string
+		viewer   string
+		isSigner bool
+		wantLen  int
+	}{
+		{name: "普通访客不可见", viewer: userB, wantLen: 0},
+		{name: "创建者可见", viewer: userA, wantLen: 1},
+		{name: "签署人可见", viewer: userC, isSigner: true, wantLen: 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cs, mock := newCommentServiceWithEffectForTest(t, config.EffectSlow)
+			ctx := context.Background()
+			const id = int64(1001)
+
+			mockLoadCommentsRows(mock, id)
+			mockActivityAuditBrief(mock, id, userA, "pending_auditor")
+			// 创建者由 ActivityVisible 直接放行；其他人需要查签署关系。
+			if tc.viewer != userA {
+				count := 0
+				if tc.isSigner {
+					count = 1
+				}
+				mock.ExpectQuery("SELECT count\\(\\*\\) FROM `approvement` WHERE activity_id = \\? AND student_id = \\?").
+					WithArgs(id, tc.viewer).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(count))
+			}
+
+			cmts, err := cs.LoadComments(ctx, id, tc.viewer)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(cmts) != tc.wantLen {
+				t.Fatalf("got %d comments, want %d", len(cmts), tc.wantLen)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+}
+
+// TestCreateCommentOnPendingActivitySlowEffect slow 模式下审核中的活动：普通访客按不存在拒绝，
+// 创建者与签署人不受限。
+func TestCreateCommentOnPendingActivitySlowEffect(t *testing.T) {
+	cases := []struct {
+		name       string
+		viewer     string
+		isSigner   bool
+		wantDenied bool
+	}{
+		{name: "普通访客按不存在拒绝", viewer: userB, wantDenied: true},
+		{name: "创建者可以评论", viewer: userA},
+		{name: "签署人可以评论", viewer: userC, isSigner: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cs, mock := newCommentServiceWithEffectForTest(t, config.EffectSlow)
+			ctx := context.Background()
+
+			mockGetUserInfo(mock, tc.viewer, "Viewer")
+			mockActivityPreloadsFor(mock, "pending_auditor")
+			if tc.viewer != userA {
+				count := 0
+				if tc.isSigner {
+					count = 1
+				}
+				mock.ExpectQuery("SELECT count\\(\\*\\) FROM `approvement` WHERE activity_id = \\? AND student_id = \\?").
+					WithArgs(actID, tc.viewer).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(count))
+			}
+			if !tc.wantDenied {
+				mock.ExpectExec("INSERT INTO `comment`").WillReturnResult(sqlmock.NewResult(40, 1))
+				mock.ExpectExec("UPDATE `activity` SET `comment_num`").WillReturnResult(sqlmock.NewResult(0, 1))
+			}
+
+			cmt := &model.Comment{
+				Id:        40,
+				StudentID: tc.viewer,
+				Content:   "审核中活动下的评论",
+				ParentID:  actID,
+				Subject:   SubjectActivity,
+			}
+			_, err := cs.CreateComment(ctx, cmt, tc.viewer)
+			if tc.wantDenied {
+				if !errors.Is(err, errs.ErrActivityNotFound) {
+					t.Fatalf("expected ErrActivityNotFound, got %v", err)
+				}
+			} else if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Error(err)
+			}
+		})
 	}
 }

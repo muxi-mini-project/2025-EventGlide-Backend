@@ -18,6 +18,27 @@ import (
 	"gorm.io/gorm"
 )
 
+// normalizeActScope 归一化活动列表的时间范围：空值与非法值（含大小写不符）按 active 处理，
+// 兼容不传新参数的老客户端。
+func normalizeActScope(scope string) string {
+	switch scope {
+	case req.ActScopeEnded, req.ActScopeAll:
+		return scope
+	default:
+		return req.ActScopeActive
+	}
+}
+
+// normalizeActRole 归一化活动列表的归属范围：空值与非法值按 creator 处理。
+func normalizeActRole(role string) string {
+	switch role {
+	case req.ActRoleParticipant, req.ActRoleAll:
+		return role
+	default:
+		return req.ActRoleCreator
+	}
+}
+
 type ActivityServiceHdl interface {
 	CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error
 	ResubmitActivity(c context.Context, srcID int64, act *model.Activity, signers []model.Signer, studentID string) error
@@ -29,7 +50,7 @@ type ActivityServiceHdl interface {
 	FindActByName(c context.Context, name string, page, limit int) (*model.PaginatedActivities, error)
 	FindActById(c context.Context, id int64) (model.Activity, error)
 	FindActByOwnerID(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error)
-	FindActByOwnerIDAll(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error)
+	FindActListForStudent(c context.Context, studentID, scope, role string, page, limit int) (*model.PaginatedActivities, error)
 	ListAllActs(c context.Context, page, limit int) (*model.PaginatedActivities, error)
 	EnrichForSearcher(c context.Context, acts []model.Activity, viewerID string) []model.ActivityDetail
 	EnrichOneForSearcher(c context.Context, act *model.Activity, viewerID string) model.ActivityDetail
@@ -44,10 +65,17 @@ type ActivityService struct {
 	aud         AuditorService
 	imgWorker   imageWorkerNotifier
 	maxResubmit int
+	effect      string
 	l           *zap.Logger
 }
 
 func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgWorker imageWorkerNotifier, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
+	lg := l.Activity.Named("service")
+	effect := cfg.Auditor.EffectMode()
+	if effect != cfg.Auditor.Effect {
+		lg.Warn("auditor.effect 未配置或非法，活动可见性按 slow 处理",
+			zap.String("effect", cfg.Auditor.Effect))
+	}
 	return &ActivityService{
 		ad:          ad,
 		ud:          ud,
@@ -56,8 +84,14 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.Inter
 		mq:          mq,
 		imgWorker:   imgWorker,
 		maxResubmit: cfg.Auditor.ResubmitLimit(),
-		l:           l.Activity.Named("service"),
+		effect:      effect,
+		l:           lg,
 	}
+}
+
+// CanViewActivity 判断 viewer 能否查看该活动，规则见 ActivityVisible。
+func (as *ActivityService) CanViewActivity(act model.Activity, viewer string, isSigner bool) bool {
+	return ActivityVisible(act.IsChecking, act.StudentID, viewer, isSigner, as.effect)
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
@@ -277,11 +311,13 @@ func (as *ActivityService) ListAllActs(c context.Context, page, limit int) (*mod
 	return acts, nil
 }
 
-// FindActByOwnerIDAll 返回本人全部审核状态的活动（含审核中与被拒），供 review 页展示本人全部活动。
-func (as *ActivityService) FindActByOwnerIDAll(c context.Context, studentID string, page, limit int) (*model.PaginatedActivities, error) {
-	acts, err := as.ad.FindActByOwnerIDAll(c, studentID, page, limit)
+// FindActListForStudent 返回学生本人视角的活动列表：默认只含自己创建的活动，
+// role 可扩展到"我签署的"；scope 控制时间范围与已结束活动的审核状态。
+// 不套 SetEffect：本人要能看见自己的审核中与被拒活动。
+func (as *ActivityService) FindActListForStudent(c context.Context, studentID string, scope string, role string, page, limit int) (*model.PaginatedActivities, error) {
+	acts, err := as.ad.FindActListForStudent(c, studentID, normalizeActScope(scope), normalizeActRole(role), page, limit)
 	if err != nil {
-		as.l.Error("Failed to find all acts by owner id", zap.Error(err))
+		as.l.Error("Failed to find act list for student", zap.Error(err), zap.String("studentID", studentID))
 		return nil, errs.ErrInternal.Wrap(err)
 	}
 	return acts, nil
