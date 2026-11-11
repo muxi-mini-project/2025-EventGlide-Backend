@@ -303,6 +303,9 @@ func (ad *ActDao) FindActListForStudent(c context.Context, s string, scope strin
 
 		// ended/all 是个人页的历史口径：已被新申请替代的旧版本不再展示。
 		// active 不加此条件——审核页需要看到被替代的旧申请。
+		// ended 的 replaced_by = 0 是防御性条件：被替代的行只会是 reject，而迁移到 pass
+		// 本身要求 replaced_by = 0，因此它不会改变 ended 的结果；all 里这个条件才真正
+		// 生效，用于排除尚未结束的被替代旧版本。
 		switch scope {
 		case req.ActScopeEnded:
 			// 已结束：只保留已通过的活动，pending/reject 不再出现在本人列表。

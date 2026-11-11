@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
@@ -246,7 +248,7 @@ func (ah *ActHandler) FindActByStudentID(ctx *gin.Context, req_ req.FindActByStu
 	pathStudentID := ctx.Param("studentId")
 	// 本人显式传了 scope/role 才切到全状态口径；不传参数时保持旧的"已通过 + 未结束"，
 	// 避免老客户端升级后突然看到审核中/被拒活动。
-	if claims.Subject != "" && pathStudentID == claims.Subject && (req_.Scope != "" || req_.Role != "") {
+	if shouldUseOwnActivityList(claims.Subject, pathStudentID, req_.Scope, req_.Role) {
 		paginated, err := ah.as.FindActListForStudent(ctx, claims.Subject, req_.Scope, req_.Role, req_.Page, req_.Limit)
 		if err != nil {
 			return ginx.ReturnError(err)
@@ -260,6 +262,17 @@ func (ah *ActHandler) FindActByStudentID(ctx *gin.Context, req_ req.FindActByStu
 	}
 	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
 	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
+}
+
+// shouldUseOwnActivityList 判断 /act/student/{studentId} 是否切换到本人全状态口径：
+// 只有路径学号是本人、且显式传了 scope 或 role 时才切换；都不传时保持旧的
+// effect 过滤口径，避免老客户端升级后突然看到审核中/被拒活动。
+// 空白字符串不是合法取值，按未传处理。
+func shouldUseOwnActivityList(claimsSubject, pathStudentID, scope, role string) bool {
+	if claimsSubject == "" || pathStudentID != claimsSubject {
+		return false
+	}
+	return strings.TrimSpace(scope) != "" || strings.TrimSpace(role) != ""
 }
 
 // FindActById
