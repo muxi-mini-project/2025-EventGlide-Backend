@@ -3,7 +3,9 @@ package handler
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/raiki02/EG/internal/middleware"
@@ -49,7 +51,7 @@ func (r *Handler) healthz(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
 }
 
-func (r *Handler) Run() (error, func()) {
+func (r *Handler) Run() (func(context.Context), error) {
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: r.e.Handler(),
@@ -60,11 +62,15 @@ func (r *Handler) Run() (error, func()) {
 		}
 	}()
 
-	return nil, func() {
-		if err := srv.Shutdown(context.Background()); err != nil {
-			panic(err)
+	return func(parent context.Context) {
+		// HTTP 排空必须有界：从关闭总预算里最多取 5s，超时则强制断开残留连接。
+		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("HTTP server shutdown: %v", err)
+			_ = srv.Close()
 		}
-	}
+	}, nil
 }
 
 func (r *Handler) RegisterSwagger() {

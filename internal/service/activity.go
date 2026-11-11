@@ -63,13 +63,13 @@ type ActivityService struct {
 	id          *repo.InteractionRepo
 	mq          mq.MQHdl
 	aud         AuditorService
-	imgWorker   *ImageSizeWorker
+	imgWorker   imageWorkerNotifier
 	maxResubmit int
 	effect      string
 	l           *zap.Logger
 }
 
-func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgWorker *ImageSizeWorker, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
+func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, imgWorker imageWorkerNotifier, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
 	lg := l.Activity.Named("service")
 	effect := cfg.Auditor.EffectMode()
 	if effect != cfg.Auditor.Effect {
@@ -95,6 +95,11 @@ func (as *ActivityService) CanViewActivity(act model.Activity, viewer string, is
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {
+	// 前端为准：宽高随请求入库；漏传/传错的行走 pending，创建不阻塞，
+	// 落库成功后唤醒回填 worker 异步兜底。
+	// pending 必须在事务前判定：DAO 写入活动时会把 act.Images 置空，事务后读不到图片行。
+	pending := hasPendingImage(act.Images)
+
 	err := as.ad.Transaction(c, func(tx *gorm.DB) error {
 		return as.ad.CreateActivity(c, tx, act, signers, studentID)
 	})
@@ -103,9 +108,7 @@ func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity
 		return errs.ErrActivityCreateFailed.Wrap(err)
 	}
 
-	// 前端为准：宽高随请求入库；漏传/传错的行走 pending，创建不阻塞，
-	// 落库成功后唤醒回填 worker 异步兜底。
-	if hasPendingImage(act.Images) {
+	if pending {
 		as.imgWorker.Notify()
 	}
 
@@ -139,6 +142,9 @@ func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act 
 
 	act.Revision = src.Revision + 1
 
+	// pending 必须在事务前判定：DAO 写入活动时会把 act.Images 置空，事务后读不到图片行。
+	pending := hasPendingImage(act.Images)
+
 	conflict := false
 	err = as.ad.Transaction(c, func(tx *gorm.DB) error {
 		// 先条件更新源活动的 replaced_by：并发重复提交时只有一个事务能把 0 改为新 id，
@@ -161,6 +167,10 @@ func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act 
 		}
 		as.l.Error("failed to resubmit activity tx", zap.Error(err), zap.Int64("srcId", srcID))
 		return errs.ErrActivityCreateFailed.Wrap(err)
+	}
+
+	if pending {
+		as.imgWorker.Notify()
 	}
 
 	as.l.Info("resubmit activity tx",

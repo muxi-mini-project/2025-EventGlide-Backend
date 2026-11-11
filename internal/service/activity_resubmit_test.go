@@ -19,7 +19,7 @@ import (
 	"gorm.io/gorm/schema"
 )
 
-func newResubmitServiceForTest(t *testing.T, maxResubmit int) (*ActivityService, sqlmock.Sqlmock) {
+func newResubmitServiceForTest(t *testing.T, maxResubmit int) (*ActivityService, sqlmock.Sqlmock, *fakeImageNotifier) {
 	t.Helper()
 	t.Setenv("EG_PII_KEY", "0123456789abcdef0123456789abcdef")
 
@@ -38,13 +38,15 @@ func newResubmitServiceForTest(t *testing.T, maxResubmit int) (*ActivityService,
 	}
 
 	actDao := dao.NewActDao(gdb, &config.Conf{}, logger.NewLoggerSet())
+	notifier := &fakeImageNotifier{}
 	svc := &ActivityService{
 		ad:          repo.NewActivityRepo(actDao, nil),
 		mq:          &fakeFeedMQ{},
+		imgWorker:   notifier,
 		maxResubmit: maxResubmit,
 		l:           zap.NewNop(),
 	}
-	return svc, mock
+	return svc, mock, notifier
 }
 
 // expectResubmitSourceLoad 模拟 findById 读取源活动及其 Signers/Images 预加载。
@@ -75,7 +77,7 @@ func expectResubmitSourceState(mock sqlmock.Sqlmock, srcID int64, isChecking str
 
 // expectResubmitCreate 模拟回写源活动 replaced_by 并创建新活动的完整事务。
 // 重新送审保留用户正在编辑的活动草稿，因此不应出现 activity_draft 的查询与删除。
-func expectResubmitCreate(mock sqlmock.Sqlmock, newID, srcID int64, withSigners bool, replacedRows int64) {
+func expectResubmitCreate(mock sqlmock.Sqlmock, newID, srcID int64, withSigners bool, imageRows int, replacedRows int64) {
 	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE `activity` SET `replaced_by`=\\? WHERE id = \\? AND replaced_by = 0 AND is_checking = \\?").
 		WithArgs(newID, srcID, "reject").
@@ -85,6 +87,9 @@ func expectResubmitCreate(mock sqlmock.Sqlmock, newID, srcID int64, withSigners 
 		return
 	}
 	mock.ExpectExec("INSERT INTO `activity`").WillReturnResult(sqlmock.NewResult(0, 1))
+	if imageRows > 0 {
+		mock.ExpectExec("INSERT INTO `image`").WillReturnResult(sqlmock.NewResult(0, int64(imageRows)))
+	}
 	if withSigners {
 		mock.ExpectExec("INSERT INTO `activity_signer`").WillReturnResult(sqlmock.NewResult(0, 1))
 		mock.ExpectExec("INSERT INTO `approvement`").WillReturnResult(sqlmock.NewResult(0, 1))
@@ -114,13 +119,13 @@ func newResubmitAct() *model.Activity {
 // TestResubmitActivityCreatesNewRevision 内容与源活动完全一致也能创建成功（唯一索引含 revision），
 // 新活动 revision 为源 revision+1，源活动的 replaced_by 被指向新活动。
 func TestResubmitActivityCreatesNewRevision(t *testing.T) {
-	svc, mock := newResubmitServiceForTest(t, 5)
+	svc, mock, _ := newResubmitServiceForTest(t, 5)
 	srcID := int64(10001)
 	act := newResubmitAct()
 	signers := []model.Signer{{StudentID: "S20250002", Name: "张三"}}
 
 	expectResubmitSourceLoad(mock, srcID, 1, 0)
-	expectResubmitCreate(mock, act.Id, srcID, true, 1)
+	expectResubmitCreate(mock, act.Id, srcID, true, 0, 1)
 
 	if err := svc.ResubmitActivity(context.Background(), srcID, act, signers, "S20250001"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -138,12 +143,12 @@ func TestResubmitActivityCreatesNewRevision(t *testing.T) {
 
 // TestResubmitActivityWithoutSignersKeepsPendingAuditor 无签署人时仍沿用创建逻辑直接置为待审核。
 func TestResubmitActivityWithoutSignersKeepsPendingAuditor(t *testing.T) {
-	svc, mock := newResubmitServiceForTest(t, 5)
+	svc, mock, _ := newResubmitServiceForTest(t, 5)
 	srcID := int64(10002)
 	act := newResubmitAct()
 
 	expectResubmitSourceLoad(mock, srcID, 0, 0)
-	expectResubmitCreate(mock, act.Id, srcID, false, 1)
+	expectResubmitCreate(mock, act.Id, srcID, false, 0, 1)
 
 	if err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -159,20 +164,26 @@ func TestResubmitActivityWithoutSignersKeepsPendingAuditor(t *testing.T) {
 	}
 }
 
-// TestResubmitActivityRollbackWhenAlreadyReplaced 并发下源活动已被替代时回滚，不留下新活动。
+// TestResubmitActivityRollbackWhenAlreadyReplaced 并发下源活动已被替代时回滚，不留下新活动，
+// 也不应唤醒回填 worker（事务未提交，图片行不存在）。
 func TestResubmitActivityRollbackWhenAlreadyReplaced(t *testing.T) {
-	svc, mock := newResubmitServiceForTest(t, 5)
+	svc, mock, notifier := newResubmitServiceForTest(t, 5)
 	srcID := int64(10003)
 	act := newResubmitAct()
+	act.Images = []model.Image{{Url: "http://img/a.png", SizeStatus: model.ImageSizePending}}
 
 	expectResubmitSourceLoad(mock, srcID, 1, 0)
-	expectResubmitCreate(mock, act.Id, srcID, false, 0)
+	// replaced_by 未命中即返回，事务内不会插入图片行，因此图片期望为 0。
+	expectResubmitCreate(mock, act.Id, srcID, false, 0, 0)
 	// 条件更新未命中后重读源活动：已被指向新申请。
 	expectResubmitSourceState(mock, srcID, "reject", 10004)
 
 	err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001")
 	if !errors.Is(err, errs.ErrActivityAlreadyReplaced) {
 		t.Fatalf("err = %v, want ErrActivityAlreadyReplaced", err)
+	}
+	if notifier.notifies != 0 {
+		t.Errorf("回滚时唤醒次数 = %d, want 0", notifier.notifies)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -182,17 +193,80 @@ func TestResubmitActivityRollbackWhenAlreadyReplaced(t *testing.T) {
 // TestResubmitActivityRollbackWhenRejectedVerdictChanged 读取源活动后被平台改判为通过：
 // 条件更新因 is_checking 不再是 reject 而未命中，返回"未驳回"而不是"已替代"。
 func TestResubmitActivityRollbackWhenRejectedVerdictChanged(t *testing.T) {
-	svc, mock := newResubmitServiceForTest(t, 5)
+	svc, mock, _ := newResubmitServiceForTest(t, 5)
 	srcID := int64(10005)
 	act := newResubmitAct()
 
 	expectResubmitSourceLoad(mock, srcID, 1, 0)
-	expectResubmitCreate(mock, act.Id, srcID, false, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 0, 0)
 	expectResubmitSourceState(mock, srcID, model.StancePass, 0)
 
 	err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001")
 	if !errors.Is(err, errs.ErrActivityNotRejected) {
 		t.Fatalf("err = %v, want ErrActivityNotRejected", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResubmitActivityNotifiesWhenImagesPending 重新送审同样要在事务前判定 pending：
+// DAO 写入新活动时会把 act.Images 置空，事务后再判定恒为 false，宽高永远没人回填。
+func TestResubmitActivityNotifiesWhenImagesPending(t *testing.T) {
+	svc, mock, notifier := newResubmitServiceForTest(t, 5)
+	srcID := int64(10006)
+	act := newResubmitAct()
+	act.Images = []model.Image{{Url: "http://img/a.png", SizeStatus: model.ImageSizePending}}
+
+	expectResubmitSourceLoad(mock, srcID, 1, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 1, 1)
+
+	if err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if notifier.notifies != 1 {
+		t.Errorf("pending 图片重新送审后唤醒次数 = %d, want 1", notifier.notifies)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResubmitActivitySkipsNotifyWhenSizesReady 宽高齐全的图片无需唤醒回填 worker。
+func TestResubmitActivitySkipsNotifyWhenSizesReady(t *testing.T) {
+	svc, mock, notifier := newResubmitServiceForTest(t, 5)
+	srcID := int64(10007)
+	act := newResubmitAct()
+	act.Images = []model.Image{{Url: "http://img/a.png", Width: 8, Height: 4, SizeStatus: model.ImageSizeOK}}
+
+	expectResubmitSourceLoad(mock, srcID, 1, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 1, 1)
+
+	if err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if notifier.notifies != 0 {
+		t.Errorf("宽高齐全时唤醒次数 = %d, want 0", notifier.notifies)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResubmitActivitySkipsNotifyWithoutImages 无图片时不应唤醒回填 worker。
+func TestResubmitActivitySkipsNotifyWithoutImages(t *testing.T) {
+	svc, mock, notifier := newResubmitServiceForTest(t, 5)
+	srcID := int64(10008)
+	act := newResubmitAct()
+
+	expectResubmitSourceLoad(mock, srcID, 1, 0)
+	expectResubmitCreate(mock, act.Id, srcID, false, 0, 1)
+
+	if err := svc.ResubmitActivity(context.Background(), srcID, act, nil, "S20250001"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if notifier.notifies != 0 {
+		t.Errorf("无图片时唤醒次数 = %d, want 0", notifier.notifies)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
