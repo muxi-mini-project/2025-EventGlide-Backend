@@ -25,11 +25,11 @@ type FeedUserInfo struct {
 type FeedLikeResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id            utils.SnowflakeID `json:"id"`
+	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Message       string            `json:"Message"`
 	PublishedAt   string            `json:"PublishedAt"`
-	TargetId      utils.SnowflakeID `json:"TargetId"`
-	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	TargetId      utils.SnowflakeID `json:"TargetId" swaggertype:"string"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty" swaggertype:"string"`
 	RootType      string            `json:"RootType,omitempty"`
 	Subject       string            `json:"Subject"`
 	FirstPic      string            `json:"FirstPic,omitempty"`
@@ -40,11 +40,11 @@ type FeedLikeResp struct {
 type FeedCommentResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id            utils.SnowflakeID `json:"id"`
+	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Message       string            `json:"Message"`
 	PublishedAt   string            `json:"PublishedAt"`
-	TargetId      utils.SnowflakeID `json:"TargetId"`
-	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	TargetId      utils.SnowflakeID `json:"TargetId" swaggertype:"string"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty" swaggertype:"string"`
 	RootType      string            `json:"RootType,omitempty"`
 	Subject       string            `json:"Subject"`
 	FirstPic      string            `json:"FirstPic,omitempty"`
@@ -55,11 +55,11 @@ type FeedCommentResp struct {
 type FeedAtResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id            utils.SnowflakeID `json:"id"`
+	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Message       string            `json:"Message"`
 	PublishedAt   string            `json:"PublishedAt"`
-	TargetId      utils.SnowflakeID `json:"TargetId"`
-	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	TargetId      utils.SnowflakeID `json:"TargetId" swaggertype:"string"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty" swaggertype:"string"`
 	RootType      string            `json:"RootType,omitempty"`
 	Subject       string            `json:"Subject"`
 	FirstPic      string            `json:"FirstPic,omitempty"`
@@ -70,12 +70,12 @@ type FeedAtResp struct {
 type FeedCollectResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id            utils.SnowflakeID `json:"id"`
+	Id            utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Message       string            `json:"Message"`
 	PublishedAt   string            `json:"PublishedAt"`
 	FirstPic      string            `json:"FirstPic,omitempty"`
-	TargetId      utils.SnowflakeID `json:"TargetId"`
-	RootID        utils.SnowflakeID `json:"RootId,omitempty"`
+	TargetId      utils.SnowflakeID `json:"TargetId" swaggertype:"string"`
+	RootID        utils.SnowflakeID `json:"RootId,omitempty" swaggertype:"string"`
 	RootType      string            `json:"RootType,omitempty"`
 	Subject       string            `json:"Subject"`
 	Status        string            `json:"status"`
@@ -85,11 +85,11 @@ type FeedCollectResp struct {
 type FeedInvitationResp struct {
 	Userinfo FeedUserInfo `json:"Userinfo"`
 
-	Id          utils.SnowflakeID `json:"id"`
+	Id          utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Message     string            `json:"Message"`
 	PublishedAt string            `json:"PublishedAt"`
-	TargetId    utils.SnowflakeID `json:"TargetId"`
-	RootID      utils.SnowflakeID `json:"RootId,omitempty"`
+	TargetId    utils.SnowflakeID `json:"TargetId" swaggertype:"string"`
+	RootID      utils.SnowflakeID `json:"RootId,omitempty" swaggertype:"string"`
 	RootType    string            `json:"RootType,omitempty"`
 	Subject     string            `json:"Subject"`
 	FirstPic    string            `json:"FirstPic,omitempty"`

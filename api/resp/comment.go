@@ -3,7 +3,7 @@ package resp
 import "github.com/raiki02/EG/pkg/utils"
 
 type CommentResp struct {
-	Id utils.SnowflakeID `json:"id"`
+	Id utils.SnowflakeID `json:"id" swaggertype:"string"`
 
 	Creator Creator `json:"creator"`
 
@@ -13,14 +13,14 @@ type CommentResp struct {
 	LikeNum       int               `json:"likeNum"`
 	ReplyNum      int               `json:"replyNum"`
 	IsLike        string            `json:"isLike"`
-	ParentID      utils.SnowflakeID `json:"parentId"`
-	RootID        utils.SnowflakeID `json:"rootId"`
+	ParentID      utils.SnowflakeID `json:"parentId" swaggertype:"string"`
+	RootID        utils.SnowflakeID `json:"rootId" swaggertype:"string"`
 
 	Reply []ReplyResp `json:"reply"`
 }
 
 type ReplyResp struct {
-	Id utils.SnowflakeID `json:"id"`
+	Id utils.SnowflakeID `json:"id" swaggertype:"string"`
 
 	ReplyCreator ReplyCreator `json:"replyCreator"`
 
@@ -28,8 +28,8 @@ type ReplyResp struct {
 	ReplyTime    string `json:"replyTime"`
 	ReplyPos     string `json:"replyPos"`
 
-	ParentID       utils.SnowflakeID `json:"parentId"`
-	RootID         utils.SnowflakeID `json:"rootId"`
+	ParentID       utils.SnowflakeID `json:"parentId" swaggertype:"string"`
+	RootID         utils.SnowflakeID `json:"rootId" swaggertype:"string"`
 	ParentUserName string            `json:"parentUserName"`
 
 	IsLike   string `json:"isLike"`

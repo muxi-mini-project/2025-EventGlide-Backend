@@ -3,15 +3,15 @@ package req
 import "github.com/raiki02/EG/pkg/utils"
 
 type DeleteCommentReq struct {
-	TargetID utils.SnowflakeID `json:"targetId" validate:"required"`
+	TargetID utils.SnowflakeID `json:"targetId" validate:"required" swaggertype:"string"`
 }
 
 type CreateCommentReq struct {
 	Content  string            `json:"content" validate:"required"`
-	ParentID utils.SnowflakeID `json:"parentId" validate:"required"`
+	ParentID utils.SnowflakeID `json:"parentId" validate:"required" swaggertype:"string"`
 	Subject  string            `json:"subject" validate:"required"`
 }
 
 type LoadCommentsReq struct {
-	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id" swaggertype:"string"`
 }

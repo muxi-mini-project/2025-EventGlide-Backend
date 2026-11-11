@@ -530,7 +530,7 @@ const docTemplate = `{
                 "summary": "重新送审被驳回的活动",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "源活动 id",
                         "name": "id",
                         "in": "path",
@@ -2401,7 +2401,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "parentId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "subject": {
                     "type": "string"
@@ -2490,7 +2490,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "targetId": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -2501,7 +2501,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "targetId": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -2631,7 +2631,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "targetId": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -2680,7 +2680,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "visibility": {
                     "type": "string",
@@ -2802,7 +2802,7 @@ const docTemplate = `{
                     "$ref": "#/definitions/resp.Creator"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "isLike": {
                     "type": "string"
@@ -2811,7 +2811,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "parentId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "reply": {
                     "type": "array",
@@ -2823,7 +2823,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "rootId": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -2837,7 +2837,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "ifRegister": {
                     "type": "string"
@@ -2855,7 +2855,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "replacedBy": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "revision": {
                     "description": "Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 为替代它的新申请 id，\n序列化成字符串，\"0\" 表示未被替代（不是空串或 null）。",
@@ -2922,7 +2922,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "RootId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "RootType": {
                     "type": "string"
@@ -2931,13 +2931,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "TargetId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "Userinfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -2960,7 +2960,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "RootId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "RootType": {
                     "type": "string"
@@ -2969,13 +2969,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "TargetId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "Userinfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -2998,7 +2998,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "RootId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "RootType": {
                     "type": "string"
@@ -3007,13 +3007,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "TargetId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "Userinfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -3036,7 +3036,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "RootId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "RootType": {
                     "type": "string"
@@ -3045,13 +3045,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "TargetId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "Userinfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -3071,7 +3071,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "RootId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "RootType": {
                     "type": "string"
@@ -3080,13 +3080,13 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "TargetId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "Userinfo": {
                     "$ref": "#/definitions/resp.FeedUserInfo"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "status": {
                     "type": "string"
@@ -3220,7 +3220,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "ifRegister": {
                     "type": "string"
@@ -3250,7 +3250,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "replacedBy": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "revision": {
                     "description": "以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；\nactiveForm/signer 只在详情中返回。公开列表共用该结构，这些字段均为空值。",
@@ -3289,7 +3289,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "introduce": {
                     "type": "string"
@@ -3353,7 +3353,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "introduce": {
                     "type": "string"
@@ -3456,7 +3456,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "id": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "isLike": {
                     "type": "string"
@@ -3465,7 +3465,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "parentId": {
-                    "type": "integer"
+                    "type": "string"
                 },
                 "parentUserName": {
                     "type": "string"
@@ -3486,7 +3486,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "rootId": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
