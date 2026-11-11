@@ -61,15 +61,43 @@ type ListAllActsReq struct {
 	Limit int `json:"limit"`
 }
 
+// 活动列表 scope / role 的合法取值。
+const (
+	ActScopeActive = "active" // 进行中（默认）
+	ActScopeEnded  = "ended"  // 已结束且已通过
+	ActScopeAll    = "all"    // 进行中或已通过
+
+	ActRoleCreator     = "creator"     // 我创建的（默认）
+	ActRoleParticipant = "participant" // 我签署的
+	ActRoleAll         = "all"         // 我创建的 + 我签署的
+)
+
 type FindActByOwnerIDReq struct {
 	Page  int `json:"page"`
 	Limit int `json:"limit"`
+	// Scope 时间范围：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。
+	// 空值与非法值按 active 处理。
+	// all 不是 active 的超集：ended/all 排除已被新申请替代的旧申请，active 保留它们供审核页使用。
+	Scope string `json:"scope"`
+	// Role 归属范围：creator(默认，我创建的) | participant(我签署的) | all(两者)。
+	// 空值与非法值按 creator 处理。
+	Role string `json:"role"`
 }
 
 type FindActByStudentIDReq struct {
-	StudentID string `json:"studentId" form:"studentId" uri:"studentId"`
+	// 学号只从路径参数取：body 里即使带 studentId 也忽略，避免覆盖路径值。
+	StudentID string `json:"-" form:"studentId" uri:"studentId"`
 	Page      int    `json:"page"`
 	Limit     int    `json:"limit"`
+	// Scope 仅本人视角且显式传参时生效：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。
+	// 传了 scope 或 role 任一参数即切到本人全状态口径，都不传时保持旧的“已通过 + 未结束”行为。
+	// 空值与非法值按 active 处理；查看他人时忽略。
+	// all 不是 active 的超集：ended/all 排除已被新申请替代的旧申请，active 保留它们供审核页使用。
+	Scope string `json:"scope"`
+	// Role 仅本人视角且显式传参时生效：creator(默认，我创建的) | participant(我签署的) | all(两者)。
+	// 传了 scope 或 role 任一参数即切到本人全状态口径。
+	// 空值与非法值按 creator 处理；查看他人时忽略。
+	Role string `json:"role"`
 }
 
 type Signer struct {

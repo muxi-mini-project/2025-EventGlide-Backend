@@ -78,6 +78,21 @@ func (c AuditorConf) ResubmitLimit() int {
 	return c.MaxResubmit
 }
 
+// 审核生效模式取值。
+const (
+	EffectFast = "fast" // 先发后审
+	EffectSlow = "slow" // 先审后发
+)
+
+// EffectMode 归一化审核生效模式：只有显式配置为 fast 才先发后审，其余一律按 slow 先审后发。
+// 未配置或拼写错误时 fail-closed：宁可让未过审内容少曝光，也不能把它放给普通访客。
+func (c AuditorConf) EffectMode() string {
+	if c.Effect == EffectFast {
+		return EffectFast
+	}
+	return EffectSlow
+}
+
 type KafkaConf struct {
 	Addr string `yaml:"addr"`
 }

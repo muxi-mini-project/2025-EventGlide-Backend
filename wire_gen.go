@@ -56,7 +56,7 @@ func InitApp() *server.Server {
 	actHandler := handler.NewActHandler(engine, activityService, imgUploader, jwt, loggerSet)
 	postHandler := handler.NewPostHandler(engine, postService, jwt, loggerSet)
 	commentDao := dao.NewCommentDao(db, loggerSet)
-	subjectGetter := service.NewSubjectGetter(activityRepo, postRepo, commentDao)
+	subjectGetter := service.NewSubjectGetter(activityRepo, postRepo, commentDao, conf)
 	commentService := service.NewCommentService(commentDao, userRepo, interactionRepo, mqHdl, subjectGetter, loggerSet)
 	commentHandler := handler.NewCommentHandler(engine, commentService, jwt, loggerSet)
 	feedDao := dao.NewFeedDao(db, loggerSet)

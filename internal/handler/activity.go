@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/raiki02/EG/api/req"
@@ -169,29 +171,45 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 
 // FindActByOwnerID
 // @Tags Activity
-// @Summary 通过创建者id查找活动（本人全部状态，含审核中与被拒）
+// @Summary 本人活动列表（支持 scope/role 筛选）
+// @Description scope：active(默认，进行中，全部审核状态) | ended(已结束且已通过) | all(进行中或已通过)；role：creator(默认，我创建的) | participant(我签署的) | all(两者)。空值与非法值按默认处理。ended/all 不含已被新申请替代的旧版本，也不含已结束但未通过审核的活动；因此 all 不是 active 的超集。
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
-// @Param req body req.FindActByOwnerIDReq true "分页请求"
+// @Param req body req.FindActByOwnerIDReq true "分页与 scope/role 筛选（均可选）"
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/own [post]
 func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwnerIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
-	paginated, err := ah.as.FindActByOwnerIDAll(ctx, claims.Subject, req_.Page, req_.Limit)
+	paginated, err := ah.as.FindActListForStudent(ctx, claims.Subject, req_.Scope, req_.Role, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
-	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
+	return ginx.ReturnSuccess(ah.ownActivitiesResp(ctx, paginated, claims.Subject))
+}
+
+// ownActivitiesResp 构建本人视角的活动列表响应，并补上仅本人需要的审核字段：
+// revision / replacedBy 让本人判断哪些活动已被新申请替代（服务端不过滤，审核页仍需要它们），
+// rejectReason 用于展示驳回原因。/act/own 与 /act/student/{self} 共用，两条路径字段必须一致。
+func (ah *ActHandler) ownActivitiesResp(ctx *gin.Context, paginated *model.PaginatedActivities, viewer string) resp.PaginatedListActivitiesResp {
+	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, viewer)
 	res := converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details)
 	reasons := ah.as.RejectReasons(ctx, paginated.Acts...)
-	for i := range res.Details {
-		// 本人需据此判断哪些活动已被新申请替代（服务端不过滤，审核页仍需要它们）。
-		res.Details[i].Revision = paginated.Acts[i].Revision
-		res.Details[i].ReplacedBy = utils.SnowflakeID(paginated.Acts[i].ReplacedBy)
-		res.Details[i].RejectReason = reasons[int64(res.Details[i].Id)]
+	byID := make(map[int64]model.Activity, len(paginated.Acts))
+	for _, act := range paginated.Acts {
+		byID[act.Id] = act
 	}
-	return ginx.ReturnSuccess(res)
+	// 按 id 对齐而不是按下标：Enrich 逻辑将来若有过滤，字段也不会补到别的活动上。
+	for i := range res.Details {
+		act, ok := byID[int64(res.Details[i].Id)]
+		if !ok {
+			continue
+		}
+		res.Details[i].Revision = act.Revision
+		res.Details[i].ReplacedBy = utils.SnowflakeID(act.ReplacedBy)
+		res.Details[i].RejectReason = reasons[act.Id]
+	}
+	return res
 }
 
 // ListAllActs
@@ -215,22 +233,46 @@ func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, cla
 
 // FindActByStudentID
 // @Tags Activity
-// @Summary 通过学号获取活动
+// @Summary 通过学号获取活动（本人显式传 scope/role 时支持筛选）
+// @Description 查看他人或未传 scope/role 时按 auditor.effect 过滤：slow（默认）只返回已通过且未结束；fast 下未过审也可返回，仅挡被驳回。查看自己且显式传 scope/role 时与 /act/own 一致（本人全状态、返回审核字段），不传时保持旧行为。ended/all 不含已被新申请替代的旧版本，也不含已结束但未通过审核的活动；因此 all 不是 active 的超集。
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
 // @Param studentId path string true "学号"
-// @Param req body req.FindActByStudentIDReq true "分页请求"
+// @Param req body req.FindActByStudentIDReq true "分页与 scope/role 筛选（仅本人视角且显式传参时生效，均可选）"
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/student/{studentId} [post]
 func (ah *ActHandler) FindActByStudentID(ctx *gin.Context, req_ req.FindActByStudentIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
-	paginated, err := ah.as.FindActByOwnerID(ctx, req_.StudentID, req_.Page, req_.Limit)
+	// 目标学号只认路径参数：body 里的 studentId 可以覆盖/偏离路径值，用它判断视角不可预期。
+	pathStudentID := ctx.Param("studentId")
+	// 本人显式传了 scope/role 才切到全状态口径；不传参数时保持旧的"已通过 + 未结束"，
+	// 避免老客户端升级后突然看到审核中/被拒活动。
+	if shouldUseOwnActivityList(claims.Subject, pathStudentID, req_.Scope, req_.Role) {
+		paginated, err := ah.as.FindActListForStudent(ctx, claims.Subject, req_.Scope, req_.Role, req_.Page, req_.Limit)
+		if err != nil {
+			return ginx.ReturnError(err)
+		}
+		return ginx.ReturnSuccess(ah.ownActivitiesResp(ctx, paginated, claims.Subject))
+	}
+	// 其余情况（含看自己但未传参数、看他人）：保持原行为，忽略 scope/role。
+	paginated, err := ah.as.FindActByOwnerID(ctx, pathStudentID, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}
 	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, claims.Subject)
 	return ginx.ReturnSuccess(converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details))
+}
+
+// shouldUseOwnActivityList 判断 /act/student/{studentId} 是否切换到本人全状态口径：
+// 只有路径学号是本人、且显式传了 scope 或 role 时才切换；都不传时保持旧的
+// effect 过滤口径，避免老客户端升级后突然看到审核中/被拒活动。
+// 空白字符串不是合法取值，按未传处理。
+func shouldUseOwnActivityList(claimsSubject, pathStudentID, scope, role string) bool {
+	if claimsSubject == "" || pathStudentID != claimsSubject {
+		return false
+	}
+	return strings.TrimSpace(scope) != "" || strings.TrimSpace(role) != ""
 }
 
 // FindActById
@@ -247,9 +289,9 @@ func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, cla
 	}
 	detail := ah.as.EnrichOneForSearcher(ctx, &act, claims.Subject)
 	isSigner := ah.as.IsApprover(ctx, act, claims.Subject)
-	// 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理，
-	// 与帖子删除后的表现一致，避免下架内容继续被外部访问。
-	if !activityVisibleToViewer(act, claims.Subject, isSigner) {
+	// 审核中/被驳回的活动是否可见由 effect 决定（见 service.ActivityVisible）；
+	// 对不可见者按"活动不存在"处理，与帖子删除后的表现一致，避免内容继续被外部访问。
+	if !ah.as.CanViewActivity(act, claims.Subject, isSigner) {
 		return ginx.ReturnError(errs.ErrActivityNotFound)
 	}
 	res := converter.ToListActivityResp(detail)
@@ -303,15 +345,5 @@ func detailFieldsVisible(act model.Activity, viewer string, isSigner bool) bool 
 
 // rejectReasonVisible 判断拒绝原因能否展示给 viewer：活动作者与所有申办人（签署人）可见。
 func rejectReasonVisible(act model.Activity, viewer string, isSigner bool) bool {
-	return viewer != "" && (act.StudentID == viewer || isSigner)
-}
-
-// activityVisibleToViewer 判断活动详情是否对该用户可见。
-// 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理。
-// 评论读写路径用的是同一规则（service.SubjectGetter.ActivityVisibleTo），改动时两处要一起改。
-func activityVisibleToViewer(act model.Activity, viewer string, isSigner bool) bool {
-	if act.IsChecking != model.StanceReject {
-		return true
-	}
 	return viewer != "" && (act.StudentID == viewer || isSigner)
 }

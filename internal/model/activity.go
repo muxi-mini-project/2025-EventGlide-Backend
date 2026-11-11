@@ -2,6 +2,19 @@ package model
 
 import "time"
 
+// 活动审核状态中“审核中”的两种取值（StancePass / StanceReject 见 approvement.go）。
+const (
+	ActivityPendingSigners = "pending_signers"
+	ActivityPendingAuditor = "pending_auditor"
+)
+
+// ActivityCheckingVisibleInFast 返回 fast 模式下对外可见的审核状态。
+// 用白名单而非“非 reject”：历史 NULL/空值以及以后新增的审核状态都不会被默认放行，
+// 与详情侧的可见性判定保持同一集合。返回新切片，调用方无法篡改集合内容。
+func ActivityCheckingVisibleInFast() []string {
+	return []string{StancePass, ActivityPendingSigners, ActivityPendingAuditor}
+}
+
 type Activity struct {
 	Id         int64     `gorm:"primaryKey;type:bigint;comment:主键id;column:id"`
 	CreatedAt  time.Time `gorm:"type:datetime;column:created_at; not null"`
