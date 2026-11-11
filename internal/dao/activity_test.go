@@ -124,3 +124,20 @@ func TestFindActByOwnerIDAll_NoAuditStatusFilter(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestGetCheckingExcludesExpiredActivities 审核中列表不返回已过期活动：
+// 过期活动不会再送审、也不会有结论，继续以"审核中"出现在 /user/checking 里是错的。
+func TestGetCheckingExcludesExpiredActivities(t *testing.T) {
+	dao, mock := newActDaoForTest(t)
+
+	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE \\(student_id = \\? AND is_checking IN \\(\\?,\\?\\)\\) AND end_time > \\?").
+		WithArgs("S20250001", "pending_signers", "pending_auditor", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	if _, err := dao.GetChecking(context.Background(), "S20250001"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

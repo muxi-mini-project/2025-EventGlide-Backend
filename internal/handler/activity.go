@@ -6,6 +6,7 @@ import (
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/api/resp"
 	"github.com/raiki02/EG/internal/converter"
+	"github.com/raiki02/EG/internal/errs"
 	"github.com/raiki02/EG/internal/middleware"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/internal/service"
@@ -45,6 +46,7 @@ func (ah *ActHandler) RegisterActHandlers(e *gin.Engine, handlerFunc gin.Handler
 		act.POST("/own", ginx.WrapRequestWithClaims(ah.FindActByOwnerID))
 		act.POST("/student/:studentId", ginx.WrapRequestWithClaims(ah.FindActByStudentID))
 		act.POST("/all", ginx.WrapRequestWithClaims(ah.ListAllActs))
+		act.POST("/:id/resubmit", ginx.WrapRequestWithClaims(ah.ResubmitAct))
 		act.GET("/:id", ginx.WrapRequestWithClaims(ah.FindActById))
 	}
 }
@@ -184,6 +186,9 @@ func (ah *ActHandler) FindActByOwnerID(ctx *gin.Context, req_ req.FindActByOwner
 	res := converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details)
 	reasons := ah.as.RejectReasons(ctx, paginated.Acts...)
 	for i := range res.Details {
+		// 本人需据此判断哪些活动已被新申请替代（服务端不过滤，审核页仍需要它们）。
+		res.Details[i].Revision = paginated.Acts[i].Revision
+		res.Details[i].ReplacedBy = utils.SnowflakeID(paginated.Acts[i].ReplacedBy)
 		res.Details[i].RejectReason = reasons[int64(res.Details[i].Id)]
 	}
 	return ginx.ReturnSuccess(res)
@@ -241,15 +246,72 @@ func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, cla
 		return ginx.ReturnError(err)
 	}
 	detail := ah.as.EnrichOneForSearcher(ctx, &act, claims.Subject)
+	isSigner := ah.as.IsApprover(ctx, act, claims.Subject)
+	// 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理，
+	// 与帖子删除后的表现一致，避免下架内容继续被外部访问。
+	if !activityVisibleToViewer(act, claims.Subject, isSigner) {
+		return ginx.ReturnError(errs.ErrActivityNotFound)
+	}
 	res := converter.ToListActivityResp(detail)
-	// 拒绝原因是审核人的内部备注，只回给活动作者
-	if rejectReasonVisible(act, claims.Subject) {
+	// 签署人、申请表与版本信息只给创建者和签署人，公开列表不返回。
+	if detailFieldsVisible(act, claims.Subject, isSigner) {
+		res.Signer = converter.ActivitySignersToResp(act.Signers)
+		res.ActiveForm = act.ActiveForm
+		res.Revision = act.Revision
+		res.ReplacedBy = utils.SnowflakeID(act.ReplacedBy)
+	}
+	// 拒绝原因展示给活动作者与所有申办人（签署人）。
+	if rejectReasonVisible(act, claims.Subject, isSigner) {
 		res.RejectReason = ah.as.RejectReasons(ctx, act)[act.Id]
 	}
 	return ginx.ReturnSuccess(res)
 }
 
-// rejectReasonVisible 判断拒绝原因能否展示给 viewer：只有活动作者本人可见。
-func rejectReasonVisible(act model.Activity, viewer string) bool {
-	return viewer != "" && act.StudentID == viewer
+// ResubmitAct
+// @Tags Activity
+// @Summary 重新送审被驳回的活动
+// @Description 用编辑后的完整内容创建一条新申请（revision+1），并把源活动标记为已被替代
+// @Produce json
+// @Accept json
+// @Param id path int true "源活动 id"
+// @Param activity body req.CreateActReq true "编辑后的活动内容"
+// @Param Authorization header string true "token"
+// @Success 200 {object} resp.Resp{data=resp.CreateActivityResp}
+// @Router /act/{id}/resubmit [post]
+func (ah *ActHandler) ResubmitAct(ctx *gin.Context, req_ req.ResubmitActReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
+	act := converter.CreateActFromReq(&req_.CreateActReq, claims.Subject)
+	signers := converter.SignersFromReq(req_.LabelForm.Signer)
+	if err := ah.as.ResubmitActivity(ctx, int64(req_.Id), act, signers, claims.Subject); err != nil {
+		return ginx.ReturnError(err)
+	}
+	loadedAct, err := ah.as.FindActById(ctx, act.Id)
+	if err != nil {
+		return ginx.ReturnError(err)
+	}
+	detail := ah.as.EnrichOneForSearcher(ctx, &loadedAct, claims.Subject)
+	return ginx.ReturnSuccess(converter.ToCreateActivityResp(detail))
+}
+
+// detailFieldsVisible 判断详情中的签署人、申请表等编辑字段能否返回给 viewer：
+// 创建者或签署人可见，其他人（含未登录）不可见。
+func detailFieldsVisible(act model.Activity, viewer string, isSigner bool) bool {
+	if viewer == "" {
+		return false
+	}
+	return act.StudentID == viewer || isSigner
+}
+
+// rejectReasonVisible 判断拒绝原因能否展示给 viewer：活动作者与所有申办人（签署人）可见。
+func rejectReasonVisible(act model.Activity, viewer string, isSigner bool) bool {
+	return viewer != "" && (act.StudentID == viewer || isSigner)
+}
+
+// activityVisibleToViewer 判断活动详情是否对该用户可见。
+// 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理。
+// 评论读写路径用的是同一规则（service.SubjectGetter.ActivityVisibleTo），改动时两处要一起改。
+func activityVisibleToViewer(act model.Activity, viewer string, isSigner bool) bool {
+	if act.IsChecking != model.StanceReject {
+		return true
+	}
+	return viewer != "" && (act.StudentID == viewer || isSigner)
 }

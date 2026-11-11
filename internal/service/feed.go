@@ -482,11 +482,15 @@ func (fs *FeedService) GetAuditorFeedList(ctx context.Context, sid string) (mode
 // feedTargetDeletedMsg 帖子被删后，保留的 feed 行统一展示的文案。
 const feedTargetDeletedMsg = "帖子已不存在"
 
-// feedTarget 是 feed 在展示期解析出的根对象信息；postID 非 0 表示该 feed 指向某个帖子。
+// feedActivityDeletedMsg 活动被改判不通过（下架）后，其相关 feed 行统一展示的文案。
+const feedActivityDeletedMsg = "活动已不存在"
+
+// feedTarget 是 feed 在展示期解析出的根对象信息；postID/actID 非 0 分别表示该 feed 指向某个帖子/活动。
 type feedTarget struct {
 	rootID   int64
 	rootType string
 	postID   int64
+	actID    int64
 }
 
 // feedPostID 返回 feed 指向的帖子 id；like/collect 直接指向帖子（Object=post, TargetId），
@@ -502,61 +506,120 @@ func feedPostID(f *model.Feed, rootID int64, rootType string) int64 {
 	}
 }
 
-// resolveFeedTargets 解析每条 feed 的根对象，并一次性批量判断其帖子对 viewer 是否可访问（单次 IN 查询），
-// 返回与 feeds 对齐的目标信息与"不可访问帖子"集合，供逐条渲染文案时使用。
+// feedActivityID 返回 feed 指向的活动 id；like/collect 直接指向活动（Object=activity, TargetId），
+// comment/at 指向评论，其根对象为活动（RootType=activity, RootID）。不涉及活动时返回 0。
+func feedActivityID(f *model.Feed, rootID int64, rootType string) int64 {
+	switch {
+	case f.Object == SubjectActivity:
+		return f.TargetId
+	case rootType == SubjectActivity:
+		return rootID
+	default:
+		return 0
+	}
+}
+
+// feedDeletedTargets 记录本轮判定为"已不可展示"的目标，按对象类型分开存放：
+// 帖子与活动各自独立编号，混在一张表里会因 id 相同而互相污染。
+type feedDeletedTargets struct {
+	posts      map[int64]bool
+	activities map[int64]bool
+}
+
+// resolveFeedTargets 解析每条 feed 的根对象，并一次性批量判断其帖子/活动是否仍可展示
+// （每类目标一次 IN 查询，避免 N+1），返回与 feeds 对齐的目标信息与"不可展示"集合，
+// 供逐条渲染文案时使用。
 // viewer 为 feed 列表的接收者；私密帖对其作者本人仍可访问，对其他人按"不存在"处理。
-func (fs *FeedService) resolveFeedTargets(ctx context.Context, viewer string, feeds []*model.Feed) ([]feedTarget, map[int64]bool) {
+func (fs *FeedService) resolveFeedTargets(ctx context.Context, viewer string, feeds []*model.Feed) ([]feedTarget, feedDeletedTargets) {
 	targets := make([]feedTarget, len(feeds))
 	postIDs := make([]int64, 0, len(feeds))
-	seen := make(map[int64]struct{}, len(feeds))
+	actIDs := make([]int64, 0, len(feeds))
+	seenPost := make(map[int64]struct{}, len(feeds))
+	seenAct := make(map[int64]struct{}, len(feeds))
 	for i, f := range feeds {
 		rootID, rootType := fs.resolveRootMeta(ctx, f)
 		pid := feedPostID(f, rootID, rootType)
-		targets[i] = feedTarget{rootID: rootID, rootType: rootType, postID: pid}
+		aid := feedActivityID(f, rootID, rootType)
+		targets[i] = feedTarget{rootID: rootID, rootType: rootType, postID: pid, actID: aid}
 		if pid != 0 {
-			if _, ok := seen[pid]; !ok {
-				seen[pid] = struct{}{}
+			if _, ok := seenPost[pid]; !ok {
+				seenPost[pid] = struct{}{}
 				postIDs = append(postIDs, pid)
 			}
 		}
-	}
-	deleted, err := fs.deletedPostSet(ctx, viewer, postIDs)
-	if err != nil {
-		fs.l.Error("Batch check feed target posts failed", zap.Error(err))
-		// fail-closed：可访问性查询失败时不能把目标当作可访问，否则会回吐他人私密帖的缩略图与文案。
-		failClosed := make(map[int64]bool, len(postIDs))
-		for _, id := range postIDs {
-			failClosed[id] = true
+		if aid != 0 {
+			if _, ok := seenAct[aid]; !ok {
+				seenAct[aid] = struct{}{}
+				actIDs = append(actIDs, aid)
+			}
 		}
-		return targets, failClosed
 	}
-	return targets, deleted
+	return targets, feedDeletedTargets{
+		posts:      fs.deletedPostSet(ctx, viewer, postIDs),
+		activities: fs.deletedActivitySet(ctx, actIDs),
+	}
 }
 
 // deletedPostSet 批量查询帖子对 viewer 是否可访问，返回"不可访问"（已删或私密他人帖）的帖子 id 集合。
-func (fs *FeedService) deletedPostSet(ctx context.Context, viewer string, postIDs []int64) (map[int64]bool, error) {
+// 查询失败时 fail-closed：不能把目标当作可访问，否则会回吐他人私密帖的缩略图与文案。
+func (fs *FeedService) deletedPostSet(ctx context.Context, viewer string, postIDs []int64) map[int64]bool {
 	if len(postIDs) == 0 {
-		return map[int64]bool{}, nil
+		return map[int64]bool{}
 	}
 	accessible, err := fs.fd.AccessiblePostBatch(ctx, viewer, postIDs)
 	if err != nil {
-		return nil, err
+		fs.l.Error("Batch check feed target posts failed", zap.Error(err))
+		return failClosedSet(postIDs)
 	}
-	deleted := make(map[int64]bool, len(postIDs))
-	for _, id := range postIDs {
-		deleted[id] = !accessible[id]
-	}
-	return deleted, nil
+	return inaccessibleSet(postIDs, accessible)
 }
 
-// feedTargetDeleted 判断该 feed 的目标帖子是否已删除。
-func feedTargetDeleted(t feedTarget, deleted map[int64]bool) bool {
-	return t.postID != 0 && deleted[t.postID]
+// deletedActivitySet 批量查询活动是否仍可展示，返回"已下架"（审核结论为 reject）的活动 id 集合。
+// 查询失败同样 fail-closed：无法确认状态时不能把活动当作正常展示。
+func (fs *FeedService) deletedActivitySet(ctx context.Context, actIDs []int64) map[int64]bool {
+	if len(actIDs) == 0 {
+		return map[int64]bool{}
+	}
+	accessible, err := fs.fd.AccessibleActivityBatch(ctx, actIDs)
+	if err != nil {
+		fs.l.Error("Batch check feed target activities failed", zap.Error(err))
+		return failClosedSet(actIDs)
+	}
+	return inaccessibleSet(actIDs, accessible)
 }
 
-// feedMessage 生成 feed 文案；目标帖子已删时统一改为"帖子已不存在"。
-func (fs *FeedService) feedMessage(f *model.Feed, t feedTarget, name string, deleted map[int64]bool) string {
+// failClosedSet 把全部 id 标为不可展示。
+func failClosedSet(ids []int64) map[int64]bool {
+	failClosed := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		failClosed[id] = true
+	}
+	return failClosed
+}
+
+// inaccessibleSet 反查可访问集合，返回不可访问的 id 集合。
+func inaccessibleSet(ids []int64, accessible map[int64]bool) map[int64]bool {
+	res := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		res[id] = !accessible[id]
+	}
+	return res
+}
+
+// feedTargetDeleted 判断该 feed 的目标（帖子或活动）是否已不可展示。
+func feedTargetDeleted(t feedTarget, deleted feedDeletedTargets) bool {
+	if t.postID != 0 && deleted.posts[t.postID] {
+		return true
+	}
+	return t.actID != 0 && deleted.activities[t.actID]
+}
+
+// feedMessage 生成 feed 文案；目标帖子已删、活动已下架时统一改为对应的"不存在"文案。
+func (fs *FeedService) feedMessage(f *model.Feed, t feedTarget, name string, deleted feedDeletedTargets) string {
 	if feedTargetDeleted(t, deleted) {
+		if t.actID != 0 {
+			return feedActivityDeletedMsg
+		}
 		return feedTargetDeletedMsg
 	}
 	return processMsg(f, name)

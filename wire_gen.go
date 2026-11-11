@@ -53,7 +53,7 @@ func InitApp() *server.Server {
 	imageRepo := repo.NewImageRepo(imageDao)
 	imageSizeResolver := service.NewImageSizeResolver(conf)
 	imageSizeWorker := service.NewImageSizeWorker(imageRepo, imageSizeResolver, loggerSet)
-	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, imageSizeWorker, loggerSet)
+	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, imageSizeWorker, loggerSet, conf)
 	postService := service.NewPostService(postRepo, userRepo, interactionRepo, imageSizeWorker, loggerSet)
 	userService := service.NewUserService(userRepo, activityRepo, postRepo, interactionRepo, jwt, ccnuService, imgUploader, activityService, postService, loggerSet, conf)
 	userHandler := handler.NewUserHandler(engine, userService, jwt, loggerSet)

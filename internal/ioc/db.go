@@ -110,6 +110,12 @@ func migrate(db *gorm.DB) error {
 		return err
 	}
 
+	// activity 唯一索引由 4 列扩展为含 revision 的 5 列，AutoMigrate 不会修改已存在的索引，
+	// 需先把旧索引改名让位，再由 AutoMigrate 重建；建成后清掉改名的旧索引。
+	if err := renameLegacyActivityUniqueIndex(db); err != nil {
+		return err
+	}
+
 	// auditor_form 将建 (activity_id, subject) 唯一索引，需先清掉存量重复行
 	// （历史 worker 每 5s 重复送审累积的），否则 AutoMigrate 建索引失败。
 	// 去重后若仍有并发写入造成重复（滚动发布期间旧实例仍在写），建唯一索引会因 1062
@@ -133,6 +139,11 @@ func migrate(db *gorm.DB) error {
 	}
 	if migrateErr != nil {
 		return migrateErr
+	}
+
+	// 5 列唯一索引已由 AutoMigrate 建好，清掉改名保留的旧 4 列索引。
+	if err := dropLegacyActivityUniqueIndex(db); err != nil {
+		return err
 	}
 
 	// 帖子不再送审：存量仍停在 checking 的帖子一次性回填为 pass，使其在 slow 模式下也立即可见。
@@ -201,6 +212,100 @@ func backfillImageSizeStatus(db *gorm.DB) error {
 	if res.RowsAffected > 0 {
 		log.Printf("backfillImageSizeStatus: converted %d failed-mark row(s) to size_status=2\n", res.RowsAffected)
 	}
+	return nil
+}
+
+// legacyActivityIndexName 迁移期间旧 4 列唯一索引临时改用的名字。
+const legacyActivityIndexName = "idx_activity_unique_legacy"
+
+// renameLegacyActivityUniqueIndex 在 AutoMigrate 建 5 列唯一索引 idx_activity_unique 之前，
+// 把旧的 4 列索引改名让位。不能直接 DROP：DROP 与建新索引之间存在没有唯一约束的窗口，
+// 滚动发布期间旧实例仍按 4 列写入，一旦在窗口内写入重复行，建 5 列索引就会失败，而旧索引
+// 已经删掉，下次启动也无法自愈。改名是元数据操作，旧索引在窗口内继续生效且约束比新索引更严，
+// 新索引必然能建成功。全新库（表不存在）、索引不存在、或索引已含 revision 时跳过；
+// 上次迁移在改名后中断时，这里也会因为找不到 idx_activity_unique 而跳过。
+func renameLegacyActivityUniqueIndex(db *gorm.DB) error {
+	const (
+		tableName = "activity"
+		indexName = "idx_activity_unique"
+	)
+	var tableExists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.tables "+
+			"WHERE table_schema = DATABASE() AND table_name = ?", tableName,
+	).Scan(&tableExists).Error; err != nil {
+		return err
+	}
+	if !tableExists {
+		return nil
+	}
+
+	var indexExists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+		tableName, indexName,
+	).Scan(&indexExists).Error; err != nil {
+		return err
+	}
+	if !indexExists {
+		return nil
+	}
+
+	var hasRevision bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? AND column_name = 'revision'",
+		tableName, indexName,
+	).Scan(&hasRevision).Error; err != nil {
+		return err
+	}
+	if hasRevision {
+		return nil
+	}
+
+	stmt := "ALTER TABLE " + tableName + " RENAME INDEX " + indexName + " TO " + legacyActivityIndexName
+	if err := db.Exec(stmt).Error; err != nil {
+		return err
+	}
+	log.Printf("renameLegacyActivityUniqueIndex: renamed %s to %s on %s\n", indexName, legacyActivityIndexName, tableName)
+	return nil
+}
+
+// dropLegacyActivityUniqueIndex 在新 5 列索引建好后清掉改名保留的旧索引。
+// 索引不存在（全新库、已清理过）时为空操作，保证重复启动幂等。
+// 只有确认新索引（含 revision）已存在才删旧索引：否则会留下"没有任何唯一约束"的表，
+// 与本次改动想避免的窗口对称——重复行一旦写入，下次启动建索引失败且旧索引已没了。
+func dropLegacyActivityUniqueIndex(db *gorm.DB) error {
+	var exists bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+		"activity", legacyActivityIndexName,
+	).Scan(&exists).Error; err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+
+	var newIndexReady bool
+	if err := db.Raw(
+		"SELECT COUNT(*) > 0 FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? AND column_name = 'revision'",
+		"activity", "idx_activity_unique",
+	).Scan(&newIndexReady).Error; err != nil {
+		return err
+	}
+	if !newIndexReady {
+		log.Printf("dropLegacyActivityUniqueIndex: new index missing, keep %s for next start\n", legacyActivityIndexName)
+		return nil
+	}
+
+	if err := db.Exec("DROP INDEX " + legacyActivityIndexName + " ON activity").Error; err != nil {
+		return err
+	}
+	log.Printf("dropLegacyActivityUniqueIndex: dropped legacy index %s on activity\n", legacyActivityIndexName)
 	return nil
 }
 

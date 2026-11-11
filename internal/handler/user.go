@@ -251,6 +251,7 @@ func (uh *UserHandler) LoadLikeAct(ctx *gin.Context, req_ req.UserSearchReq, cla
 // Checking
 // @Tags User
 // @Summary 获取用户处于审核状态中的活动和帖子
+// @Description 已过期的活动不再返回：end_time <= now 的活动不会再送审、也不会有审核结论。
 // @Produce json
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.CheckingResp}
