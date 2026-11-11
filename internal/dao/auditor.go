@@ -22,8 +22,10 @@ type AuditorRepository interface {
 	ClaimForUpload(c context.Context, formId int64, now, leaseUntil time.Time) (bool, error)
 	ReleaseClaim(c context.Context, formId int64, leaseUntil time.Time) error
 	FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error)
+	FindExpiredPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error)
+	MarkRevoked(c context.Context, formId int64, revokedAt time.Time) error
 	UpdateIfPending(c context.Context, formId int64, status string) error
-	RevertRejectToPending(c context.Context, formId int64) error
+	ParkAsPending(c context.Context, formId int64, observedStatus string) error
 	FindByID(c context.Context, formId int64) (model.AuditorForm, error)
 }
 type AuditorRepo struct {
@@ -183,10 +185,11 @@ func (a *AuditorRepo) ReleaseClaim(c context.Context, formId int64, leaseUntil t
 // 排除帖子表单：帖子已不审核，其历史表单在平台上可能已不存在，
 // 继续回查只会每轮刷告警且永远不收敛。
 // 同时排除所属活动已过期的表单：这类活动在所有列表都不可见，结论对用户没有意义。
+// 也排除已被过期撤销任务标记的表单：它们已不需要结论，继续回查只会重复告警。
 func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
 	var forms []model.AuditorForm
 	err := a.db.WithContext(c).
-		Where("pushed_at IS NOT NULL AND status = ? AND subject <> ? AND id > ?", "pending", model.SubjectPost, afterID).
+		Where("pushed_at IS NOT NULL AND status = ? AND subject <> ? AND revoked_at IS NULL AND id > ?", "pending", model.SubjectPost, afterID).
 		Where("EXISTS (SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time > ?)", time.Now()).
 		Order("id ASC").
 		Limit(limit).
@@ -196,6 +199,40 @@ func (a *AuditorRepo) FindPushedPending(c context.Context, afterID int64, limit 
 		return nil, err
 	}
 	return forms, nil
+}
+
+// FindExpiredPushedPending 按 id 游标分批返回"已推送、平台仍 pending、但所属活动已过期"的活动表单，
+// 供定时任务撤销这些已经没有展示意义的平台审核条目。
+// 与 FindPushedPending 互补：那边只回查未过期活动，这边只取已过期的，互不重叠。
+// 活动已不在本地存在（表单指向的活动被删）时 EXISTS 不命中，不纳入撤销范围。
+// 已撤销的行（revoked_at 非空）不再返回，避免每小时重复回查平台。
+func (a *AuditorRepo) FindExpiredPushedPending(c context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
+	var forms []model.AuditorForm
+	err := a.db.WithContext(c).
+		Where("subject = ? AND status = ? AND pushed_at IS NOT NULL AND revoked_at IS NULL AND id > ?", model.SubjectActivity, "pending", afterID).
+		Where("EXISTS (SELECT 1 FROM activity a WHERE a.id = auditor_form.activity_id AND a.end_time <= ?)", time.Now()).
+		Order("id ASC").
+		Limit(limit).
+		Find(&forms).Error
+	if err != nil {
+		a.l.Error("failed to find expired pushed pending auditor forms", zap.Error(err))
+		return nil, err
+	}
+	return forms, nil
+}
+
+// MarkRevoked 记录该表单的平台条目已被过期撤销，写入 revoked_at 后其不再进入撤销扫描。
+// 只写这一列：审核状态与其它字段保留原值，本地行留作记录，也不触发 AfterUpdate 推进活动。
+// 条件 revoked_at IS NULL 让并发/重试只保留第一次的撤销时间；条件未命中视为已完成。
+func (a *AuditorRepo) MarkRevoked(c context.Context, formId int64, revokedAt time.Time) error {
+	res := a.db.WithContext(c).Model(&model.AuditorForm{}).
+		Where("id = ? AND revoked_at IS NULL", formId).
+		UpdateColumn("revoked_at", revokedAt)
+	if res.Error != nil {
+		a.l.Error("failed to mark auditor form revoked", zap.Error(res.Error), zap.Int64("formId", formId))
+		return res.Error
+	}
+	return nil
 }
 
 // UpdateIfPending 仅在表单当前仍为 pending 时更新状态，避免对账用平台过期结果覆盖
@@ -238,25 +275,50 @@ func (a *AuditorRepo) UpdateIfPending(c context.Context, formId int64, status st
 	})
 }
 
-// RevertRejectToPending 仅在表单当前仍为 reject 时退回 pending。
-// 改判回查无法确认平台结论时用它代替无条件的 Update：条件更新不会覆盖并发路径已写入的
-// 终态（例如已确认的 pass），也不会因非 reject 写入而清空驳回原因。
-// 条件未命中（状态已被回调/对账推进）视为幂等成功。
-func (a *AuditorRepo) RevertRejectToPending(c context.Context, formId int64) error {
-	form := model.AuditorForm{Id: formId, Status: "pending"}
+// ErrAuditorParkConflict 表示回查期间该表单的结论已被并发写入改变，
+// 本次不进 park（不覆盖对方刚写入的终态），让平台重试回调。
+var ErrAuditorParkConflict = errors.New("auditor form status changed while parking")
+
+// ParkAsPending 把表单退回 pending，并把「读取时的状态」作为原子更新条件：
+// 只有结论在回查期间没有被并发改动时才退回。并发路径刚写入的 pass/reject 不会被覆盖，
+// 条件未命中时重新读一次：已是 pending 或行已删除视为幂等成功，变成终态则返回
+// ErrAuditorParkConflict 让平台重试，由下一次回查/对账收敛。
+// 只写 status 一列，不碰 reason/pushed_at/claimed_at；AuditorForm.AfterUpdate 因 Subject 为空
+// 跳过活动同步：仅凭一次失败的平台回查不能把已发布/已驳回的活动改回待审核。
+func (a *AuditorRepo) ParkAsPending(c context.Context, formId int64, observedStatus string) error {
+	form := model.AuditorForm{Id: formId, Status: model.StancePending}
 	res := a.db.WithContext(c).
 		Model(&model.AuditorForm{}).
-		Where("id = ? AND status = ?", formId, model.StanceReject).
+		Where("id = ? AND status = ?", formId, observedStatus).
 		Select("Status").
 		Updates(&form)
 	if res.Error != nil {
-		a.l.Error("failed to revert auditor form to pending", zap.Error(res.Error), zap.Int64("formId", formId))
+		a.l.Error("failed to park auditor form as pending", zap.Error(res.Error), zap.Int64("formId", formId))
 		return res.Error
 	}
-	if res.RowsAffected == 0 {
-		a.l.Info("auditor form no longer reject, skip revert to pending", zap.Int64("formId", formId))
+	if res.RowsAffected > 0 {
+		return nil
 	}
-	return nil
+
+	var cur model.AuditorForm
+	err := a.db.WithContext(c).Select("status").Where("id = ?", formId).First(&cur).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		a.l.Info("auditor form gone, skip parking", zap.Int64("formId", formId))
+		return nil
+	}
+	if err != nil {
+		a.l.Error("failed to reload auditor form after park miss", zap.Error(err), zap.Int64("formId", formId))
+		return err
+	}
+	if cur.Status == model.StancePending {
+		a.l.Info("auditor form already parked, skip", zap.Int64("formId", formId))
+		return nil
+	}
+	a.l.Warn("auditor form changed while parking, keep the concurrent conclusion",
+		zap.Int64("formId", formId),
+		zap.String("observed", observedStatus),
+		zap.String("current", cur.Status))
+	return ErrAuditorParkConflict
 }
 
 // FindByID 按主键回查表单最新状态。

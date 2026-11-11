@@ -28,6 +28,8 @@ const perRecordUploadTimeout = 30 * time.Second
 var (
 	auditorUploadInterval    = 5 * time.Second
 	auditorReconcileInterval = 10 * time.Minute
+	// auditorRevokeInterval 过期条目撤销是低频运维动作（活动过期后才需要），一小时一轮足够。
+	auditorRevokeInterval = time.Hour
 	// auditorStopTimeout 直接调用 Stop 时的兜底等待上限；Server.Shutdown 的总预算更小，会先截断。
 	// 对账轮最长 2 分钟，超时即取消：对账幂等，下一轮启动后重跑。
 	auditorStopTimeout = 10 * time.Second
@@ -65,7 +67,7 @@ func (w *AuditorUploadWorker) Start(ctx context.Context) {
 	runCtx, cancel := context.WithCancel(ctx)
 	w.baseCtx = runCtx
 	w.cancel = cancel
-	w.wg.Add(2)
+	w.wg.Add(3)
 	safe.Go(w.logger.Auditor, "auditor-worker.upload", func() {
 		defer w.wg.Done()
 		w.run(runCtx)
@@ -73,6 +75,10 @@ func (w *AuditorUploadWorker) Start(ctx context.Context) {
 	safe.Go(w.logger.Auditor, "auditor-worker.reconcile", func() {
 		defer w.wg.Done()
 		w.runReconcile(runCtx)
+	})
+	safe.Go(w.logger.Auditor, "auditor-worker.revoke", func() {
+		defer w.wg.Done()
+		w.runRevoke(runCtx)
 	})
 }
 
@@ -151,6 +157,33 @@ func (w *AuditorUploadWorker) runReconcile(ctx context.Context) {
 // reconcile 回查已推送但仍 pending 的表单，弥补平台回调丢失。
 func (w *AuditorUploadWorker) reconcile(ctx context.Context) {
 	w.auditorService.ReconcilePendingForms(ctx)
+}
+
+// runRevoke 撤销所属活动已过期、平台仍 pending 的审核条目。
+// 低频运维动作，一小时一轮；与上传/对账各自独立，互不拖延。
+func (w *AuditorUploadWorker) runRevoke(ctx context.Context) {
+	ticker := time.NewTicker(auditorRevokeInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if ctx.Err() != nil {
+				return
+			}
+			safe.Run(w.logger.Auditor, "auditor-worker.revoke", func() {
+				w.revoke(ctx)
+			})
+		}
+	}
+}
+
+// revoke 整轮超时给到 5 分钟：单批 revokeBatchSize 条、条间有限流，
+// 既要覆盖一批慢请求，又不能无限期占用 goroutine。
+func (w *AuditorUploadWorker) revoke(ctx context.Context) {
+	w.processWithTimeoutFor(ctx, 5*time.Minute, w.auditorService.RevokeExpiredForms)
 }
 
 // processWithTimeout 从 worker ctx 派生整轮预算：Stop 时整轮可取消，

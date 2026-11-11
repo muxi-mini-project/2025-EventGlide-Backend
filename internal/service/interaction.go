@@ -55,19 +55,28 @@ func (is *InteractionService) getUserIDByStudentID(c context.Context, studentID 
 	return userID, nil
 }
 
-// ensurePostVisible 对"目标是帖子"的互动做可见性兜底：非本人私密帖按不存在拒绝，
-// 防止用旧 id 直连接口绕开读路径的可见性拦截。非帖子目标一律放行。
-func (is *InteractionService) ensurePostVisible(ctx context.Context, subject string, targetID int64, viewer string) error {
-	if subject != SubjectPost {
-		return nil
-	}
-	visible, err := is.id.IsPostVisibleTo(ctx, targetID, viewer)
-	if err != nil {
-		is.l.Error("Failed to check post visibility", zap.Error(err), zap.Int64("postId", targetID))
-		return errs.ErrInternal.Wrap(err)
-	}
-	if !visible {
-		return errs.ErrPostNotFound
+// ensureTargetVisible 对互动的目标做可见性兜底：非本人私密帖、已下架（reject）的活动按不存在拒绝，
+// 防止用旧 id 直连接口绕开读路径的可见性拦截。其它目标一律放行。
+func (is *InteractionService) ensureTargetVisible(ctx context.Context, subject string, targetID int64, viewer string) error {
+	switch subject {
+	case SubjectPost:
+		visible, err := is.id.IsPostVisibleTo(ctx, targetID, viewer)
+		if err != nil {
+			is.l.Error("Failed to check post visibility", zap.Error(err), zap.Int64("postId", targetID))
+			return errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return errs.ErrPostNotFound
+		}
+	case SubjectActivity:
+		visible, err := is.sg.ActivityVisibleTo(ctx, targetID, viewer)
+		if err != nil {
+			is.l.Error("Failed to check activity visibility", zap.Error(err), zap.Int64("activityId", targetID))
+			return errs.ErrInternal.Wrap(err)
+		}
+		if !visible {
+			return errs.ErrActivityNotFound
+		}
 	}
 	return nil
 }
@@ -79,7 +88,7 @@ func (is *InteractionService) Like(c *gin.Context, r *req.InteractionReq, sid st
 		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
 	}
-	if err := is.ensurePostVisible(ctx, r.Subject, int64(r.TargetID), sid); err != nil {
+	if err := is.ensureTargetVisible(ctx, r.Subject, int64(r.TargetID), sid); err != nil {
 		return err
 	}
 
@@ -220,7 +229,7 @@ func (is *InteractionService) Collect(c *gin.Context, r *req.InteractionReq, sid
 		is.l.Error("Failed to get subject info", zap.Error(err), zap.Int64("targetId", int64(r.TargetID)), zap.String("subject", r.Subject))
 		return errs.ErrInternal.Wrap(err)
 	}
-	if err := is.ensurePostVisible(c.Request.Context(), r.Subject, int64(r.TargetID), sid); err != nil {
+	if err := is.ensureTargetVisible(c.Request.Context(), r.Subject, int64(r.TargetID), sid); err != nil {
 		return err
 	}
 

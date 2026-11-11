@@ -26,6 +26,11 @@ var _ dao.AuditorRepository = (*dao.AuditorRepo)(nil)
 // ErrFormAlreadyPushed 表示该表单已成功送审，后台轮询应跳过，避免重复送审。
 var ErrFormAlreadyPushed = errors.New("auditor form already pushed")
 
+// ErrAuditorItemNotFound 表示平台侧查不到该条目（按 id 查询返回空集）。
+// 平台条目被撤销/从未创建成功时都会落到这里：对账用它区分"条目缺失"与一般查询失败，
+// 撤销流程把它当作"已无需撤销"。
+var ErrAuditorItemNotFound = errors.New("auditor item not found on platform")
+
 // uploadClaimLease 上传占用的租约时长：须大于单次上传的最坏耗时，
 // 以免上传进行中租约到期、被另一个 worker 重复上传；worker 崩溃后租约到期可自动重试。
 const uploadClaimLease = 60 * time.Second
@@ -38,8 +43,10 @@ type AuditorService interface {
 	ReleaseClaim(c context.Context, FormId int64, leaseUntil time.Time) error
 	MarkPushed(c context.Context, FormId int64, pushedAt time.Time) error
 	ReconcilePendingForms(c context.Context)
+	RevokeExpiredForms(c context.Context)
 	GetReasons(c context.Context, activityIds []int64) (map[int64]string, error)
 	PlatformStatus(c context.Context, formId int64) (string, error)
+	DeleteItem(c context.Context, formId int64) error
 }
 
 type auditorService struct {
@@ -53,6 +60,11 @@ type auditorService struct {
 	// reconcileCursor 是入站对账的分批游标（表单 id）。仅对账 goroutine 读写，
 	// 无并发访问；服务重启后归零从头扫，多实例各持一份会重复回查但幂等无害。
 	reconcileCursor int64
+
+	// revokeCursor 是过期条目撤销的分批游标（表单 id）。仅撤销 goroutine 读写，
+	// 无并发访问；撤销结果持久化在 auditor_form.revoked_at 上（本地行保留作记录），
+	// 因此扫描条件带 revoked_at IS NULL，处理完的行不会再回到游标范围内。
+	revokeCursor int64
 }
 
 // reconcileBatchSize 单批对账条数：用于限制每批 DB 读取与 HTTP 回查量，
@@ -223,6 +235,11 @@ func (a *auditorService) PlatformStatus(c context.Context, formId int64) (string
 	if resp.Basic.Code != sdkerrorx.SuccessCode {
 		return "", fmt.Errorf("auditor get items not success: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
 	}
+	if len(resp.Items) == 0 {
+		// 平台上没有该条目（已被撤销、或历史推送实际未成功）：返回可判定的哨兵错误，
+		// 调用方据此区分"条目缺失"与一般查询失败。
+		return "", fmt.Errorf("auditor item %d missing on platform: %w", formId, ErrAuditorItemNotFound)
+	}
 	if len(resp.Items) != 1 {
 		// 仅当恰好返回一条时才采信：条目数异常时无法确认哪一条对应本次回查，
 		// 取错条目会得出错误结论，因此一律报错交由调用方 fail-closed 处理。
@@ -286,4 +303,143 @@ func (a *auditorService) ReconcilePendingForms(c context.Context) {
 			return
 		}
 	}
+}
+
+// revokeBatchSize/revokeInterval 控制过期条目撤销的节奏：每批读取与平台请求量有界，
+// 条间留出间隔，避免一轮把平台接口打满。
+const (
+	revokeBatchSize = 50
+	revokeInterval  = 100 * time.Millisecond
+)
+
+// DeleteItem 撤销平台上的一条审核条目。条目是否真的消失由调用方回查确认：
+// SDK 会把非 2xx 响应归一成业务码（拿不到原始状态码），单凭返回值不足以判定。
+func (a *auditorService) DeleteItem(c context.Context, formId int64) error {
+	req, err := request.NewDeleteReq(uint(formId))
+	if err != nil {
+		return err
+	}
+	resp, err := a.MuxiCli.DeleteItem(c, req)
+	if err != nil {
+		return err
+	}
+	// 平台可能以 HTTP 200 + 错误业务码返回失败，此时 err 为 nil，必须校验业务码。
+	if resp.Basic.Code != sdkerrorx.SuccessCode {
+		return fmt.Errorf("auditor delete not accepted: code=%d msg=%s", resp.Basic.Code, resp.Basic.Msg)
+	}
+	return nil
+}
+
+// RevokeExpiredForms 撤销"已送进平台、但所属活动已过期且平台仍 pending"的审核条目。
+// 过期活动在送审与对账中都被跳过，但已经推进平台的条目会一直挂在审核队列，
+// 由本任务撤销；撤销后保留本地表单行，只把撤销时间写进 revoked_at，扫描条件据此跳过它。
+//
+// 每条先回查平台状态：仍为 pending 才撤销，避免与刚完成的审核竞争；
+// 平台已出结论的不撤销，直接标记完成（过期活动不再需要本地结论）。失败只记日志，下一轮重试。
+// 分批游标与对账同构：按 id 升序每批 revokeBatchSize 条，取空或不足一批即回绕。
+func (a *auditorService) RevokeExpiredForms(c context.Context) {
+	for {
+		if c.Err() != nil {
+			a.l.Warn("Revoke expired auditor forms aborted: context done", zap.Int64("cursor", a.revokeCursor))
+			return
+		}
+		forms, err := a.AuditorRepo.FindExpiredPushedPending(c, a.revokeCursor, revokeBatchSize)
+		if err != nil {
+			a.l.Error("Revoke expired auditor forms: find failed", zap.Error(err))
+			return
+		}
+		for i, form := range forms {
+			if c.Err() != nil {
+				a.l.Warn("Revoke expired auditor forms aborted: context done", zap.Int64("cursor", a.revokeCursor))
+				return
+			}
+			a.revokeForm(c, form)
+			// 逐条推进游标：中途 ctx 到期也不丢进度。
+			a.revokeCursor = form.Id
+			if i < len(forms)-1 {
+				select {
+				case <-c.Done():
+					return
+				case <-time.After(revokeInterval):
+				}
+			}
+		}
+		if len(forms) < revokeBatchSize {
+			a.revokeCursor = 0
+			return
+		}
+	}
+}
+
+// markRevoked 持久化撤销结果。写库失败只记日志：下一轮扫描会再取到该行，
+// 若平台条目确实已被撤销，回查会返回"条目缺失"并再次走到这里补写。
+func (a *auditorService) markRevoked(c context.Context, form model.AuditorForm) {
+	if err := a.AuditorRepo.MarkRevoked(c, form.Id, time.Now()); err != nil {
+		a.l.Error("Mark expired auditor form revoked failed, will retry next round",
+			zap.Error(err), zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId))
+		return
+	}
+	a.l.Info("Revoked expired auditor form",
+		zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId))
+}
+
+// revokeForm 对单条表单执行"确认平台仍 pending -> 撤销"。
+func (a *auditorService) revokeForm(c context.Context, form model.AuditorForm) {
+	status, err := a.PlatformStatus(c, form.Id)
+	if err != nil {
+		if errors.Is(err, ErrAuditorItemNotFound) {
+			// 平台上已无该条目：无需撤销，按已完成处理，避免反复回查。
+			a.l.Info("Expired auditor item already gone on platform",
+				zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId))
+			a.markRevoked(c, form)
+			return
+		}
+		a.l.Error("Revoke expired auditor form: query platform status failed, will retry",
+			zap.Error(err), zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId))
+		return
+	}
+	switch status {
+	case "pending":
+		// 仍需撤销，继续往下走。
+	case model.StancePass, model.StanceReject:
+		// 平台已出结论：不撤销，标记完成即可。过期活动不再展示，本地结论没有意义。
+		a.l.Info("Expired auditor item already concluded on platform, skip revoke",
+			zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId), zap.String("status", status))
+		a.markRevoked(c, form)
+		return
+	default:
+		// 状态无法识别：不能确认是否该撤销，留待下一轮重试。
+		a.l.Warn("Revoke expired auditor form: unknown platform status, skip",
+			zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId), zap.String("status", status))
+		return
+	}
+
+	if err := a.DeleteItem(c, form.Id); err != nil {
+		// 平台以 HTTP 200 返回时，SDK 仍可能因 data 形状不符合预期（如 null）判定为
+		// "响应数据格式错误"，而删除其实已经生效。回查一次确认：
+		//   - 条目已不存在：删除已生效；
+		//   - 平台已出结论：条目不再需要撤销。
+		// 两种都标记完成，否则会每小时重复删除失败、重复告警且永不收敛。
+		// 只有状态无法确认（网络错误、非法响应）才留待下一轮重试。
+		status, statErr := a.PlatformStatus(c, form.Id)
+		switch {
+		case errors.Is(statErr, ErrAuditorItemNotFound):
+			a.l.Info("Revoked expired auditor form (item gone after delete response)",
+				zap.Error(err), zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId))
+			a.markRevoked(c, form)
+			return
+		case statErr == nil && (status == model.StancePass || status == model.StanceReject):
+			a.l.Info("Revoked expired auditor form (platform concluded after delete attempt)",
+				zap.Error(err), zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId), zap.String("status", status))
+			a.markRevoked(c, form)
+			return
+		case statErr == nil:
+			a.l.Warn("Auditor item still on platform after delete attempt",
+				zap.Error(err), zap.Int64("formId", form.Id), zap.String("status", status))
+		}
+		a.l.Error("Revoke expired auditor form failed, will retry",
+			zap.Error(err), zap.Int64("formId", form.Id), zap.Int64("activityId", form.ActivityId))
+		return
+	}
+	a.markRevoked(c, form)
 }

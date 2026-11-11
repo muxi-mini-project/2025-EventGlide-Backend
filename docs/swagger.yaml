@@ -397,6 +397,13 @@ definitions:
         type: string
       position:
         type: string
+      replacedBy:
+        type: integer
+      revision:
+        description: |-
+          Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 为替代它的新申请 id，
+          序列化成字符串，"0" 表示未被替代（不是空串或 null）。
+        type: integer
       showImg:
         items:
           $ref: '#/definitions/resp.Image'
@@ -629,6 +636,8 @@ definitions:
     type: object
   resp.ListActivitiesResp:
     properties:
+      activeForm:
+        type: string
       address:
         type: string
       collectNum:
@@ -659,9 +668,20 @@ definitions:
         type: string
       rejectReason:
         type: string
+      replacedBy:
+        type: integer
+      revision:
+        description: |-
+          以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；
+          activeForm/signer 只在详情中返回。公开列表共用该结构，这些字段均为空值。
+        type: integer
       showImg:
         items:
           $ref: '#/definitions/resp.Image'
+        type: array
+      signer:
+        items:
+          $ref: '#/definitions/resp.Signer'
         type: array
       title:
         type: string
@@ -881,6 +901,43 @@ paths:
                   $ref: '#/definitions/resp.ListActivitiesResp'
               type: object
       summary: 根据id返回活动详情
+      tags:
+      - Activity
+  /act/{id}/resubmit:
+    post:
+      consumes:
+      - application/json
+      description: 用编辑后的完整内容创建一条新申请（revision+1），并把源活动标记为已被替代
+      parameters:
+      - description: 源活动 id
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 编辑后的活动内容
+        in: body
+        name: activity
+        required: true
+        schema:
+          $ref: '#/definitions/req.CreateActReq'
+      - description: token
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/resp.Resp'
+            - properties:
+                data:
+                  $ref: '#/definitions/resp.CreateActivityResp'
+              type: object
+      summary: 重新送审被驳回的活动
       tags:
       - Activity
   /act/all:
@@ -1836,6 +1893,7 @@ paths:
       - User
   /user/checking:
     get:
+      description: 已过期的活动不再返回：end_time <= now 的活动不会再送审、也不会有审核结论。
       parameters:
       - description: token
         in: header

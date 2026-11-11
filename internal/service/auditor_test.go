@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,18 +21,21 @@ import (
 
 // fakeAuditorRepo 记录 Insert 调用次数，用于锁定后台轮询的幂等契约。
 type fakeAuditorRepo struct {
-	existing      *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
-	byID          *model.AuditorForm // FindByID 的返回值，nil 表示未找到
-	findErr       error              // 非 nil 时 FindByID 返回该错误
-	insertCnt     int
-	lastFormId    int64
-	insertDup     *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
-	updatedTo     string              // Update 写入的最后一个状态
-	updatedReason string              // Update 写入的最后一个原因
-	revertCnt     int                 // RevertRejectToPending 调用次数
-	revertFormId  int64               // RevertRejectToPending 收到的表单 id
-	reasons       map[int64]string    // FindReasonsByActivityIDs 的返回值
-	pushedPending []model.AuditorForm // FindPushedPending 的返回值
+	existing       *model.AuditorForm // FindByActivity 的返回值，nil 表示未找到
+	byID           *model.AuditorForm // FindByID 的返回值，nil 表示未找到
+	findErr        error              // 非 nil 时 FindByID 返回该错误
+	insertCnt      int
+	lastFormId     int64
+	insertDup      *model.AuditorForm  // 非 nil 时 Insert 模拟撞唯一键，并假定并发方已插入该行
+	updatedTo      string              // Update 写入的最后一个状态
+	updatedReason  string              // Update 写入的最后一个原因
+	parkCnt        int                 // ParkAsPending 调用次数
+	parkFormId     int64               // ParkAsPending 收到的表单 id
+	parkObserved   string              // ParkAsPending 收到的读取时状态
+	reasons        map[int64]string    // FindReasonsByActivityIDs 的返回值
+	pushedPending  []model.AuditorForm // FindPushedPending 的返回值
+	expiredForms   []model.AuditorForm // FindExpiredPushedPending 的返回值
+	markRevokedErr error               // 非 nil 时 MarkRevoked 返回该错误
 }
 
 var _ dao.AuditorRepository = (*fakeAuditorRepo)(nil)
@@ -75,10 +81,11 @@ func (f *fakeAuditorRepo) UpdateIfPending(_ context.Context, _ int64, status str
 	return nil
 }
 
-// RevertRejectToPending 模拟条件更新：真实 DAO 只在 status='reject' 时命中。
-func (f *fakeAuditorRepo) RevertRejectToPending(_ context.Context, formId int64) error {
-	f.revertCnt++
-	f.revertFormId = formId
+// ParkAsPending 模拟条件更新：真实 DAO 只在状态与读取时一致时才写行。
+func (f *fakeAuditorRepo) ParkAsPending(_ context.Context, formId int64, observedStatus string) error {
+	f.parkCnt++
+	f.parkFormId = formId
+	f.parkObserved = observedStatus
 	return nil
 }
 
@@ -121,6 +128,46 @@ func (f *fakeAuditorRepo) FindPushedPending(_ context.Context, afterID int64, li
 		out = out[:limit]
 	}
 	return out, nil
+}
+
+func (f *fakeAuditorRepo) FindExpiredPushedPending(_ context.Context, afterID int64, limit int) ([]model.AuditorForm, error) {
+	forms := append([]model.AuditorForm(nil), f.expiredForms...)
+	sort.Slice(forms, func(i, j int) bool { return forms[i].Id < forms[j].Id })
+	var out []model.AuditorForm
+	for _, form := range forms {
+		// 与真实查询一致：已撤销的行不再返回。
+		if form.RevokedAt == nil && form.Id > afterID {
+			out = append(out, form)
+		}
+	}
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+// MarkRevoked 模拟写入 revoked_at：只更新内存中的过期表单副本，供后续查询过滤。
+func (f *fakeAuditorRepo) MarkRevoked(_ context.Context, formId int64, revokedAt time.Time) error {
+	if f.markRevokedErr != nil {
+		return f.markRevokedErr
+	}
+	for i := range f.expiredForms {
+		if f.expiredForms[i].Id == formId {
+			f.expiredForms[i].RevokedAt = &revokedAt
+			return nil
+		}
+	}
+	return nil
+}
+
+// revokedForm 返回内存中该表单的 revoked_at，nil 表示未被标记撤销。
+func (f *fakeAuditorRepo) revokedForm(formId int64) *time.Time {
+	for i := range f.expiredForms {
+		if f.expiredForms[i].Id == formId {
+			return f.expiredForms[i].RevokedAt
+		}
+	}
+	return nil
 }
 
 func (f *fakeAuditorRepo) ReleaseClaim(_ context.Context, formId int64, leaseUntil time.Time) error {
@@ -441,6 +488,422 @@ func newAuditorServiceWithServer(t *testing.T, handler http.HandlerFunc) (*audit
 	}
 	repo := &fakeAuditorRepo{}
 	return &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}, repo
+}
+
+// TestRevokeExpiredForms_RevokesOnlyPending 只有平台仍 pending 的过期条目才撤销；
+// 平台已出结论（pass/reject）的不删，直接标记撤销完成。本地表单行一律保留。
+func TestRevokeExpiredForms_RevokesOnlyPending(t *testing.T) {
+	var mu sync.Mutex
+	var deleted []string
+	queryCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			mu.Lock()
+			queryCnt++
+			mu.Unlock()
+			ids := r.URL.Query().Get("ids")
+			status := 0 // pending
+			if ids == "43" {
+				status = 1 // pass：平台已出结论，不应撤销
+			}
+			_, _ = fmt.Fprintf(w, `{"msg":"","code":200,"data":{"items":[{"status":%d,"hook_id":%s}]}}`, status, ids)
+		case http.MethodDelete:
+			mu.Lock()
+			deleted = append(deleted, r.URL.Path)
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":42}`))
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+		{Id: 43, ActivityId: 8, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	if len(deleted) != 1 || !strings.HasSuffix(deleted[0], "/42") {
+		mu.Unlock()
+		t.Fatalf("only the still-pending form should be deleted, got %v", deleted)
+	}
+	queriesAfterFirstRound := queryCnt
+	mu.Unlock()
+
+	// 两条都已写入 revoked_at：撤销过的与已出结论的都不再参与下一轮扫描。
+	if repo.revokedForm(42) == nil {
+		t.Fatalf("deleted form must have revoked_at set")
+	}
+	if repo.revokedForm(43) == nil {
+		t.Fatalf("concluded form must have revoked_at set")
+	}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if queryCnt != queriesAfterFirstRound {
+		t.Fatalf("revoked rows must not be scanned again, extra platform queries=%d", queryCnt-queriesAfterFirstRound)
+	}
+	if len(deleted) != 1 {
+		t.Fatalf("revoked rows must not be deleted again, got %v", deleted)
+	}
+}
+
+// TestRevokeExpiredForms_KeepsOnPlatformFailure 平台撤销失败时不能标记完成，下一轮应重试。
+func TestRevokeExpiredForms_KeepsOnPlatformFailure(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":0}]}}`))
+		case http.MethodDelete:
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`boom`))
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+	if repo.revokedForm(42) != nil {
+		t.Fatalf("failed delete must not set revoked_at")
+	}
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if deleteCnt != 2 {
+		t.Fatalf("failed form should be retried next round, delete calls=%d", deleteCnt)
+	}
+}
+
+// TestRevokeExpiredForms_ItemMissingTreatedAsSuccess 平台上已无该条目视为已撤销，不再发删除请求。
+func TestRevokeExpiredForms_ItemMissingTreatedAsSuccess(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":42}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if deleteCnt != 0 {
+		t.Fatalf("item already gone must not trigger delete, got %d calls", deleteCnt)
+	}
+	if repo.revokedForm(42) == nil {
+		t.Fatalf("item already gone should set revoked_at")
+	}
+}
+
+// TestRevokeExpiredForms_DeleteErrorButItemGone 删除请求报错（如条目已不存在导致 4xx）时，
+// 回查确认平台已无该条目即按撤销成功处理，避免每小时重试。
+func TestRevokeExpiredForms_DeleteErrorButItemGone(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete {
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`not found`))
+			return
+		}
+		mu.Lock()
+		gone := deleteCnt > 0
+		mu.Unlock()
+		if gone {
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":0}]}}`))
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	if repo.revokedForm(42) == nil {
+		t.Fatalf("item confirmed gone after delete error should set revoked_at")
+	}
+}
+
+// TestRevokeExpiredForms_DeleteErrorButPlatformConcluded 删除失败后回查发现平台已出结论
+// （审核已结束），条目已不需要撤销：标记完成，下一轮不再扫描。
+func TestRevokeExpiredForms_DeleteErrorButPlatformConcluded(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	queryCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`boom`))
+		default:
+			mu.Lock()
+			concluded := deleteCnt > 0
+			queryCnt++
+			mu.Unlock()
+			if concluded {
+				// 删除失败后回查：平台已给出 pass 结论。
+				_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":1}]}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":0}]}}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	queriesAfterFirstRound := queryCnt
+	mu.Unlock()
+	if repo.revokedForm(42) == nil {
+		t.Fatalf("platform concluded after delete attempt should set revoked_at")
+	}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if queryCnt != queriesAfterFirstRound {
+		t.Fatalf("revoked rows must not be scanned again, extra platform queries=%d", queryCnt-queriesAfterFirstRound)
+	}
+	if deleteCnt != 1 {
+		t.Fatalf("revoked rows must not be deleted again, delete calls=%d", deleteCnt)
+	}
+}
+
+// TestRevokeExpiredForms_DeleteErrorStatusUnknownRetried 删除失败后回查也失败（网络/非法响应）时，
+// 无法确认条目是否还在，不能标记完成，下一轮必须重试。
+func TestRevokeExpiredForms_DeleteErrorStatusUnknownRetried(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	queryCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`boom`))
+		default:
+			mu.Lock()
+			queryCnt++
+			n := queryCnt
+			mu.Unlock()
+			// 奇数号为撤销前的状态查询（仍 pending），偶数号为删除失败后的回查（异常）。
+			if n%2 == 0 {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`boom`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":0}]}}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+	if repo.revokedForm(42) != nil {
+		t.Fatalf("unknown platform status must not set revoked_at")
+	}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if repo.revokedForm(42) != nil {
+		t.Fatalf("unknown platform status must not set revoked_at on retry")
+	}
+	if deleteCnt != 2 {
+		t.Fatalf("unknown platform status should retry next round, delete calls=%d", deleteCnt)
+	}
+}
+
+// TestRevokeExpiredForms_DeleteResponseShapeErrorConfirmedGone 平台以 200 + 非预期 data 形状
+// 返回删除结果时，SDK 会判为业务失败；回查确认条目已不在平台后仍应视为撤销成功，避免每小时重试。
+func TestRevokeExpiredForms_DeleteResponseShapeErrorConfirmedGone(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":null}`))
+		default:
+			// 首次回查仍 pending（删除前），删除后的回查返回空集。
+			mu.Lock()
+			gone := deleteCnt > 0
+			mu.Unlock()
+			if gone {
+				_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":0}]}}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{expiredForms: []model.AuditorForm{
+		{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"},
+	}}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if deleteCnt != 1 {
+		t.Fatalf("expected exactly one delete attempt, got %d", deleteCnt)
+	}
+	if repo.revokedForm(42) == nil {
+		t.Fatalf("item confirmed gone after delete must set revoked_at")
+	}
+}
+
+// TestRevokeExpiredForms_MarkRevokedFailureRetried 撤销成功但写 revoked_at 失败时，
+// 该行不会被隐藏，下一轮会再次扫描并补写标记（平台条目缺失时不会重复删除）。
+func TestRevokeExpiredForms_MarkRevokedFailureRetried(t *testing.T) {
+	var mu sync.Mutex
+	deleteCnt := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodDelete:
+			mu.Lock()
+			deleteCnt++
+			mu.Unlock()
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":42}`))
+		default:
+			mu.Lock()
+			gone := deleteCnt > 0
+			mu.Unlock()
+			if gone {
+				_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[{"status":0}]}}`))
+		}
+	}))
+	defer srv.Close()
+
+	cli, err := client.NewClient(client.Config{ApiKey: "k", Region: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeAuditorRepo{
+		expiredForms:   []model.AuditorForm{{Id: 42, ActivityId: 7, Subject: SubjectActivity, Status: "pending"}},
+		markRevokedErr: errors.New("db down"),
+	}
+	svc := &auditorService{MuxiCli: cli, AuditorRepo: repo, l: zap.NewNop()}
+
+	svc.RevokeExpiredForms(context.Background())
+	if repo.revokedForm(42) != nil {
+		t.Fatalf("mark failure must not persist revoked_at")
+	}
+
+	repo.markRevokedErr = nil
+	svc.RevokeExpiredForms(context.Background())
+
+	mu.Lock()
+	defer mu.Unlock()
+	if repo.revokedForm(42) == nil {
+		t.Fatalf("retry should persist revoked_at")
+	}
+	if deleteCnt != 1 {
+		t.Fatalf("platform item already gone, must not delete twice, got %d", deleteCnt)
+	}
+}
+
+// TestPlatformStatusMissingIsSentinel 平台无条目时返回可判定的哨兵错误，撤销流程据此区分"已无需撤销"。
+func TestPlatformStatusMissingIsSentinel(t *testing.T) {
+	svc, _ := newAuditorServiceWithServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"msg":"","code":200,"data":{"items":[]}}`))
+	})
+
+	_, err := svc.PlatformStatus(context.Background(), 42)
+	if !errors.Is(err, ErrAuditorItemNotFound) {
+		t.Fatalf("expected ErrAuditorItemNotFound, got %v", err)
+	}
 }
 
 // TestPlatformStatus 平台状态映射与条目数校验：仅当恰好一条时才采信，否则报错。

@@ -31,6 +31,16 @@ func (r *ActivityRepo) Transaction(ctx context.Context, fn func(tx *gorm.DB) err
 }
 
 func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
+	return r.createActivity(ctx, tx, act, signers, studentID, true)
+}
+
+// CreateActivityKeepDraft 与 CreateActivity 相同，但保留该学生的活动草稿。
+// 重新送审编辑的是已存在的活动，不应连带清掉用户正在新建的另一条活动的草稿。
+func (r *ActivityRepo) CreateActivityKeepDraft(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string) error {
+	return r.createActivity(ctx, tx, act, signers, studentID, false)
+}
+
+func (r *ActivityRepo) createActivity(ctx context.Context, tx *gorm.DB, act *model.Activity, signers []model.Signer, studentID string, clearDraft bool) error {
 	act.Signers = nil
 
 	signerCount := 0
@@ -47,8 +57,10 @@ func (r *ActivityRepo) CreateActivity(ctx context.Context, tx *gorm.DB, act *mod
 		act.IsChecking = "pending_auditor"
 	}
 
-	if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
-		return err
+	if clearDraft {
+		if err := r.dao.DeleteActivityDraft(ctx, tx, studentID); err != nil {
+			return err
+		}
 	}
 
 	if err := r.dao.CreateActivity(ctx, tx, act); err != nil {
@@ -202,4 +214,21 @@ func (r *ActivityRepo) FindPendingAuditorActivities(ctx context.Context) ([]mode
 
 func (r *ActivityRepo) FindActsByIds(ctx context.Context, ids []int64) ([]model.Activity, error) {
 	return r.dao.FindActsByIds(ctx, ids)
+}
+
+// MarkReplaced 在同一事务内把源活动的 replaced_by 指向新活动。
+// 返回 false 表示源活动已被其他请求替代，调用方须回滚本次创建。
+func (r *ActivityRepo) MarkReplaced(ctx context.Context, tx *gorm.DB, srcID, newID int64) (bool, error) {
+	return r.dao.MarkActivityReplaced(ctx, tx, srcID, newID)
+}
+
+// FindActAuditBrief loads only the fields needed for visibility checks, without preloading
+// signers or images (this runs on hot read paths such as loading an activity's comments).
+func (r *ActivityRepo) FindActAuditBrief(ctx context.Context, id int64) (model.Activity, error) {
+	return r.dao.FindActAuditBrief(ctx, id)
+}
+
+// ExistsApprovement 判断某学号是否为该活动的签署人。
+func (r *ActivityRepo) ExistsApprovement(ctx context.Context, activityID int64, studentID string) (bool, error) {
+	return r.dao.ExistsApprovement(ctx, activityID, studentID)
 }

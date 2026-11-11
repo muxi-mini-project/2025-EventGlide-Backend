@@ -27,6 +27,7 @@ type fakeAuditorSvc struct {
 	uploadErr    error
 	uploadCnt    int
 	reconcileCnt int
+	revokeCnt    int
 	lastSub      string
 	lastFormUrl  string
 	reasons      map[int64]string // GetReasons 的返回值
@@ -86,6 +87,14 @@ func (f *fakeAuditorSvc) CreateAuditorForm(context.Context, int64, string, strin
 
 func (f *fakeAuditorSvc) ReconcilePendingForms(context.Context) {
 	f.reconcileCnt++
+}
+
+func (f *fakeAuditorSvc) RevokeExpiredForms(context.Context) {
+	f.revokeCnt++
+}
+
+func (f *fakeAuditorSvc) DeleteItem(context.Context, int64) error {
+	return errors.New("not used")
 }
 
 func (f *fakeAuditorSvc) GetReasons(_ context.Context, ids []int64) (map[int64]string, error) {
@@ -229,6 +238,12 @@ func (f *ctxCheckingSvc) CreateAuditorForm(context.Context, int64, string, strin
 
 func (f *ctxCheckingSvc) ReconcilePendingForms(context.Context) {}
 
+func (f *ctxCheckingSvc) RevokeExpiredForms(context.Context) {}
+
+func (f *ctxCheckingSvc) DeleteItem(context.Context, int64) error {
+	return errors.New("not used")
+}
+
 func (f *ctxCheckingSvc) GetReasons(context.Context, []int64) (map[int64]string, error) {
 	return nil, nil
 }
@@ -304,5 +319,17 @@ func TestUpload_IndependentContextPerRecord(t *testing.T) {
 	}
 	if svc.uploadCnt != 1 {
 		t.Fatalf("record upload must complete on an independent ctx, got %d uploads", svc.uploadCnt)
+	}
+}
+
+// TestWorkerRevokeInvokesService 撤销任务挂在独立 ticker 上，每轮调用一次服务层撤销。
+func TestWorkerRevokeInvokesService(t *testing.T) {
+	svc := &fakeAuditorSvc{}
+	w := newWorkerForTest(&fakePendingActivities{}, svc)
+
+	w.revoke(context.Background())
+
+	if svc.revokeCnt != 1 {
+		t.Fatalf("expected 1 revoke round, got %d", svc.revokeCnt)
 	}
 }
