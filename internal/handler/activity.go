@@ -315,7 +315,7 @@ func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, cla
 // @Description 用编辑后的完整内容创建一条新申请（revision+1），并把源活动标记为已被替代
 // @Produce json
 // @Accept json
-// @Param id path int true "源活动 id"
+// @Param id path string true "源活动 id"
 // @Param activity body req.CreateActReq true "编辑后的活动内容"
 // @Param Authorization header string true "token"
 // @Success 200 {object} resp.Resp{data=resp.CreateActivityResp}

@@ -3,7 +3,7 @@ package resp
 import "github.com/raiki02/EG/pkg/utils"
 
 type CreatePostResp struct {
-	Id          utils.SnowflakeID `json:"id"`
+	Id          utils.SnowflakeID `json:"id" swaggertype:"string"`
 	StudentID   string            `json:"studentId"`
 	PublishTime string            `json:"publishTime"`
 
@@ -17,7 +17,7 @@ type CreatePostResp struct {
 }
 
 type ListPostsResp struct {
-	Id          utils.SnowflakeID `json:"id"`
+	Id          utils.SnowflakeID `json:"id" swaggertype:"string"`
 	UserInfo    UserInfo          `json:"userInfo"`
 	PublishTime string            `json:"publishTime"`
 
@@ -36,7 +36,7 @@ type ListPostsResp struct {
 }
 
 type LoadPostDraftResp struct {
-	Id        utils.SnowflakeID `json:"id"`
+	Id        utils.SnowflakeID `json:"id" swaggertype:"string"`
 	Title     string            `json:"title"`
 	Introduce string            `json:"introduce"`
 	ShowImg   []Image           `json:"showImg"`

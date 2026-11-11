@@ -21,15 +21,15 @@ type FindPostReq struct {
 }
 
 type DeletePostReq struct {
-	TargetID utils.SnowflakeID `json:"targetId" validate:"required"`
+	TargetID utils.SnowflakeID `json:"targetId" validate:"required" swaggertype:"string"`
 }
 
 type FindPostByIdReq struct {
-	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id"`
+	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id" swaggertype:"string"`
 }
 
 type SetPostVisibilityReq struct {
-	Id         utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id"`
+	Id         utils.SnowflakeID `json:"id" validate:"required" form:"id" uri:"id" swaggertype:"string"`
 	Visibility string            `json:"visibility" validate:"required,oneof=public private"`
 }
 
