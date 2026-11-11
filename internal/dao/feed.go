@@ -217,6 +217,8 @@ func (fd *FeedDao) AccessiblePostBatch(ctx context.Context, viewer string, postI
 // AccessibleActivityBatch 一次查询返回给定活动 id 中仍可展示的集合（feed 标记下架活动用）。
 // 可展示 = 活动存在且审核结论不是 reject（改判不通过即下架，对所有人不可见）。
 // is_checking 为 NULL 的历史行按可展示处理：列有默认值，NULL 不代表审核不通过。
+// 这里只判断"目标是否仍存在/是否被下架"，不承担面向用户的可见性判定；feed 接收者
+// 以创建者与签署人为主，审核中活动对普通访客的可见性由 service.ActivityVisible 负责。
 func (fd *FeedDao) AccessibleActivityBatch(ctx context.Context, actIds []int64) (map[int64]bool, error) {
 	accessible := make(map[int64]bool, len(actIds))
 	if len(actIds) == 0 {

@@ -2,21 +2,26 @@ package dao
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/raiki02/EG/api/req"
+	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
-func newActDaoForTest(t *testing.T) (*ActDao, sqlmock.Sqlmock) {
+func newActGormWithMatcherForTest(t *testing.T, matcher sqlmock.QueryMatcher) (*gorm.DB, sqlmock.Sqlmock) {
 	t.Helper()
 
-	sqlDB, mock, err := sqlmock.New()
+	sqlDB, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(matcher))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,8 +34,28 @@ func newActDaoForTest(t *testing.T) (*ActDao, sqlmock.Sqlmock) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return gdb, mock
+}
 
+func newActGormForTest(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
+	return newActGormWithMatcherForTest(t, sqlmock.QueryMatcherRegexp)
+}
+
+func newActDaoForTest(t *testing.T) (*ActDao, sqlmock.Sqlmock) {
+	t.Helper()
+
+	gdb, mock := newActGormForTest(t)
 	return &ActDao{db: gdb, l: logger.NewLoggerSet().Activity}, mock
+}
+
+// newActDaoViaConfForTest 走 NewActDao 构造，用于覆盖 effect 经 EffectMode 归一化的路径。
+func newActDaoViaConfForTest(t *testing.T, effect string) (*ActDao, sqlmock.Sqlmock) {
+	t.Helper()
+
+	gdb, mock := newActGormForTest(t)
+	cfg := &config.Conf{}
+	cfg.Auditor.Effect = effect
+	return NewActDao(gdb, cfg, logger.NewLoggerSet()), mock
 }
 
 // TestDeleteDraftsByStudentIDRemovesImages 删除活动草稿须一并清理 activity_draft 图片，
@@ -82,10 +107,10 @@ func TestFindPendingAuditorActivitiesSkipsExpired(t *testing.T) {
 	}
 }
 
-// TestFindActByOwnerIDAll_NoAuditStatusFilter 本人"全部活动"列表不得按 is_checking 过滤，
+// TestFindActListForStudent_NoAuditStatusFilter 本人活动列表（默认 active/creator）不得按 is_checking 过滤，
 // 否则审核中(pending_*)与被拒(reject)的活动对本人不可见（前端 review 页拿不到被拒活动）。
 // 与 FindActByOwnerID 的区别正是去掉 SetEffect；本测试断言 SQL 不含 is_checking。
-func TestFindActByOwnerIDAll_NoAuditStatusFilter(t *testing.T) {
+func TestFindActListForStudent_NoAuditStatusFilter(t *testing.T) {
 	sqlDB, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherFunc(
 		func(_, actualSQL string) error {
 			if strings.Contains(actualSQL, "is_checking") {
@@ -106,19 +131,252 @@ func TestFindActByOwnerIDAll_NoAuditStatusFilter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// effect=slow 时 SetEffect 会加 is_checking='pass'；FindActByOwnerIDAll 必须不套它，
+	// effect=slow 时 SetEffect 会加 is_checking='pass'；FindActListForStudent 必须不套它，
 	// 否则 matcher 会因 SQL 含 is_checking 报错——这正是本测试要守住的点。
 	dao := &ActDao{db: gdb, l: logger.NewLoggerSet().Activity, effect: "slow"}
 
 	mock.ExpectQuery("SELECT").WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	mock.ExpectQuery("SELECT").WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
-	got, err := dao.FindActByOwnerIDAll(context.Background(), "S20250001", 1, 10)
+	got, err := dao.FindActListForStudent(context.Background(), "S20250001", req.ActScopeActive, req.ActRoleCreator, 1, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if got.Total != 0 || len(got.Acts) != 0 {
 		t.Fatalf("unexpected result: %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindActListForStudent_DefaultScopeRole 未传 scope/role（空值）时按 active/creator 处理：
+// 只查本人创建且未结束的活动，不按审核状态过滤，也不走 approvement 子查询。
+func TestFindActListForStudent_DefaultScopeRole(t *testing.T) {
+	const sid = "S20250001"
+
+	matcher := sqlmock.QueryMatcherFunc(func(expected, actual string) error {
+		switch expected {
+		case "list":
+			if !strings.HasPrefix(actual, "SELECT * FROM `activity`") {
+				return fmt.Errorf("unexpected list SQL: %s", actual)
+			}
+			if !strings.Contains(actual, "ORDER BY start_time ASC, id ASC") {
+				return fmt.Errorf("list SQL missing stable order: %s", actual)
+			}
+		case "count":
+			if !strings.Contains(actual, "count(*)") {
+				return fmt.Errorf("unexpected count SQL: %s", actual)
+			}
+		}
+		for _, f := range []string{"student_id = ?", "end_time > ?"} {
+			if !strings.Contains(actual, f) {
+				return fmt.Errorf("%s SQL missing condition %q: %s", expected, f, actual)
+			}
+		}
+		for _, f := range []string{"is_checking", "approvement"} {
+			if strings.Contains(actual, f) {
+				return fmt.Errorf("%s SQL must not contain %q: %s", expected, f, actual)
+			}
+		}
+		return nil
+	})
+
+	gdb, mock := newActGormWithMatcherForTest(t, matcher)
+	dao := &ActDao{db: gdb, l: logger.NewLoggerSet().Activity}
+
+	mock.ExpectQuery("list").WithArgs(sid, sqlmock.AnyArg(), 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("count").WithArgs(sid, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+
+	got, err := dao.FindActListForStudent(context.Background(), sid, "", "", 1, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// count 查询的结果必须原样写回 Total，否则分页总数永远是 0。
+	if got.Total != 2 {
+		t.Fatalf("Total = %d, want 2", got.Total)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestFindActListForStudentSQL scope 与 role 的组合必须体现在 WHERE 中：
+// scope 控制时间窗口、已结束活动的 pass 过滤与排序；role 控制创建者/签署人（approvement 子查询）。
+// 列表与 count 必须命中同一套条件（同一组 fragments 分别断言两条 SQL）。
+func TestFindActListForStudentSQL(t *testing.T) {
+	const sid = "S20250001"
+
+	cases := []struct {
+		name      string
+		scope     string
+		role      string
+		where     []string
+		order     string
+		listArgs  []driver.Value
+		countArgs []driver.Value
+		absent    []string
+	}{
+		{
+			name:      "active/creator 默认仅进行中且不按审核状态过滤",
+			scope:     req.ActScopeActive,
+			role:      req.ActRoleCreator,
+			where:     []string{"student_id = ?", "end_time > ?"},
+			order:     "ORDER BY start_time ASC, id ASC",
+			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), 10},
+			countArgs: []driver.Value{sid, sqlmock.AnyArg()},
+			absent:    []string{"is_checking", "replaced_by"},
+		},
+		{
+			name:      "ended/creator 只放已通过且未替代的旧版本",
+			scope:     req.ActScopeEnded,
+			role:      req.ActRoleCreator,
+			where:     []string{"student_id = ?", "end_time <= ?", "is_checking = ?", "replaced_by = 0"},
+			order:     "ORDER BY end_time DESC, id DESC",
+			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), "pass", 10},
+			countArgs: []driver.Value{sid, sqlmock.AnyArg(), "pass"},
+		},
+		{
+			name:      "all/creator 进行中或已通过且未替代",
+			scope:     req.ActScopeAll,
+			role:      req.ActRoleCreator,
+			where:     []string{"student_id = ?", "end_time > ?", "OR is_checking = ?", "replaced_by = 0"},
+			order:     "ORDER BY start_time DESC, id DESC",
+			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), "pass", 10},
+			countArgs: []driver.Value{sid, sqlmock.AnyArg(), "pass"},
+		},
+		{
+			name:      "active/participant 走签署子查询",
+			scope:     req.ActScopeActive,
+			role:      req.ActRoleParticipant,
+			where:     []string{"id IN (SELECT", "FROM `approvement`", "student_id = ?", "end_time > ?"},
+			order:     "ORDER BY start_time ASC, id ASC",
+			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), 10},
+			countArgs: []driver.Value{sid, sqlmock.AnyArg()},
+			absent:    []string{"replaced_by"},
+		},
+		{
+			name:      "ended/participant 子查询叠加 pass 与替代过滤",
+			scope:     req.ActScopeEnded,
+			role:      req.ActRoleParticipant,
+			where:     []string{"id IN (SELECT", "FROM `approvement`", "end_time <= ?", "is_checking = ?", "replaced_by = 0"},
+			order:     "ORDER BY end_time DESC, id DESC",
+			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), "pass", 10},
+			countArgs: []driver.Value{sid, sqlmock.AnyArg(), "pass"},
+		},
+		{
+			name:      "all/all 创建者与签署人并集",
+			scope:     req.ActScopeAll,
+			role:      req.ActRoleAll,
+			where:     []string{"student_id = ?", "OR id IN (SELECT", "FROM `approvement`", "end_time > ?", "OR is_checking = ?", "replaced_by = 0"},
+			order:     "ORDER BY start_time DESC, id DESC",
+			listArgs:  []driver.Value{sid, sid, sqlmock.AnyArg(), "pass", 10},
+			countArgs: []driver.Value{sid, sid, sqlmock.AnyArg(), "pass"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			matcher := sqlmock.QueryMatcherFunc(func(expected, actual string) error {
+				if expected == "list" {
+					if !strings.HasPrefix(actual, "SELECT * FROM `activity`") {
+						return fmt.Errorf("unexpected list SQL: %s", actual)
+					}
+					if !strings.Contains(actual, tc.order) {
+						return fmt.Errorf("list SQL missing order %q: %s", tc.order, actual)
+					}
+				} else {
+					if !strings.Contains(actual, "count(*)") {
+						return fmt.Errorf("unexpected count SQL: %s", actual)
+					}
+				}
+				for _, f := range tc.where {
+					if !strings.Contains(actual, f) {
+						return fmt.Errorf("%s SQL missing condition %q: %s", expected, f, actual)
+					}
+				}
+				for _, f := range tc.absent {
+					if strings.Contains(actual, f) {
+						return fmt.Errorf("%s SQL must not contain %q: %s", expected, f, actual)
+					}
+				}
+				return nil
+			})
+
+			gdb, mock := newActGormWithMatcherForTest(t, matcher)
+			dao := &ActDao{db: gdb, l: logger.NewLoggerSet().Activity}
+
+			mock.ExpectQuery("list").WithArgs(tc.listArgs...).
+				WillReturnRows(sqlmock.NewRows([]string{"id"}))
+			mock.ExpectQuery("count").WithArgs(tc.countArgs...).
+				WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+			if _, err := dao.FindActListForStudent(context.Background(), sid, tc.scope, tc.role, 1, 10); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// TestListAllActsDefaultsToSlowEffect 未配置 effect 时公开列表只放已通过的活动（fail-closed）：
+// 漏配 effect 不能把审核中/被驳回的活动直接暴露在列表里。走 NewActDao 构造，覆盖 EffectMode 归一化。
+func TestListAllActsDefaultsToSlowEffect(t *testing.T) {
+	dao, mock := newActDaoViaConfForTest(t, "")
+
+	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE end_time > \\? AND is_checking = \\? ORDER BY start_time ASC LIMIT \\?").
+		WithArgs(sqlmock.AnyArg(), "pass", 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `activity` WHERE end_time > \\? AND is_checking = \\?").
+		WithArgs(sqlmock.AnyArg(), "pass").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	if _, err := dao.ListAllActs(context.Background(), 1, 10); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestListAllActsFastEffectUsesVisibleWhitelist fast 先发后审：列表走与详情同一个白名单，
+// 而不是"非 reject"，避免新增状态时列表 fail-open。
+// 期望的 SQL 占位符与参数都从 model.ActivityCheckingVisibleInFast() 派生，不手写顺序。
+func TestListAllActsFastEffectUsesVisibleWhitelist(t *testing.T) {
+	visible := model.ActivityCheckingVisibleInFast()
+	// 集合内容本身也要锁住：长度正确且包含 pass 与两个审核中状态。
+	if len(visible) != 3 {
+		t.Fatalf("fast 可见集合长度 = %d, want 3: %v", len(visible), visible)
+	}
+	for _, want := range []string{model.StancePass, model.ActivityPendingSigners, model.ActivityPendingAuditor} {
+		if !slices.Contains(visible, want) {
+			t.Fatalf("fast 可见集合缺少 %q: %v", want, visible)
+		}
+	}
+
+	dao, mock := newActDaoViaConfForTest(t, config.EffectFast)
+
+	placeholders := strings.ReplaceAll(strings.TrimSuffix(strings.Repeat("?,", len(visible)), ","), "?", "\\?")
+	args := make([]driver.Value, 0, len(visible)+2)
+	args = append(args, sqlmock.AnyArg())
+	for _, s := range visible {
+		args = append(args, s)
+	}
+	args = append(args, 10)
+
+	mock.ExpectQuery(fmt.Sprintf("SELECT \\* FROM `activity` WHERE end_time > \\? AND is_checking IN \\(%s\\) ORDER BY start_time ASC LIMIT \\?", placeholders)).
+		WithArgs(args...).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery(fmt.Sprintf("SELECT count\\(\\*\\) FROM `activity` WHERE end_time > \\? AND is_checking IN \\(%s\\)", placeholders)).
+		WithArgs(args[:len(args)-1]...).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	if _, err := dao.ListAllActs(context.Background(), 1, 10); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

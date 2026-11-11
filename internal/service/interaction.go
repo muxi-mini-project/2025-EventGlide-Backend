@@ -55,8 +55,8 @@ func (is *InteractionService) getUserIDByStudentID(c context.Context, studentID 
 	return userID, nil
 }
 
-// ensureTargetVisible 对互动的目标做可见性兜底：非本人私密帖、已下架（reject）的活动按不存在拒绝，
-// 防止用旧 id 直连接口绕开读路径的可见性拦截。其它目标一律放行。
+// ensureTargetVisible 对互动的目标做可见性兜底：非本人私密帖、对 viewer 不可见的活动按不存在拒绝，
+// 防止用旧 id 直连接口绕开读路径的可见性拦截。评论按其根对象判定，其它目标一律放行。
 func (is *InteractionService) ensureTargetVisible(ctx context.Context, subject string, targetID int64, viewer string) error {
 	switch subject {
 	case SubjectPost:
@@ -77,6 +77,36 @@ func (is *InteractionService) ensureTargetVisible(ctx context.Context, subject s
 		if !visible {
 			return errs.ErrActivityNotFound
 		}
+	case SubjectComment:
+		// 评论的可见性跟随根对象，否则知道评论 id 就能在待审核/已下架活动或私密帖下点赞、收藏。
+		info, err := is.sg.GetSubjectInfo(ctx, targetID, SubjectComment)
+		if err != nil {
+			is.l.Error("Failed to get comment subject info", zap.Error(err), zap.Int64("commentId", targetID))
+			return err
+		}
+		switch info.RootObjectType {
+		case SubjectActivity:
+			visible, err := is.sg.ActivityVisibleTo(ctx, info.RootObjectID, viewer)
+			if err != nil {
+				is.l.Error("Failed to check activity visibility for comment", zap.Error(err),
+					zap.Int64("activityId", info.RootObjectID), zap.Int64("commentId", targetID))
+				return errs.ErrInternal.Wrap(err)
+			}
+			if !visible {
+				return errs.ErrActivityNotFound
+			}
+		case SubjectPost:
+			visible, err := is.id.IsPostVisibleTo(ctx, info.RootObjectID, viewer)
+			if err != nil {
+				is.l.Error("Failed to check post visibility for comment", zap.Error(err),
+					zap.Int64("postId", info.RootObjectID), zap.Int64("commentId", targetID))
+				return errs.ErrInternal.Wrap(err)
+			}
+			if !visible {
+				return errs.ErrPostNotFound
+			}
+		}
+		// 根对象类型为空（历史行）：无法定位根对象，放行以免误伤老数据。
 	}
 	return nil
 }

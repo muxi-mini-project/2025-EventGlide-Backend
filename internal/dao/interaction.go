@@ -97,7 +97,7 @@ func (id *InteractionDao) setApprovementStance(c context.Context, studentID stri
 			id.l.Error("Failed to load activity for signer decision", zap.Error(err), zap.Int64("activity_id", activityId))
 			return err
 		}
-		if act.IsChecking != "pending_signers" {
+		if act.IsChecking != model.ActivityPendingSigners {
 			id.l.Warn("activity not accepting signer decisions", zap.String("student_id", studentID), zap.Int64("activity_id", activityId))
 			return ErrSignerDecisionNotAllowed
 		}
