@@ -43,10 +43,17 @@ type ActivityService struct {
 	mq          mq.MQHdl
 	aud         AuditorService
 	maxResubmit int
+	effect      string
 	l           *zap.Logger
 }
 
 func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.InteractionRepo, mq mq.MQHdl, aud AuditorService, l *logger.LoggerSet, cfg *config.Conf) *ActivityService {
+	lg := l.Activity.Named("service")
+	effect := cfg.Auditor.EffectMode()
+	if effect != cfg.Auditor.Effect {
+		lg.Warn("auditor.effect 未配置或非法，活动可见性按 slow 处理",
+			zap.String("effect", cfg.Auditor.Effect))
+	}
 	return &ActivityService{
 		ad:          ad,
 		ud:          ud,
@@ -54,8 +61,14 @@ func NewActivityService(ad *repo.ActivityRepo, ud *repo.UserRepo, id *repo.Inter
 		aud:         aud,
 		mq:          mq,
 		maxResubmit: cfg.Auditor.ResubmitLimit(),
-		l:           l.Activity.Named("service"),
+		effect:      effect,
+		l:           lg,
 	}
+}
+
+// CanViewActivity 判断 viewer 能否查看该活动，规则见 ActivityVisible。
+func (as *ActivityService) CanViewActivity(act model.Activity, viewer string, isSigner bool) bool {
+	return ActivityVisible(act.IsChecking, act.StudentID, viewer, isSigner, as.effect)
 }
 
 func (as *ActivityService) CreateActivity(c context.Context, act *model.Activity, signers []model.Signer, studentID string, aw *req.AuditWrapper) error {

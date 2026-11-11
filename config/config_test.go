@@ -131,6 +131,28 @@ piiKey: "test-pii-key"
 	}
 }
 
+func TestEffectMode(t *testing.T) {
+	cases := []struct {
+		name   string
+		effect string
+		want   string
+	}{
+		{name: "fast", effect: EffectFast, want: EffectFast},
+		{name: "slow", effect: EffectSlow, want: EffectSlow},
+		{name: "未配置", effect: "", want: EffectSlow},
+		{name: "大小写不匹配", effect: "FAST", want: EffectSlow},
+		{name: "非法值", effect: "unknown", want: EffectSlow},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := (AuditorConf{Effect: tc.effect}).EffectMode(); got != tc.want {
+				t.Fatalf("EffectMode(effect=%q) = %q, want %q", tc.effect, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestUnmarshalConfRejectsNonYAML(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")

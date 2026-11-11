@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
 	"gorm.io/driver/mysql"
@@ -16,7 +17,7 @@ func newPostDaoForTest(t *testing.T) (*PostDao, sqlmock.Sqlmock) {
 	return newPostDaoWithEffectForTest(t, "")
 }
 
-func newPostDaoWithEffectForTest(t *testing.T, effect string) (*PostDao, sqlmock.Sqlmock) {
+func newPostGormForTest(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	t.Helper()
 
 	sqlDB, mock, err := sqlmock.New()
@@ -32,8 +33,24 @@ func newPostDaoWithEffectForTest(t *testing.T, effect string) (*PostDao, sqlmock
 	if err != nil {
 		t.Fatal(err)
 	}
+	return gdb, mock
+}
 
+func newPostDaoWithEffectForTest(t *testing.T, effect string) (*PostDao, sqlmock.Sqlmock) {
+	t.Helper()
+
+	gdb, mock := newPostGormForTest(t)
 	return &PostDao{db: gdb, effect: effect, l: logger.NewLoggerSet().Post}, mock
+}
+
+// newPostDaoViaConfForTest 走 NewPostDao 构造，用于覆盖 effect 经 EffectMode 归一化的路径。
+func newPostDaoViaConfForTest(t *testing.T, effect string) (*PostDao, sqlmock.Sqlmock) {
+	t.Helper()
+
+	gdb, mock := newPostGormForTest(t)
+	cfg := &config.Conf{}
+	cfg.Auditor.Effect = effect
+	return NewPostDao(gdb, cfg, logger.NewLoggerSet()), mock
 }
 
 // TestDeletePostRemovesImages 删除帖子须在同一事务内一并清理其图片。
@@ -233,12 +250,13 @@ func TestSetVisibilityOnlyOwner(t *testing.T) {
 	})
 }
 
-// TestIsPostVisibleToSQL 可见性判定条件为"公开 或 本人发布"，供互动写入兜底使用。
+// TestIsPostVisibleToSQL 可见性判定条件为"公开 或 本人发布"，并叠加默认的 slow 审核过滤：
+// effect 未配置时只放 is_checking='pass'，漏配不能把未过审帖子放出去。
 func TestIsPostVisibleToSQL(t *testing.T) {
 	dao, mock := newPostDaoForTest(t)
 
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND \\(visibility = \\? OR student_id = \\?\\)").
-		WithArgs(int64(1001), model.PostVisibilityPublic, "S_viewer").
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE id = \\? AND is_checking = \\? AND \\(visibility = \\? OR student_id = \\?\\)").
+		WithArgs(int64(1001), "pass", model.PostVisibilityPublic, "S_viewer").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	visible, err := dao.IsPostVisibleTo(context.Background(), 1001, "S_viewer")
@@ -247,6 +265,45 @@ func TestIsPostVisibleToSQL(t *testing.T) {
 	}
 	if !visible {
 		t.Fatalf("expected visible")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestGetAllPostDefaultsToSlowEffect 未配置 effect 时帖子广场只放 is_checking='pass'：
+// 漏配 effect 不能把审核中/被驳回的帖子放出去。走 NewPostDao 构造，覆盖 EffectMode 归一化。
+func TestGetAllPostDefaultsToSlowEffect(t *testing.T) {
+	dao, mock := newPostDaoViaConfForTest(t, "")
+
+	mock.ExpectQuery("SELECT \\* FROM `post` WHERE is_checking = \\? AND visibility = \\? ORDER BY created_at DESC LIMIT \\?").
+		WithArgs("pass", model.PostVisibilityPublic, 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE is_checking = \\? AND visibility = \\?").
+		WithArgs("pass", model.PostVisibilityPublic).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	if _, err := dao.GetAllPost(context.Background(), 1, 10); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestGetAllPostFastEffectOnlyBlocksRejected fast 先发后审：广场只挡被驳回的帖子。
+func TestGetAllPostFastEffectOnlyBlocksRejected(t *testing.T) {
+	dao, mock := newPostDaoWithEffectForTest(t, config.EffectFast)
+
+	mock.ExpectQuery("SELECT \\* FROM `post` WHERE is_checking != \\? AND visibility = \\? ORDER BY created_at DESC LIMIT \\?").
+		WithArgs("reject", model.PostVisibilityPublic, 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `post` WHERE is_checking != \\? AND visibility = \\?").
+		WithArgs("reject", model.PostVisibilityPublic).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	if _, err := dao.GetAllPost(context.Background(), 1, 10); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

@@ -7,13 +7,14 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/pkg/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
 
-func newActDaoForTest(t *testing.T) (*ActDao, sqlmock.Sqlmock) {
+func newActGormForTest(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	t.Helper()
 
 	sqlDB, mock, err := sqlmock.New()
@@ -29,8 +30,24 @@ func newActDaoForTest(t *testing.T) (*ActDao, sqlmock.Sqlmock) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	return gdb, mock
+}
 
+func newActDaoForTest(t *testing.T) (*ActDao, sqlmock.Sqlmock) {
+	t.Helper()
+
+	gdb, mock := newActGormForTest(t)
 	return &ActDao{db: gdb, l: logger.NewLoggerSet().Activity}, mock
+}
+
+// newActDaoViaConfForTest 走 NewActDao 构造，用于覆盖 effect 经 EffectMode 归一化的路径。
+func newActDaoViaConfForTest(t *testing.T, effect string) (*ActDao, sqlmock.Sqlmock) {
+	t.Helper()
+
+	gdb, mock := newActGormForTest(t)
+	cfg := &config.Conf{}
+	cfg.Auditor.Effect = effect
+	return NewActDao(gdb, cfg, logger.NewLoggerSet()), mock
 }
 
 // TestDeleteDraftsByStudentIDRemovesImages 删除活动草稿须一并清理 activity_draft 图片，
@@ -119,6 +136,46 @@ func TestFindActByOwnerIDAll_NoAuditStatusFilter(t *testing.T) {
 	}
 	if got.Total != 0 || len(got.Acts) != 0 {
 		t.Fatalf("unexpected result: %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestListAllActsDefaultsToSlowEffect 未配置 effect 时公开列表只放已通过的活动（fail-closed）：
+// 漏配 effect 不能把审核中/被驳回的活动直接暴露在列表里。走 NewActDao 构造，覆盖 EffectMode 归一化。
+func TestListAllActsDefaultsToSlowEffect(t *testing.T) {
+	dao, mock := newActDaoViaConfForTest(t, "")
+
+	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE end_time > \\? AND is_checking = \\? ORDER BY start_time ASC LIMIT \\?").
+		WithArgs(sqlmock.AnyArg(), "pass", 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `activity` WHERE end_time > \\? AND is_checking = \\?").
+		WithArgs(sqlmock.AnyArg(), "pass").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	if _, err := dao.ListAllActs(context.Background(), 1, 10); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestListAllActsFastEffectOnlyBlocksRejected fast 先发后审：列表只挡被驳回的活动，
+// 审核中与已通过都放行。同样走 NewActDao 构造，确保配置值被归一化后生效。
+func TestListAllActsFastEffectOnlyBlocksRejected(t *testing.T) {
+	dao, mock := newActDaoViaConfForTest(t, config.EffectFast)
+
+	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE end_time > \\? AND is_checking != \\? ORDER BY start_time ASC LIMIT \\?").
+		WithArgs(sqlmock.AnyArg(), "reject", 10).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `activity` WHERE end_time > \\? AND is_checking !=").
+		WithArgs(sqlmock.AnyArg(), "reject").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	if _, err := dao.ListAllActs(context.Background(), 1, 10); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

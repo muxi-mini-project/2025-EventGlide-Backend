@@ -247,9 +247,9 @@ func (ah *ActHandler) FindActById(ctx *gin.Context, req_ req.FindActByIdReq, cla
 	}
 	detail := ah.as.EnrichOneForSearcher(ctx, &act, claims.Subject)
 	isSigner := ah.as.IsApprover(ctx, act, claims.Subject)
-	// 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理，
-	// 与帖子删除后的表现一致，避免下架内容继续被外部访问。
-	if !activityVisibleToViewer(act, claims.Subject, isSigner) {
+	// 审核中/被驳回的活动是否可见由 effect 决定（见 service.ActivityVisible）；
+	// 对不可见者按"活动不存在"处理，与帖子删除后的表现一致，避免内容继续被外部访问。
+	if !ah.as.CanViewActivity(act, claims.Subject, isSigner) {
 		return ginx.ReturnError(errs.ErrActivityNotFound)
 	}
 	res := converter.ToListActivityResp(detail)
@@ -303,15 +303,5 @@ func detailFieldsVisible(act model.Activity, viewer string, isSigner bool) bool 
 
 // rejectReasonVisible 判断拒绝原因能否展示给 viewer：活动作者与所有申办人（签署人）可见。
 func rejectReasonVisible(act model.Activity, viewer string, isSigner bool) bool {
-	return viewer != "" && (act.StudentID == viewer || isSigner)
-}
-
-// activityVisibleToViewer 判断活动详情是否对该用户可见。
-// 被驳回（下架）的活动只对创建者与签署人可见；其他人按"活动不存在"处理。
-// 评论读写路径用的是同一规则（service.SubjectGetter.ActivityVisibleTo），改动时两处要一起改。
-func activityVisibleToViewer(act model.Activity, viewer string, isSigner bool) bool {
-	if act.IsChecking != model.StanceReject {
-		return true
-	}
 	return viewer != "" && (act.StudentID == viewer || isSigner)
 }

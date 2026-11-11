@@ -38,7 +38,7 @@ type PostDao struct {
 func NewPostDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *PostDao {
 	return &PostDao{
 		db:     db,
-		effect: cfg.Auditor.Effect,
+		effect: cfg.Auditor.EffectMode(),
 		l:      l.Post.Named("dao"),
 	}
 }
@@ -277,18 +277,15 @@ func (pd *PostDao) SetVisibility(ctx context.Context, id int64, studentID, visib
 	return true, nil
 }
 
+// SetEffect 与活动列表同规则：fast 只挡被驳回的帖子，其余（含未配置）按 slow 只放已通过的。
 func (pd *PostDao) SetEffect() func(db *gorm.DB) *gorm.DB {
-	if pd.effect == "slow" {
-		return func(db *gorm.DB) *gorm.DB {
-			return db.Where("is_checking = ?", "pass")
-		}
-	} else if pd.effect == "fast" {
+	if pd.effect == config.EffectFast {
 		return func(db *gorm.DB) *gorm.DB {
 			return db.Where("is_checking != ?", "reject")
 		}
 	}
 	return func(db *gorm.DB) *gorm.DB {
-		return db
+		return db.Where("is_checking = ?", "pass")
 	}
 }
 

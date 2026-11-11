@@ -55,7 +55,7 @@ func (is *InteractionService) getUserIDByStudentID(c context.Context, studentID 
 	return userID, nil
 }
 
-// ensureTargetVisible 对互动的目标做可见性兜底：非本人私密帖、已下架（reject）的活动按不存在拒绝，
+// ensureTargetVisible 对互动的目标做可见性兜底：非本人私密帖、对 viewer 不可见的活动按不存在拒绝，
 // 防止用旧 id 直连接口绕开读路径的可见性拦截。其它目标一律放行。
 func (is *InteractionService) ensureTargetVisible(ctx context.Context, subject string, targetID int64, viewer string) error {
 	switch subject {

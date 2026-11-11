@@ -201,8 +201,8 @@ func TestFindPostByIdHidesPrivateFromOthers(t *testing.T) {
 	ctx := context.Background()
 	svc, _, mock := newPostServiceForTest(t)
 
-	mock.ExpectQuery("SELECT \\* FROM `post` WHERE id = \\? AND \\(visibility = \\? OR student_id = \\?\\) ORDER BY `post`\\.`id` LIMIT \\?").
-		WithArgs(int64(1001), "public", "S_stranger", 1).
+	mock.ExpectQuery("SELECT \\* FROM `post` WHERE id = \\? AND is_checking = \\? AND \\(visibility = \\? OR student_id = \\?\\) ORDER BY `post`\\.`id` LIMIT \\?").
+		WithArgs(int64(1001), "pass", "public", "S_stranger", 1).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "title", "introduce", "visibility", "is_checking"}))
 
 	_, err := svc.FindPostById(ctx, 1001, "S_stranger")

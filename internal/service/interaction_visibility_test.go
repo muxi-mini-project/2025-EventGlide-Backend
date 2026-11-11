@@ -36,8 +36,9 @@ func newInteractionServiceForTest(t *testing.T) (*InteractionService, sqlmock.Sq
 	}
 
 	ls := logger.NewLoggerSet()
-	ad := dao.NewActDao(gdb, &config.Conf{}, ls)
-	sg := NewSubjectGetter(repo.NewActivityRepo(ad, nil), nil, nil)
+	cfg := &config.Conf{}
+	ad := dao.NewActDao(gdb, cfg, ls)
+	sg := NewSubjectGetter(repo.NewActivityRepo(ad, nil), nil, nil, cfg)
 	return &InteractionService{sg: sg, l: zap.NewNop()}, mock
 }
 

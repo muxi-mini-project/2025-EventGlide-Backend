@@ -50,7 +50,7 @@ type ActDao struct {
 func NewActDao(db *gorm.DB, cfg *config.Conf, l *logger.LoggerSet) *ActDao {
 	return &ActDao{
 		db:     db,
-		effect: cfg.Auditor.Effect,
+		effect: cfg.Auditor.EffectMode(),
 		l:      l.Activity.Named("dao"),
 	}
 }
@@ -349,18 +349,16 @@ func (ad *ActDao) FindActAuditBrief(c context.Context, id int64) (model.Activity
 	return act, nil
 }
 
+// SetEffect 按审核模式过滤列表：fast 先发后审，只挡被驳回的活动；
+// 其余（含未配置）按 slow 先审后发，只放已通过的活动。
 func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
-	if ad.effect == "slow" {
-		return func(db *gorm.DB) *gorm.DB {
-			return db.Where("is_checking = ?", "pass")
-		}
-	} else if ad.effect == "fast" {
+	if ad.effect == config.EffectFast {
 		return func(db *gorm.DB) *gorm.DB {
 			return db.Where("is_checking != ?", "reject")
 		}
 	}
 	return func(db *gorm.DB) *gorm.DB {
-		return db
+		return db.Where("is_checking = ?", "pass")
 	}
 }
 
