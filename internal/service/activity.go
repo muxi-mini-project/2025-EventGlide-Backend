@@ -108,6 +108,9 @@ func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act 
 
 	act.Revision = src.Revision + 1
 
+	// pending 必须在事务前判定：DAO 写入活动时会把 act.Images 置空，事务后读不到图片行。
+	pending := hasPendingImage(act.Images)
+
 	conflict := false
 	err = as.ad.Transaction(c, func(tx *gorm.DB) error {
 		// 先条件更新源活动的 replaced_by：并发重复提交时只有一个事务能把 0 改为新 id，
@@ -130,6 +133,10 @@ func (as *ActivityService) ResubmitActivity(c context.Context, srcID int64, act 
 		}
 		as.l.Error("failed to resubmit activity tx", zap.Error(err), zap.Int64("srcId", srcID))
 		return errs.ErrActivityCreateFailed.Wrap(err)
+	}
+
+	if pending {
+		as.imgWorker.Notify()
 	}
 
 	as.l.Info("resubmit activity tx",
