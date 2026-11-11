@@ -1,6 +1,8 @@
 package service
 
 import (
+	"slices"
+
 	"github.com/raiki02/EG/config"
 	"github.com/raiki02/EG/internal/model"
 )
@@ -13,13 +15,8 @@ func ActivityVisible(isChecking, ownerID, viewer string, isSigner bool, effect s
 		return true
 	}
 	if effect == config.EffectFast {
-		// 先发后审：只挡被驳回的活动。状态白名单而非"非 reject"，
-		// 避免历史 NULL/空值被当成可展示状态放给普通访客。
-		switch isChecking {
-		case model.StancePass, "pending_signers", "pending_auditor":
-			return true
-		}
-		return false
+		// 先发后审：与 dao.SetEffect 共用同一个白名单，避免新增审核状态时列表与详情分叉。
+		return slices.Contains(model.ActivityCheckingVisibleInFast(), isChecking)
 	}
 	return isChecking == model.StancePass
 }

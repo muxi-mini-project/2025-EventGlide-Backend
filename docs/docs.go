@@ -315,7 +315,7 @@ const docTemplate = `{
         },
         "/act/own": {
             "post": {
-                "description": "scope：active(默认，进行中，全部审核状态) | ended(已结束且已通过) | all(进行中或已通过)；role：creator(默认，我创建的) | participant(我签署的) | all(两者)。空值与非法值按默认处理。",
+                "description": "scope：active(默认，进行中，全部审核状态) | ended(已结束且已通过) | all(进行中或已通过)；role：creator(默认，我创建的) | participant(我签署的) | all(两者)。空值与非法值按默认处理。ended/all 不含已被新申请替代的旧版本，也不含已结束但未通过审核的活动；因此 all 不是 active 的超集。",
                 "consumes": [
                     "application/json"
                 ],
@@ -417,7 +417,7 @@ const docTemplate = `{
         },
         "/act/student/{studentId}": {
             "post": {
-                "description": "查看他人时按 auditor.effect 过滤：slow（默认）只返回已通过且未结束；fast 下未过审也可返回，仅挡被驳回。查看自己时与 /act/own 一致，scope/role 生效且返回审核字段。",
+                "description": "查看他人或未传 scope/role 时按 auditor.effect 过滤：slow（默认）只返回已通过且未结束；fast 下未过审也可返回，仅挡被驳回。查看自己且显式传 scope/role 时与 /act/own 一致（本人全状态、返回审核字段），不传时保持旧行为。ended/all 不含已被新申请替代的旧版本，也不含已结束但未通过审核的活动；因此 all 不是 active 的超集。",
                 "consumes": [
                     "application/json"
                 ],
@@ -427,7 +427,7 @@ const docTemplate = `{
                 "tags": [
                     "Activity"
                 ],
-                "summary": "通过学号获取活动（看自己时支持 scope/role 筛选）",
+                "summary": "通过学号获取活动（本人显式传 scope/role 时支持筛选）",
                 "parameters": [
                     {
                         "type": "string",
@@ -444,7 +444,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "分页与 scope/role 筛选（仅本人视角生效，均可选）",
+                        "description": "分页与 scope/role 筛选（仅本人视角且显式传参时生效，均可选）",
                         "name": "req",
                         "in": "body",
                         "required": true,
@@ -2554,7 +2554,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "scope": {
-                    "description": "Scope 时间范围：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。\n空值与非法值按 active 处理。",
+                    "description": "Scope 时间范围：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。\n空值与非法值按 active 处理。\nall 不是 active 的超集：ended/all 排除已被新申请替代的旧申请，active 保留它们供审核页使用。",
                     "type": "string"
                 }
             }
@@ -2569,14 +2569,11 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "role": {
-                    "description": "Role 仅查看本人时生效：creator(默认，我创建的) | participant(我签署的) | all(两者)。\n空值与非法值按 creator 处理；查看他人时忽略。",
+                    "description": "Role 仅本人视角且显式传参时生效：creator(默认，我创建的) | participant(我签署的) | all(两者)。\n传了 scope 或 role 任一参数即切到本人全状态口径。\n空值与非法值按 creator 处理；查看他人时忽略。",
                     "type": "string"
                 },
                 "scope": {
-                    "description": "Scope 仅查看本人时生效：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。\n空值与非法值按 active 处理；查看他人时忽略。",
-                    "type": "string"
-                },
-                "studentId": {
+                    "description": "Scope 仅本人视角且显式传参时生效：active(默认，进行中) | ended(已结束且已通过) | all(进行中或已通过)。\n传了 scope 或 role 任一参数即切到本人全状态口径，都不传时保持旧的“已通过 + 未结束”行为。\n空值与非法值按 active 处理；查看他人时忽略。\nall 不是 active 的超集：ended/all 排除已被新申请替代的旧申请，active 保留它们供审核页使用。",
                     "type": "string"
                 }
             }

@@ -170,7 +170,7 @@ func (ah *ActHandler) FindActByDate(ctx *gin.Context, req_ req.FindActByDateReq,
 // FindActByOwnerID
 // @Tags Activity
 // @Summary 本人活动列表（支持 scope/role 筛选）
-// @Description scope：active(默认，进行中，全部审核状态) | ended(已结束且已通过) | all(进行中或已通过)；role：creator(默认，我创建的) | participant(我签署的) | all(两者)。空值与非法值按默认处理。
+// @Description scope：active(默认，进行中，全部审核状态) | ended(已结束且已通过) | all(进行中或已通过)；role：creator(默认，我创建的) | participant(我签署的) | all(两者)。空值与非法值按默认处理。ended/all 不含已被新申请替代的旧版本，也不含已结束但未通过审核的活动；因此 all 不是 active 的超集。
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
@@ -193,10 +193,19 @@ func (ah *ActHandler) ownActivitiesResp(ctx *gin.Context, paginated *model.Pagin
 	details := ah.as.EnrichForSearcher(ctx, paginated.Acts, viewer)
 	res := converter.ToPaginatedListActivitiesResp(paginated.Total, paginated.Page, paginated.Limit, details)
 	reasons := ah.as.RejectReasons(ctx, paginated.Acts...)
+	byID := make(map[int64]model.Activity, len(paginated.Acts))
+	for _, act := range paginated.Acts {
+		byID[act.Id] = act
+	}
+	// 按 id 对齐而不是按下标：Enrich 逻辑将来若有过滤，字段也不会补到别的活动上。
 	for i := range res.Details {
-		res.Details[i].Revision = paginated.Acts[i].Revision
-		res.Details[i].ReplacedBy = utils.SnowflakeID(paginated.Acts[i].ReplacedBy)
-		res.Details[i].RejectReason = reasons[int64(res.Details[i].Id)]
+		act, ok := byID[int64(res.Details[i].Id)]
+		if !ok {
+			continue
+		}
+		res.Details[i].Revision = act.Revision
+		res.Details[i].ReplacedBy = utils.SnowflakeID(act.ReplacedBy)
+		res.Details[i].RejectReason = reasons[act.Id]
 	}
 	return res
 }
@@ -222,27 +231,30 @@ func (ah *ActHandler) ListAllActs(ctx *gin.Context, req_ req.ListAllActsReq, cla
 
 // FindActByStudentID
 // @Tags Activity
-// @Summary 通过学号获取活动（看自己时支持 scope/role 筛选）
-// @Description 查看他人时按 auditor.effect 过滤：slow（默认）只返回已通过且未结束；fast 下未过审也可返回，仅挡被驳回。查看自己时与 /act/own 一致，scope/role 生效且返回审核字段。
+// @Summary 通过学号获取活动（本人显式传 scope/role 时支持筛选）
+// @Description 查看他人或未传 scope/role 时按 auditor.effect 过滤：slow（默认）只返回已通过且未结束；fast 下未过审也可返回，仅挡被驳回。查看自己且显式传 scope/role 时与 /act/own 一致（本人全状态、返回审核字段），不传时保持旧行为。ended/all 不含已被新申请替代的旧版本，也不含已结束但未通过审核的活动；因此 all 不是 active 的超集。
 // @Produce json
 // @Accept json
 // @Param Authorization header string true "token"
 // @Param studentId path string true "学号"
-// @Param req body req.FindActByStudentIDReq true "分页与 scope/role 筛选（仅本人视角生效，均可选）"
+// @Param req body req.FindActByStudentIDReq true "分页与 scope/role 筛选（仅本人视角且显式传参时生效，均可选）"
 // @Success 200 {object} resp.Resp{data=resp.PaginatedListActivitiesResp}
 // @Router /act/student/{studentId} [post]
 func (ah *ActHandler) FindActByStudentID(ctx *gin.Context, req_ req.FindActByStudentIDReq, claims jwt.RegisteredClaims) (resp.Resp, error) {
 	req_.Page, req_.Limit = utils.IndexValid(req_.Page, req_.Limit)
-	if claims.Subject != "" && req_.StudentID == claims.Subject {
-		// 本人视角：能看到自己创建/签署的全部状态，scope/role 生效，返回字段与 /act/own 一致。
-		paginated, err := ah.as.FindActListForStudent(ctx, req_.StudentID, req_.Scope, req_.Role, req_.Page, req_.Limit)
+	// 目标学号只认路径参数：body 里的 studentId 可以覆盖/偏离路径值，用它判断视角不可预期。
+	pathStudentID := ctx.Param("studentId")
+	// 本人显式传了 scope/role 才切到全状态口径；不传参数时保持旧的"已通过 + 未结束"，
+	// 避免老客户端升级后突然看到审核中/被拒活动。
+	if claims.Subject != "" && pathStudentID == claims.Subject && (req_.Scope != "" || req_.Role != "") {
+		paginated, err := ah.as.FindActListForStudent(ctx, claims.Subject, req_.Scope, req_.Role, req_.Page, req_.Limit)
 		if err != nil {
 			return ginx.ReturnError(err)
 		}
 		return ginx.ReturnSuccess(ah.ownActivitiesResp(ctx, paginated, claims.Subject))
 	}
-	// 他人视角：保持原行为（按 effect 过滤，忽略 scope/role）。
-	paginated, err := ah.as.FindActByOwnerID(ctx, req_.StudentID, req_.Page, req_.Limit)
+	// 其余情况（含看自己但未传参数、看他人）：保持原行为，忽略 scope/role。
+	paginated, err := ah.as.FindActByOwnerID(ctx, pathStudentID, req_.Page, req_.Limit)
 	if err != nil {
 		return ginx.ReturnError(err)
 	}

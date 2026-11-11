@@ -301,12 +301,14 @@ func (ad *ActDao) FindActListForStudent(c context.Context, s string, scope strin
 			db = db.Where("student_id = ?", s)
 		}
 
+		// ended/all 是个人页的历史口径：已被新申请替代的旧版本不再展示。
+		// active 不加此条件——审核页需要看到被替代的旧申请。
 		switch scope {
 		case req.ActScopeEnded:
 			// 已结束：只保留已通过的活动，pending/reject 不再出现在本人列表。
-			db = db.Where("end_time <= ?", now).Where("is_checking = ?", model.StancePass)
+			db = db.Where("end_time <= ?", now).Where("is_checking = ?", model.StancePass).Where("replaced_by = 0")
 		case req.ActScopeAll:
-			db = db.Where("(end_time > ? OR is_checking = ?)", now, model.StancePass)
+			db = db.Where("(end_time > ? OR is_checking = ?)", now, model.StancePass).Where("replaced_by = 0")
 		default:
 			db = db.Where("end_time > ?", now)
 		}
@@ -387,16 +389,16 @@ func (ad *ActDao) FindActAuditBrief(c context.Context, id int64) (model.Activity
 	return act, nil
 }
 
-// SetEffect 按审核模式过滤列表：fast 先发后审，只挡被驳回的活动；
+// SetEffect 按审核模式过滤列表：fast 先发后审，只放快审可见的状态白名单；
 // 其余（含未配置）按 slow 先审后发，只放已通过的活动。
 func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
 	if ad.effect == config.EffectFast {
 		return func(db *gorm.DB) *gorm.DB {
-			return db.Where("is_checking != ?", "reject")
+			return db.Where("is_checking IN ?", model.ActivityCheckingVisibleInFast())
 		}
 	}
 	return func(db *gorm.DB) *gorm.DB {
-		return db.Where("is_checking = ?", "pass")
+		return db.Where("is_checking = ?", model.StancePass)
 	}
 }
 
@@ -425,7 +427,7 @@ func buildActQuery(db *gorm.DB, a *req.ActSearchReq) *gorm.DB {
 func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, error) {
 	var acts []model.Activity
 	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").
-		Where("student_id = ? AND is_checking IN ?", sid, []string{"pending_signers", "pending_auditor"}).
+		Where("student_id = ? AND is_checking IN ?", sid, []string{model.ActivityPendingSigners, model.ActivityPendingAuditor}).
 		Where("end_time > ?", time.Now()).
 		Find(&acts).Error
 	if err != nil {

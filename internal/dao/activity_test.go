@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/raiki02/EG/api/req"
 	"github.com/raiki02/EG/config"
+	"github.com/raiki02/EG/internal/model"
 	"github.com/raiki02/EG/pkg/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -186,10 +188,15 @@ func TestFindActListForStudent_DefaultScopeRole(t *testing.T) {
 	mock.ExpectQuery("list").WithArgs(sid, sqlmock.AnyArg(), 10).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	mock.ExpectQuery("count").WithArgs(sid, sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 
-	if _, err := dao.FindActListForStudent(context.Background(), sid, "", "", 1, 10); err != nil {
+	got, err := dao.FindActListForStudent(context.Background(), sid, "", "", 1, 10)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	// count 查询的结果必须原样写回 Total，否则分页总数永远是 0。
+	if got.Total != 2 {
+		t.Fatalf("Total = %d, want 2", got.Total)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -220,22 +227,22 @@ func TestFindActListForStudentSQL(t *testing.T) {
 			order:     "ORDER BY start_time ASC, id ASC",
 			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), 10},
 			countArgs: []driver.Value{sid, sqlmock.AnyArg()},
-			absent:    []string{"is_checking"},
+			absent:    []string{"is_checking", "replaced_by"},
 		},
 		{
-			name:      "ended/creator 只放已通过并按结束时间倒序",
+			name:      "ended/creator 只放已通过且未替代的旧版本",
 			scope:     req.ActScopeEnded,
 			role:      req.ActRoleCreator,
-			where:     []string{"student_id = ?", "end_time <= ?", "is_checking = ?"},
+			where:     []string{"student_id = ?", "end_time <= ?", "is_checking = ?", "replaced_by = 0"},
 			order:     "ORDER BY end_time DESC, id DESC",
 			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), "pass", 10},
 			countArgs: []driver.Value{sid, sqlmock.AnyArg(), "pass"},
 		},
 		{
-			name:      "all/creator 进行中或已通过",
+			name:      "all/creator 进行中或已通过且未替代",
 			scope:     req.ActScopeAll,
 			role:      req.ActRoleCreator,
-			where:     []string{"student_id = ?", "end_time > ?", "OR is_checking = ?"},
+			where:     []string{"student_id = ?", "end_time > ?", "OR is_checking = ?", "replaced_by = 0"},
 			order:     "ORDER BY start_time DESC, id DESC",
 			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), "pass", 10},
 			countArgs: []driver.Value{sid, sqlmock.AnyArg(), "pass"},
@@ -248,12 +255,13 @@ func TestFindActListForStudentSQL(t *testing.T) {
 			order:     "ORDER BY start_time ASC, id ASC",
 			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), 10},
 			countArgs: []driver.Value{sid, sqlmock.AnyArg()},
+			absent:    []string{"replaced_by"},
 		},
 		{
-			name:      "ended/participant 子查询叠加 pass 过滤",
+			name:      "ended/participant 子查询叠加 pass 与替代过滤",
 			scope:     req.ActScopeEnded,
 			role:      req.ActRoleParticipant,
-			where:     []string{"id IN (SELECT", "FROM `approvement`", "end_time <= ?", "is_checking = ?"},
+			where:     []string{"id IN (SELECT", "FROM `approvement`", "end_time <= ?", "is_checking = ?", "replaced_by = 0"},
 			order:     "ORDER BY end_time DESC, id DESC",
 			listArgs:  []driver.Value{sid, sqlmock.AnyArg(), "pass", 10},
 			countArgs: []driver.Value{sid, sqlmock.AnyArg(), "pass"},
@@ -262,7 +270,7 @@ func TestFindActListForStudentSQL(t *testing.T) {
 			name:      "all/all 创建者与签署人并集",
 			scope:     req.ActScopeAll,
 			role:      req.ActRoleAll,
-			where:     []string{"student_id = ?", "OR id IN (SELECT", "FROM `approvement`", "end_time > ?", "OR is_checking = ?"},
+			where:     []string{"student_id = ?", "OR id IN (SELECT", "FROM `approvement`", "end_time > ?", "OR is_checking = ?", "replaced_by = 0"},
 			order:     "ORDER BY start_time DESC, id DESC",
 			listArgs:  []driver.Value{sid, sid, sqlmock.AnyArg(), "pass", 10},
 			countArgs: []driver.Value{sid, sid, sqlmock.AnyArg(), "pass"},
@@ -335,16 +343,36 @@ func TestListAllActsDefaultsToSlowEffect(t *testing.T) {
 	}
 }
 
-// TestListAllActsFastEffectOnlyBlocksRejected fast 先发后审：列表只挡被驳回的活动，
-// 审核中与已通过都放行。同样走 NewActDao 构造，确保配置值被归一化后生效。
-func TestListAllActsFastEffectOnlyBlocksRejected(t *testing.T) {
+// TestListAllActsFastEffectUsesVisibleWhitelist fast 先发后审：列表走与详情同一个白名单，
+// 而不是"非 reject"，避免新增状态时列表 fail-open。
+// 期望的 SQL 占位符与参数都从 model.ActivityCheckingVisibleInFast() 派生，不手写顺序。
+func TestListAllActsFastEffectUsesVisibleWhitelist(t *testing.T) {
+	visible := model.ActivityCheckingVisibleInFast()
+	// 集合内容本身也要锁住：长度正确且包含 pass 与两个审核中状态。
+	if len(visible) != 3 {
+		t.Fatalf("fast 可见集合长度 = %d, want 3: %v", len(visible), visible)
+	}
+	for _, want := range []string{model.StancePass, model.ActivityPendingSigners, model.ActivityPendingAuditor} {
+		if !slices.Contains(visible, want) {
+			t.Fatalf("fast 可见集合缺少 %q: %v", want, visible)
+		}
+	}
+
 	dao, mock := newActDaoViaConfForTest(t, config.EffectFast)
 
-	mock.ExpectQuery("SELECT \\* FROM `activity` WHERE end_time > \\? AND is_checking != \\? ORDER BY start_time ASC LIMIT \\?").
-		WithArgs(sqlmock.AnyArg(), "reject", 10).
+	placeholders := strings.ReplaceAll(strings.TrimSuffix(strings.Repeat("?,", len(visible)), ","), "?", "\\?")
+	args := make([]driver.Value, 0, len(visible)+2)
+	args = append(args, sqlmock.AnyArg())
+	for _, s := range visible {
+		args = append(args, s)
+	}
+	args = append(args, 10)
+
+	mock.ExpectQuery(fmt.Sprintf("SELECT \\* FROM `activity` WHERE end_time > \\? AND is_checking IN \\(%s\\) ORDER BY start_time ASC LIMIT \\?", placeholders)).
+		WithArgs(args...).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `activity` WHERE end_time > \\? AND is_checking !=").
-		WithArgs(sqlmock.AnyArg(), "reject").
+	mock.ExpectQuery(fmt.Sprintf("SELECT count\\(\\*\\) FROM `activity` WHERE end_time > \\? AND is_checking IN \\(%s\\)", placeholders)).
+		WithArgs(args[:len(args)-1]...).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
 
 	if _, err := dao.ListAllActs(context.Background(), 1, 10); err != nil {
