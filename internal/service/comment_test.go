@@ -73,7 +73,8 @@ const (
 	userC       = "S20250003" // C：回复 B 的人
 )
 
-// mockActivityPreloads 预置 FindActById 的主查询与两个 Preload 查询（Images -> Signers）
+// mockActivityPreloads 预置 FindActById 的主查询与两个 Preload 查询（Images -> Signers），
+// 以及评论写入时对活动可见性的轻量查询（默认未下架）。
 func mockActivityPreloads(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery("SELECT \\* FROM `activity`").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id"}).AddRow(actID, userA))
@@ -81,6 +82,15 @@ func mockActivityPreloads(mock sqlmock.Sqlmock) {
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
 	mock.ExpectQuery("SELECT \\* FROM `activity_signer`").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mockActivityVisible(mock, actID, userA, "pass")
+}
+
+// mockActivityVisible 预置评论写路径的活动可见性检查（未下架时只查一次轻量查询）。
+func mockActivityVisible(mock sqlmock.Sqlmock, activityID int64, owner, isChecking string) {
+	mock.ExpectQuery("SELECT `id`,`student_id`,`is_checking` FROM `activity` WHERE id = \\? ORDER BY `activity`.`id` LIMIT \\?").
+		WithArgs(activityID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "is_checking"}).
+			AddRow(activityID, owner, isChecking))
 }
 
 // mockGetUserInfo 预置评论者的用户信息查询（CreateComment/AnswerComment 第一步均会查评论者）
@@ -682,6 +692,161 @@ func TestLoadCommentsOnPrivateOthersPostEmpty(t *testing.T) {
 	}
 	if len(cmts) != 0 {
 		t.Fatalf("private post comments must be hidden from non-author, got %d", len(cmts))
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// mockLoadCommentsRows 预置某活动下一条一级评论。
+func mockLoadCommentsRows(mock sqlmock.Sqlmock, activityID int64) {
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE parent_id = \\? AND subject <> 'comment' ORDER BY created_at ASC, id ASC").
+		WithArgs(activityID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "parent_id", "subject"}).
+			AddRow(1, userA, activityID, SubjectActivity))
+}
+
+// mockActivityAuditBrief 预置活动可见性判断用的轻量查询（只取 id/student_id/is_checking）。
+func mockActivityAuditBrief(mock sqlmock.Sqlmock, activityID int64, owner, isChecking string) {
+	mock.ExpectQuery("SELECT `id`,`student_id`,`is_checking` FROM `activity` WHERE id = \\? ORDER BY `activity`.`id` LIMIT \\?").
+		WithArgs(activityID, 1).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "is_checking"}).
+			AddRow(activityID, owner, isChecking))
+}
+
+// TestLoadCommentsOnTakenDownActivityHidden 被驳回（下架）活动的评论区对非申办人返回空，
+// 与详情页"活动不存在"的表现一致。
+func TestLoadCommentsOnTakenDownActivityHidden(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+	const id = int64(1001)
+
+	mockLoadCommentsRows(mock, id)
+	mockActivityAuditBrief(mock, id, userA, model.StanceReject)
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `approvement` WHERE activity_id = \\? AND student_id = \\?").
+		WithArgs(id, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	cmts, err := cs.LoadComments(ctx, id, userB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmts) != 0 {
+		t.Fatalf("taken-down activity comments must be hidden from non-participants, got %d", len(cmts))
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestLoadCommentsOnTakenDownActivityVisibleToSigner 签署人仍能看到被下架活动的评论区。
+func TestLoadCommentsOnTakenDownActivityVisibleToSigner(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+	const id = int64(1001)
+
+	mockLoadCommentsRows(mock, id)
+	mockActivityAuditBrief(mock, id, userA, model.StanceReject)
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `approvement` WHERE activity_id = \\? AND student_id = \\?").
+		WithArgs(id, userC).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	cmts, err := cs.LoadComments(ctx, id, userC)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmts) != 1 {
+		t.Fatalf("signer must still see comments, got %d", len(cmts))
+	}
+}
+
+// TestLoadCommentsOnNormalActivityVisible 未下架的活动评论区对所有登录用户可见，不查签署关系。
+func TestLoadCommentsOnNormalActivityVisible(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+	const id = int64(1001)
+
+	mockLoadCommentsRows(mock, id)
+	mockActivityAuditBrief(mock, id, userA, "pass")
+
+	cmts, err := cs.LoadComments(ctx, id, userB)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cmts) != 1 {
+		t.Fatalf("published activity comments must be visible, got %d", len(cmts))
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestCreateCommentOnTakenDownActivityRejected 对被驳回（下架）活动写一级评论按"活动不存在"拒绝，
+// 且不得写入：知道 id 的非参与者不能在已下架活动下继续制造评论与通知。
+func TestCreateCommentOnTakenDownActivityRejected(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	mockGetUserInfo(mock, userB, "Bob")
+	mock.ExpectQuery("SELECT \\* FROM `activity`").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id"}).AddRow(actID, userA))
+	mock.ExpectQuery("SELECT \\* FROM `image`").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT \\* FROM `activity_signer`").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mockActivityVisible(mock, actID, userA, model.StanceReject)
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `approvement` WHERE activity_id = \\? AND student_id = \\?").
+		WithArgs(actID, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	cmt := &model.Comment{
+		Id:        30,
+		StudentID: userB,
+		Content:   "偷偷评论下架活动",
+		ParentID:  actID,
+		Subject:   SubjectActivity,
+	}
+	_, err := cs.CreateComment(ctx, cmt, userB)
+	if !errors.Is(err, errs.ErrActivityNotFound) {
+		t.Fatalf("expected ErrActivityNotFound, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}
+
+// TestAnswerCommentOnTakenDownActivityRejected 对已下架活动下的评论回复同样按"活动不存在"拒绝。
+func TestAnswerCommentOnTakenDownActivityRejected(t *testing.T) {
+	cs, mock := newCommentServiceForTest(t)
+	ctx := context.Background()
+
+	top := seedTopComment()
+	mockGetUserInfo(mock, userB, "Bob")
+	mock.ExpectQuery("SELECT \\* FROM `comment` WHERE id = \\?").
+		WithArgs(top.Id, sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id", "parent_id", "root_id", "subject", "root_object_id", "root_object_type", "creator_name"}).
+			AddRow(top.Id, top.StudentID, top.ParentID, top.RootID, top.Subject, top.RootObjectID, top.RootObjectType, string(top.CreatorName)))
+	mock.ExpectQuery("SELECT \\* FROM `activity`").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "student_id"}).AddRow(actID, userA))
+	mock.ExpectQuery("SELECT \\* FROM `image`").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT \\* FROM `activity_signer`").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mockActivityVisible(mock, actID, userA, model.StanceReject)
+	mock.ExpectQuery("SELECT count\\(\\*\\) FROM `approvement` WHERE activity_id = \\? AND student_id = \\?").
+		WithArgs(actID, userB).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+	cmt := &model.Comment{
+		Id:        31,
+		StudentID: userB,
+		Content:   "偷偷回复",
+		ParentID:  top.Id,
+		Subject:   SubjectComment,
+	}
+	_, err := cs.AnswerComment(ctx, cmt, userB)
+	if !errors.Is(err, errs.ErrActivityNotFound) {
+		t.Fatalf("expected ErrActivityNotFound, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)

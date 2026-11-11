@@ -44,6 +44,12 @@ type FindActByIdReq struct {
 	Id utils.SnowflakeID `json:"id" validate:"required" form:"-" uri:"id"`
 }
 
+// ResubmitActReq 重新送审请求：路径参数带源活动 id，请求体复用创建活动的完整内容。
+type ResubmitActReq struct {
+	Id utils.SnowflakeID `json:"-" form:"-" uri:"id" validate:"required"`
+	CreateActReq
+}
+
 type FindActByUserIDReq struct {
 	UserID string `json:"userId" validate:"required" form:"userId" uri:"userId"`
 	Page   int    `json:"page,omitempty"`

@@ -37,6 +37,8 @@ type ActDaoHdl interface {
 	BatchCreateSigners(context.Context, *gorm.DB, []model.ActivitySigner) error
 	FindRejectedAct(context.Context, string, string, string, string) (model.Activity, error) // studentID, title, startTime, endTime
 	FindPendingAuditorActivities(context.Context) ([]model.Activity, error)
+	MarkActivityReplaced(context.Context, *gorm.DB, int64, int64) (bool, error) // srcID, newID
+	ExistsApprovement(context.Context, int64, string) (bool, error)             // activityID, studentID
 }
 
 type ActDao struct {
@@ -336,6 +338,17 @@ func (ad *ActDao) FindActById(c context.Context, id int64) (model.Activity, erro
 	return act, nil
 }
 
+// FindActAuditBrief 只取可见性判断需要的列，不预加载签署人与图片，
+// 供评论列表等高频读路径使用。
+func (ad *ActDao) FindActAuditBrief(c context.Context, id int64) (model.Activity, error) {
+	var act model.Activity
+	err := ad.db.WithContext(c).Select("id", "student_id", "is_checking").Where("id = ?", id).First(&act).Error
+	if err != nil {
+		return model.Activity{}, err
+	}
+	return act, nil
+}
+
 func (ad *ActDao) SetEffect() func(*gorm.DB) *gorm.DB {
 	if ad.effect == "slow" {
 		return func(db *gorm.DB) *gorm.DB {
@@ -371,10 +384,13 @@ func buildActQuery(db *gorm.DB, a *req.ActSearchReq) *gorm.DB {
 	return q
 }
 
+// GetChecking 返回本人仍处于审核中的活动（/user/checking）。
+// 已过期的活动不再返回：它们不会再送审、也不会再有结论，继续显示"审核中"没有意义。
 func (ad *ActDao) GetChecking(c context.Context, sid string) ([]model.Activity, error) {
 	var acts []model.Activity
 	err := ad.db.WithContext(c).Preload("Signers").Preload("Images").
 		Where("student_id = ? AND is_checking IN ?", sid, []string{"pending_signers", "pending_auditor"}).
+		Where("end_time > ?", time.Now()).
 		Find(&acts).Error
 	if err != nil {
 		ad.l.Error("Failed to get checking activities", zap.Error(err), zap.String("student_id", sid))
@@ -414,4 +430,30 @@ func (ad *ActDao) FindActsByIds(c context.Context, ids []int64) ([]model.Activit
 	var acts []model.Activity
 	err := ad.db.WithContext(c).Scopes(ad.SetEffect()).Preload("Signers").Preload("Images").Where("id IN ?", ids).Find(&acts).Error
 	return acts, err
+}
+
+// MarkActivityReplaced 把源活动的 replaced_by 指向新活动。
+// 条件更新同时校验 replaced_by = 0 与 is_checking = reject：并发重复提交只有一个能成功，
+// 且在读取源活动与本次更新之间被平台改判（reject -> pass）时不会替代一条已公开的活动。
+// 返回 false 表示条件未命中（已被替代或状态已变化），调用方应回滚事务。
+func (ad *ActDao) MarkActivityReplaced(c context.Context, tx *gorm.DB, srcID, newID int64) (bool, error) {
+	res := tx.WithContext(c).Model(&model.Activity{}).
+		Where("id = ? AND replaced_by = 0 AND is_checking = ?", srcID, model.StanceReject).
+		Update("replaced_by", newID)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+// ExistsApprovement 判断某学号是否为该活动的签署人（approvement 只记录除申请人外的签署人）。
+func (ad *ActDao) ExistsApprovement(c context.Context, activityID int64, studentID string) (bool, error) {
+	var count int64
+	err := ad.db.WithContext(c).Model(&model.Approvement{}).
+		Where("activity_id = ? AND student_id = ?", activityID, studentID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

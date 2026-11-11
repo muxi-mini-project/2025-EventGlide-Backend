@@ -49,7 +49,7 @@ func InitApp() *server.Server {
 	mqHdl := mq.NewMQ(client)
 	auditorRepository := dao.NewAuditorRepo(db, loggerSet)
 	auditorService := service.NewAuditorService(auditorRepository, conf, loggerSet)
-	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, loggerSet)
+	activityService := service.NewActivityService(activityRepo, userRepo, interactionRepo, mqHdl, auditorService, loggerSet, conf)
 	postService := service.NewPostService(postRepo, userRepo, interactionRepo, loggerSet)
 	userService := service.NewUserService(userRepo, activityRepo, postRepo, interactionRepo, jwt, ccnuService, imgUploader, activityService, postService, loggerSet, conf)
 	userHandler := handler.NewUserHandler(engine, userService, jwt, loggerSet)

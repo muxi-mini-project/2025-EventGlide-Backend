@@ -15,7 +15,11 @@ type CreateActivityResp struct {
 	IsChecking    string            `json:"isChecking"`
 	ActiveForm    string            `json:"activeForm"`
 	Signer        []Signer          `json:"signer"`
-	UserInfo      UserInfo          `json:"userInfo"`
+	// Revision 为重新送审版本号（原始申请为 0）；ReplacedBy 为替代它的新申请 id，
+	// 序列化成字符串，"0" 表示未被替代（不是空串或 null）。
+	Revision   int               `json:"revision"`
+	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
+	UserInfo   UserInfo          `json:"userInfo"`
 }
 
 type ListActivitiesResp struct {
@@ -35,6 +39,12 @@ type ListActivitiesResp struct {
 	ShowImg       []string          `json:"showImg"`
 	IsChecking    string            `json:"isChecking"`
 	RejectReason  string            `json:"rejectReason"`
+	// 以下字段按权限返回：revision/replacedBy 在活动详情与创建者本人的列表（/act/own）中返回；
+	// activeForm/signer 只在详情中返回。公开列表共用该结构，这些字段均为空值。
+	Revision   int               `json:"revision"`
+	ReplacedBy utils.SnowflakeID `json:"replacedBy"`
+	ActiveForm string            `json:"activeForm"`
+	Signer     []Signer          `json:"signer"`
 
 	LikeNum    uint `json:"likeNum"`
 	CollectNum uint `json:"collectNum"`
